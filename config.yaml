@@ -1,0 +1,32 @@
+# My Agent Configuration
+# Fill in your API keys and settings below.
+
+# 选择 provider: anthropic | openai | glm | deepseek
+provider: glm
+
+# 模型 — 留空自动选 provider 默认模型，填了则覆盖
+model: "glm-4.7"
+
+# API Keys — 填你要用的
+api_keys:
+  anthropic: "sk-ant-xxx"
+  openai: "sk-xxx"
+  glm: ""
+  deepseek: "sk-xxx"
+
+# Base URLs — 默认值即可，需要代理时改
+base_urls:
+  anthropic: "https://api.anthropic.com"
+  openai: "https://api.openai.com/v1"
+  glm: "https://open.bigmodel.cn/api/paas/v4"
+  deepseek: "https://api.deepseek.com/v1"
+
+# 工作目录（留空使用当前目录）
+# cwd: "D:/my-project"
+
+# 安全上限
+max_turns: 50
+max_messages: 200
+
+# 是否打印调试信息
+verbose: false
