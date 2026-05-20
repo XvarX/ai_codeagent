@@ -171,6 +171,7 @@ class OpenAICompatProvider(BaseProvider):
 
             tool_use_buffer: dict[int, dict] = {}
             final_usage: dict = {}
+            all_text: list[str] = []
 
             async for chunk in stream:
                 if not chunk.choices:
@@ -180,8 +181,13 @@ class OpenAICompatProvider(BaseProvider):
 
                 delta = chunk.choices[0].delta
 
-                if delta.content:
-                    yield TextDeltaEvent(token=delta.content)
+                # GLM puts thinking in reasoning_content, final text in content
+                token_text = delta.content or ""
+                if not token_text and hasattr(delta, "reasoning_content"):
+                    token_text = delta.reasoning_content or ""
+                if token_text:
+                    all_text.append(token_text)
+                    yield TextDeltaEvent(token=token_text)
 
                 if delta.tool_calls:
                     for tc in delta.tool_calls:
@@ -202,12 +208,13 @@ class OpenAICompatProvider(BaseProvider):
                 if hasattr(chunk, "usage") and chunk.usage:
                     final_usage = chunk.usage.model_dump() if hasattr(chunk.usage, "model_dump") else {}
 
-            # Build raw response
+            # Build raw response — include full accumulated text
             raw = {
                 "_provider": self.provider_name,
                 "_request": request_payload,
                 "model": self.model,
                 "usage": final_usage,
+                "_text": "".join(all_text),
             }
 
             # Parse tool calls from buffer

@@ -161,6 +161,7 @@ class AnthropicProvider(BaseProvider):
         try:
             tool_use_buffer: dict[int, dict] = {}
             tool_use_blocks: list[ToolUseBlock] = []
+            all_text: list[str] = []
 
             async with self.client.beta.messages.stream(**request_payload) as stream:
                 async for event in stream:
@@ -177,6 +178,7 @@ class AnthropicProvider(BaseProvider):
                     elif event.type == "content_block_delta":
                         delta = event.delta
                         if hasattr(delta, "text") and delta.text:
+                            all_text.append(delta.text)
                             yield TextDeltaEvent(token=delta.text)
                         elif hasattr(delta, "partial_json") and delta.partial_json:
                             idx = event.index
@@ -205,6 +207,7 @@ class AnthropicProvider(BaseProvider):
             raw = final_msg.model_dump() if hasattr(final_msg, "model_dump") else {}
             raw["_provider"] = "anthropic"
             raw["_request"] = request_payload
+            raw["_text"] = "".join(all_text)
             raw["_tool_use_blocks"] = [
                 {"tool_name": t.tool_name, "tool_use_id": t.tool_use_id, "input": t.input}
                 for t in tool_use_blocks

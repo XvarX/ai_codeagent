@@ -174,6 +174,9 @@ class MainWindow(QMainWindow):
 
     def _on_text_delta(self, token: str):
         self.chat.append_token(token)
+        if not hasattr(self, '_tokens_received'):
+            self._tokens_received = 0
+        self._tokens_received += 1
 
     def _on_tool_use(self, name: str, input_json: str, tool_use_id: str):
         input_dict = json.loads(input_json) if input_json else {}
@@ -201,16 +204,54 @@ class MainWindow(QMainWindow):
             f.write("─" * 90 + "\n")
 
         tool_blocks = raw.get("_tool_use_blocks", [])
+        usage = raw.get("usage", {})
+        tokens = getattr(self, '_tokens_received', 0)
+        self._tokens_received = 0
+
+        # Show request summary in debug
+        req = raw.get("_request", {})
+        self.debug.add_entry(
+            "Request",
+            f"Model: {req.get('model', '?')}\nMessages: {len(req.get('messages', []))}\n"
+            f"Tools: {len(req.get('tools', []) or [])}",
+            "#569cd6",
+        )
+
+        # Show response details in debug
+        response_text = raw.get("_text", "")
         if tool_blocks:
             names = [t["tool_name"] for t in tool_blocks]
-            self.debug.add_entry("Response", f"Tool calls: {', '.join(names)}", "#4ec9b0")
+            self.debug.add_entry(
+                "Response",
+                f"Tool calls: {', '.join(names)}\nTokens received: {tokens}",
+                "#4ec9b0",
+            )
         else:
-            self.debug.add_entry("Response", "Text response", "#4ec9b0")
+            prompt_tokens = usage.get("prompt_tokens", "?")
+            completion_tokens = usage.get("completion_tokens", "?")
+            text_preview = response_text[:300] if response_text else "(empty)"
+            self.debug.add_entry(
+                "Response",
+                f"Text: {text_preview}\nTokens: {tokens} streamed, "
+                f"prompt={prompt_tokens}, completion={completion_tokens}",
+                "#4ec9b0",
+            )
 
-        usage = raw.get("usage", {})
         self.debug.update_context_usage(usage)
 
     def _on_done(self, final_text: str):
+        # If no streaming tokens arrived, show the final text in the bubble
+        if self.chat._streaming_bubble:
+            current = self.chat._streaming_bubble.text()
+            if current == "  thinking...":
+                self.chat._streaming_bubble.setText(final_text)
+                self.chat._streaming_bubble.setStyleSheet("""
+                    background: #3c3c3c;
+                    color: #d4d4d4;
+                    padding: 8px 14px;
+                    border-radius: 12px;
+                    font-size: 14px;
+                """)
         self.chat.finish_streaming()
 
     def _on_error(self, message: str):
