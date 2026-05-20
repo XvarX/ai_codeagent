@@ -2,7 +2,7 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
 )
 
 
@@ -44,12 +44,13 @@ class ChatPanel(QWidget):
         self._thinking_label: QLabel | None = None
 
     def _bubble_width(self) -> int:
+        # Use actual viewport width with reasonable minimum
         w = self._scroll.viewport().width()
-        if w < 100:
+        if w < 200:
             w = self.width()
-        if w < 100:
-            w = 800  # fallback
-        return w
+        if w < 200:
+            w = 800
+        return w - 24  # account for margins
 
     def set_title(self, text: str):
         self._title.setText(text)
@@ -58,7 +59,9 @@ class ChatPanel(QWidget):
         label = QLabel(text)
         label.setTextFormat(Qt.PlainText)
         label.setWordWrap(True)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         label.setContentsMargins(10, 8, 10, 8)
+        label.setMinimumWidth(50)
         label.setMaximumWidth(int(self._bubble_width() * 0.7))
         label.setStyleSheet("""
             background: #0e639c;
@@ -73,7 +76,9 @@ class ChatPanel(QWidget):
         label = QLabel(text)
         label.setTextFormat(Qt.PlainText)
         label.setWordWrap(True)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         label.setContentsMargins(10, 8, 10, 8)
+        label.setMinimumWidth(100)
         label.setMaximumWidth(int(self._bubble_width() * 0.8))
         label.setStyleSheet("""
             background: #3c3c3c;
