@@ -59,12 +59,12 @@ def _get_using_your_tools_section(tool_names: list[str]) -> str:
         "FileRead": "To read files use FileRead instead of cat, head, or tail",
         "FileEdit": "To edit files use FileEdit instead of sed or awk",
         "FileWrite": "To create files use FileWrite instead of cat with heredoc or echo redirection",
-        "Glob": "To search for files by pattern use Glob instead of find or ls",
+        "Glob": "To search for files by pattern use Glob instead of find",
         "Grep": "To search file contents use Grep instead of grep or rg",
         "Bash": (
-            "Reserve Bash exclusively for system commands and terminal operations "
-            "that require shell execution. If there is a relevant dedicated tool, "
-            "default to using it and only fall back to Bash when absolutely necessary."
+            "Use Bash for shell commands: ls/dir (list directory), mkdir, cd, "
+            "git, npm, pip, python, and other terminal operations. "
+            "If there is a relevant dedicated tool, prefer it over Bash."
         ),
     }
 

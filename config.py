@@ -30,8 +30,12 @@ class AgentConfig:
 
         cfg: dict = {}
 
-        # Find config file
+        # Find config file: config.yaml > config.example.yaml
         config_path = Path(path) if path else Path("config.yaml")
+        if not config_path.exists():
+            example = Path("config.example.yaml")
+            if example.exists():
+                config_path = example
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
