@@ -7,3 +7,9 @@ logs/
 .superpowers/
 .claude/worktrees/
 *.pyc
+
+# Packaging
+offline_deps/
+build/
+dist/
+*.spec

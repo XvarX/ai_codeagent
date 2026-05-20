@@ -1,11 +1,13 @@
 """Configuration management for the agent framework.
 
 Supports:
-  1. config.yaml in the project directory (primary, user-friendly)
-  2. Environment variables (override)
+  1. config.yaml next to the exe (PyInstaller) or in project dir
+  2. config.example.yaml as fallback
+  3. Environment variables (override)
 """
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,8 +32,16 @@ class AgentConfig:
 
         cfg: dict = {}
 
-        # Find config file: config.yaml > config.example.yaml
-        config_path = Path(path) if path else Path("config.yaml")
+        # Find config file: next to exe (PyInstaller) > cwd > example
+        if path:
+            config_path = Path(path)
+        else:
+            # PyInstaller: look next to exe first
+            if getattr(sys, 'frozen', False):
+                exe_dir = Path(sys.executable).parent
+                config_path = exe_dir / "config.yaml"
+            else:
+                config_path = Path("config.yaml")
         if not config_path.exists():
             example = Path("config.example.yaml")
             if example.exists():
