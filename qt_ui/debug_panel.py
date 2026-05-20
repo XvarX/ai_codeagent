@@ -91,16 +91,21 @@ class ContextUsageWidget(QWidget):
         row._bar = bar
         return row
 
+    def set_fixed_tokens(self, sys_tokens: int, tools_tokens: int):
+        """Set the pre-calculated fixed token counts for system prompt & tools."""
+        self._sys_tokens = sys_tokens
+        self._tools_tokens = tools_tokens
+
     def update_usage(self, usage: dict, model_max: int = 128000):
         prompt_tokens = usage.get("prompt_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
 
-        sys_tokens = 680
+        sys_tokens = getattr(self, '_sys_tokens', 600)
+        tools_tokens = getattr(self, '_tools_tokens', 40)
         prompt_details = usage.get("prompt_tokens_details", {}) or {}
         cached_tokens = prompt_details.get("cached_tokens", 0) or 0
 
-        msg_tokens = prompt_tokens - sys_tokens - 48
-        tools_tokens = 48
+        msg_tokens = prompt_tokens - sys_tokens - tools_tokens
 
         self._update_row("System Prompt", sys_tokens, model_max)
         self._update_row("对话消息", max(msg_tokens, 0), model_max)
@@ -162,6 +167,9 @@ class DebugPanel(QDockWidget):
             f'<pre style="font-size:11px;color:#999;margin:4px 0">{content}</pre>'
             f'<hr style="border-color:#333">'
         )
+
+    def set_fixed_tokens(self, sys_tokens: int, tools_tokens: int):
+        self._context.set_fixed_tokens(sys_tokens, tools_tokens)
 
     def update_context_usage(self, usage: dict, model_max: int = 128000):
         self._context.update_usage(usage, model_max)

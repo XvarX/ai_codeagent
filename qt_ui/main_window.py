@@ -22,6 +22,7 @@ from tools.grep import GrepTool
 from providers.anthropic import AnthropicProvider
 from providers.openai_compat import OpenAICompatProvider
 from agent import Agent
+from prompts import build_system_prompt
 from qt_ui.chat_panel import ChatPanel
 from qt_ui.debug_panel import DebugPanel
 from qt_ui.input_bar import InputBar
@@ -125,6 +126,14 @@ class MainWindow(QMainWindow):
             max_messages=config.max_messages,
         )
         self._worker: AgentWorker | None = None
+
+        # Calculate fixed token counts
+        sys_text = build_system_prompt(registry.get_tool_names(), str(self.agent.cwd))
+        tools_json = json.dumps(registry.get_schemas(), ensure_ascii=False)
+        self.debug.set_fixed_tokens(
+            sys_tokens=len(sys_text) // 3,   # mixed CN/EN ~3 chars/token
+            tools_tokens=len(tools_json) // 4,  # JSON ~4 chars/token
+        )
 
         # Log file
         logs_dir = Path("logs")
