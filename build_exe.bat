@@ -17,6 +17,7 @@ pyinstaller --onefile --windowed ^
     --hidden-import openai ^
     --hidden-import pydantic ^
     --collect-all PySide6 ^
+    --exclude-module PySide6.scripts.deploy_lib ^
     main.py
 
 echo.
