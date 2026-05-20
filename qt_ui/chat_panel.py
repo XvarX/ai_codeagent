@@ -3,8 +3,27 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel, QTextEdit, QSizePolicy,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
 )
+
+
+class _BubbleLabel(QLabel):
+    """QLabel that correctly reports height-for-width for word wrap."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self.setTextFormat(Qt.PlainText)
+        self.setWordWrap(True)
+        self.setContentsMargins(10, 8, 10, 8)
+        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return super().heightForWidth(width)
 
 
 class ChatPanel(QWidget):
@@ -44,7 +63,7 @@ class ChatPanel(QWidget):
 
         self._thinking_label: QLabel | None = None
 
-    def _bubble_width(self) -> int:
+    def _view_width(self) -> int:
         w = self._scroll.viewport().width()
         if w < 200:
             w = self.width()
@@ -55,46 +74,29 @@ class ChatPanel(QWidget):
     def set_title(self, text: str):
         self._title.setText(text)
 
-    def _make_bubble(self, text: str, max_pct: float, bg: str, color: str,
-                     align_right: bool) -> QTextEdit:
-        """Create a read-only QTextEdit styled as a message bubble."""
-        bubble = QTextEdit()
-        bubble.setReadOnly(True)
-        bubble.setPlainText(text)
-        bubble.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        bubble.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        bubble.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
-        max_w = int(self._bubble_width() * max_pct)
-        bubble.setMaximumWidth(max_w)
-
-        # Match height to content
-        doc = bubble.document()
-        doc.setTextWidth(max_w - 20)  # account for internal padding
-        doc.adjustSize()
-        h = int(doc.size().height() + 20)
-        bubble.setMinimumHeight(h)
-        bubble.setMaximumHeight(h)
-
-        bubble.setStyleSheet(f"""
-            background: {bg};
-            color: {color};
-            border: none;
+    def add_user_message(self, text: str):
+        label = _BubbleLabel(text)
+        label.setMaximumWidth(int(self._view_width() * 0.7))
+        label.setStyleSheet("""
+            background: #0e639c;
+            color: white;
             border-radius: 12px;
             font-size: 14px;
-            padding: 8px 12px;
         """)
-
-        alignment = Qt.AlignRight if align_right else Qt.AlignLeft
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble,
-                                       alignment=alignment)
-        return bubble
-
-    def add_user_message(self, text: str):
-        self._make_bubble(text, 0.7, "#0e639c", "white", align_right=True)
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
+                                       alignment=Qt.AlignRight)
 
     def add_assistant_message(self, text: str):
-        self._make_bubble(text, 0.8, "#3c3c3c", "#d4d4d4", align_right=False)
+        label = _BubbleLabel(text)
+        label.setMaximumWidth(int(self._view_width() * 0.8))
+        label.setStyleSheet("""
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border-radius: 12px;
+            font-size: 14px;
+        """)
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
+                                       alignment=Qt.AlignLeft)
 
     def add_tool_label(self, tool_name: str, input_preview: str):
         label = QLabel(f"🔧 {tool_name} — {input_preview}")
