@@ -1,6 +1,7 @@
 """QThread worker that runs Agent.run_stream() and emits Qt signals."""
 
 import asyncio
+import json
 
 from PySide6.QtCore import QThread, Signal
 
@@ -15,9 +16,9 @@ class AgentWorker(QThread):
 
     thinking = Signal()
     text_delta = Signal(str)
-    tool_use = Signal(str, dict, str)
-    tool_done = Signal(str, str, bool)
-    response_done = Signal(dict)
+    tool_use = Signal(str, str, str)        # name, input_json, tool_use_id
+    tool_done = Signal(str, str, bool)      # name, result, is_error
+    response_done = Signal(str)             # raw JSON string
     done = Signal(str)
     error = Signal(str)
 
@@ -44,11 +45,17 @@ class AgentWorker(QThread):
                 elif isinstance(event, TextDeltaEvent):
                     self.text_delta.emit(event.token)
                 elif isinstance(event, ToolUseEvent):
-                    self.tool_use.emit(event.tool_name, event.input, event.tool_use_id)
+                    self.tool_use.emit(
+                        event.tool_name,
+                        json.dumps(event.input, ensure_ascii=False),
+                        event.tool_use_id,
+                    )
                 elif isinstance(event, ToolDoneEvent):
                     self.tool_done.emit(event.tool_name, event.result, event.is_error)
                 elif isinstance(event, ResponseDoneEvent):
-                    self.response_done.emit(event.raw)
+                    self.response_done.emit(
+                        json.dumps(event.raw, ensure_ascii=False)
+                    )
                 elif isinstance(event, DoneEvent):
                     self.done.emit(event.final_text)
                 elif isinstance(event, ErrorEvent):

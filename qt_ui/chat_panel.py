@@ -85,12 +85,13 @@ class ChatPanel(QWidget):
                                        alignment=Qt.AlignLeft)
 
     def start_streaming(self):
-        self._streaming_bubble = QLabel("")
+        self._streaming_bubble = QLabel("  thinking...")
         self._streaming_bubble.setWordWrap(True)
         self._streaming_bubble.setMaximumWidth(int(self.width() * 0.8))
         self._streaming_bubble.setStyleSheet("""
             background: #3c3c3c;
-            color: #d4d4d4;
+            color: #888;
+            font-style: italic;
             padding: 8px 14px;
             border-radius: 12px;
             font-size: 14px;
@@ -98,11 +99,23 @@ class ChatPanel(QWidget):
         self._msg_layout.insertWidget(self._msg_layout.count() - 1,
                                        self._streaming_bubble,
                                        alignment=Qt.AlignLeft)
+        self._streaming_first_token = True
 
     def append_token(self, token: str):
         if self._streaming_bubble:
-            current = self._streaming_bubble.text()
-            self._streaming_bubble.setText(current + token)
+            if getattr(self, '_streaming_first_token', False):
+                self._streaming_first_token = False
+                self._streaming_bubble.setText(token)
+                self._streaming_bubble.setStyleSheet("""
+                    background: #3c3c3c;
+                    color: #d4d4d4;
+                    padding: 8px 14px;
+                    border-radius: 12px;
+                    font-size: 14px;
+                """)
+            else:
+                current = self._streaming_bubble.text()
+                self._streaming_bubble.setText(current + token)
             self._scroll.verticalScrollBar().setValue(
                 self._scroll.verticalScrollBar().maximum()
             )

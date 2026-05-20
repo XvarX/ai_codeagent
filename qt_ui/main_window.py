@@ -127,6 +127,15 @@ class MainWindow(QMainWindow):
         )
         self._worker: AgentWorker | None = None
 
+        # Startup debug entry
+        self.debug.add_entry(
+            "System",
+            f"Provider: {config.provider}\nModel: {config.model or 'default'}\n"
+            f"Tools: Bash, FileRead, FileEdit, FileWrite, Glob, Grep\n"
+            f"CWD: {config.cwd or Path.cwd()}",
+            "#569cd6",
+        )
+
         # Log file
         logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
@@ -166,9 +175,10 @@ class MainWindow(QMainWindow):
     def _on_text_delta(self, token: str):
         self.chat.append_token(token)
 
-    def _on_tool_use(self, name: str, input: dict, tool_use_id: str):
+    def _on_tool_use(self, name: str, input_json: str, tool_use_id: str):
+        input_dict = json.loads(input_json) if input_json else {}
         preview = ", ".join(
-            f"{k}={str(v)[:50]!r}" for k, v in input.items()
+            f"{k}={str(v)[:50]!r}" for k, v in input_dict.items()
         )
         self.chat.add_tool_label(name, preview)
 
@@ -176,9 +186,11 @@ class MainWindow(QMainWindow):
         color = "#f44747" if is_error else "#4ec9b0"
         preview = result[:500].replace("\n", " ")
         msg = f"Tool: {name}\nResult ({len(result)} chars): {preview}"
-        self.debug.add_entry("📥 Tool Result", msg, color)
+        self.debug.add_entry("[Tool Result]", msg, color)
 
-    def _on_response_done(self, raw: dict):
+    def _on_response_done(self, raw_json: str):
+        raw = json.loads(raw_json) if raw_json else {}
+
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("=" * 40 + " TURN " + "=" * 40 + "\n")
             f.write("── API Request ──\n")
@@ -191,9 +203,9 @@ class MainWindow(QMainWindow):
         tool_blocks = raw.get("_tool_use_blocks", [])
         if tool_blocks:
             names = [t["tool_name"] for t in tool_blocks]
-            self.debug.add_entry("📥 Response", f"Tool calls: {', '.join(names)}", "#4ec9b0")
+            self.debug.add_entry("Response", f"Tool calls: {', '.join(names)}", "#4ec9b0")
         else:
-            self.debug.add_entry("📥 Response", "Text response", "#4ec9b0")
+            self.debug.add_entry("Response", "Text response", "#4ec9b0")
 
         usage = raw.get("usage", {})
         self.debug.update_context_usage(usage)
@@ -202,7 +214,7 @@ class MainWindow(QMainWindow):
         self.chat.finish_streaming()
 
     def _on_error(self, message: str):
-        self.debug.add_entry("❌ Error", message, "#f44747")
+        self.debug.add_entry("[Error]", message, "#f44747")
 
     def _on_worker_finished(self):
         self.input_bar.set_streaming(False)
