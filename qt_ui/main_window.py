@@ -136,8 +136,11 @@ class MainWindow(QMainWindow):
             tools_tokens=int(len(tools_json) * 0.22),  # JSON compact
         )
 
-        # Log file
-        logs_dir = Path("logs")
+        # Log file — next to exe (PyInstaller) or in cwd
+        if getattr(sys, 'frozen', False):
+            logs_dir = Path(sys.executable).parent / "logs"
+        else:
+            logs_dir = Path("logs")
         logs_dir.mkdir(exist_ok=True)
         self._log_path = logs_dir / f"agent_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         self._log_path.write_text("", encoding="utf-8")
