@@ -1,4 +1,4 @@
-"""Chat panel: scrollable message bubbles with streaming text support."""
+"""Chat panel: scrollable message bubbles."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -40,7 +40,7 @@ class ChatPanel(QWidget):
         self._scroll.setWidget(self._msg_container)
         layout.addWidget(self._scroll)
 
-        self._streaming_bubble: QLabel | None = None
+        self._thinking_label: QLabel | None = None
 
     def set_title(self, text: str):
         self._title.setText(text)
@@ -84,46 +84,26 @@ class ChatPanel(QWidget):
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignLeft)
 
-    def start_streaming(self):
-        self._streaming_bubble = QLabel("  thinking...")
-        self._streaming_bubble.setWordWrap(True)
-        self._streaming_bubble.setMaximumWidth(int(self.width() * 0.8))
-        self._streaming_bubble.setStyleSheet("""
-            background: #3c3c3c;
-            color: #888;
-            font-style: italic;
-            padding: 8px 14px;
-            border-radius: 12px;
-            font-size: 14px;
-        """)
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1,
-                                       self._streaming_bubble,
-                                       alignment=Qt.AlignLeft)
-        self._streaming_first_token = True
+    def show_thinking(self):
+        if not self._thinking_label:
+            self._thinking_label = QLabel("  thinking...")
+            self._thinking_label.setStyleSheet("""
+                color: #888;
+                font-style: italic;
+                padding: 4px 8px;
+                font-size: 13px;
+            """)
+            self._msg_layout.insertWidget(self._msg_layout.count() - 1,
+                                           self._thinking_label,
+                                           alignment=Qt.AlignLeft)
 
-    def append_token(self, token: str):
-        if self._streaming_bubble:
-            if getattr(self, '_streaming_first_token', False):
-                self._streaming_first_token = False
-                self._streaming_bubble.setText(token)
-                self._streaming_bubble.setStyleSheet("""
-                    background: #3c3c3c;
-                    color: #d4d4d4;
-                    padding: 8px 14px;
-                    border-radius: 12px;
-                    font-size: 14px;
-                """)
-            else:
-                current = self._streaming_bubble.text()
-                self._streaming_bubble.setText(current + token)
-            self._scroll.verticalScrollBar().setValue(
-                self._scroll.verticalScrollBar().maximum()
-            )
-
-    def finish_streaming(self):
-        self._streaming_bubble = None
+    def hide_thinking(self):
+        if self._thinking_label:
+            self._thinking_label.deleteLater()
+            self._thinking_label = None
 
     def clear(self):
+        self._thinking_label = None
         while self._msg_layout.count() > 1:
             item = self._msg_layout.takeAt(0)
             if item.widget():

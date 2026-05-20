@@ -1,14 +1,13 @@
-"""Bottom input bar: multi-line text input + send + stop buttons."""
+"""Bottom input bar: multi-line text input + send button."""
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QTextEdit, QPushButton
 
 
 class InputBar(QWidget):
-    """Multi-line input area with send and stop buttons."""
+    """Multi-line input area with send button."""
 
     send_clicked = Signal(str)
-    stop_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,29 +49,10 @@ class InputBar(QWidget):
             QPushButton:disabled { background: #555; color: #999; }
         """)
 
-        self._stop_btn = QPushButton("停止")
-        self._stop_btn.setFixedSize(70, 40)
-        self._stop_btn.setStyleSheet("""
-            QPushButton {
-                background: #8b0000;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover { background: #a00000; }
-            QPushButton:pressed { background: #700000; }
-            QPushButton:disabled { background: #555; color: #999; }
-        """)
-        self._stop_btn.setVisible(False)
-
         layout.addWidget(self._input)
         layout.addWidget(self._send_btn)
-        layout.addWidget(self._stop_btn)
 
         self._send_btn.clicked.connect(self._on_send)
-        self._stop_btn.clicked.connect(self._on_stop)
 
     def _on_send(self):
         text = self._input.toPlainText().strip()
@@ -80,13 +60,13 @@ class InputBar(QWidget):
             self.send_clicked.emit(text)
             self._input.clear()
 
-    def _on_stop(self):
-        self.stop_clicked.emit()
-
-    def set_streaming(self, streaming: bool):
-        self._send_btn.setVisible(not streaming)
-        self._stop_btn.setVisible(streaming)
-        self._input.setEnabled(not streaming)
+    def set_busy(self, busy: bool):
+        self._send_btn.setEnabled(not busy)
+        self._input.setEnabled(not busy)
+        if busy:
+            self._input.setPlaceholderText("等待回复...")
+        else:
+            self._input.setPlaceholderText("输入消息... (Ctrl+Enter 发送, Enter 换行)")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Return and event.modifiers() & Qt.ControlModifier:

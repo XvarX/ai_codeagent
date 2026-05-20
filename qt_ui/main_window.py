@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
 
-        # Central area: chat + input
+        # Central: chat + input
         self.chat = ChatPanel()
         self.chat.set_title(
             f"AI Code Agent  |  {config.provider}  |  {config.model or 'default'}"
@@ -97,7 +97,6 @@ class MainWindow(QMainWindow):
         # Input bar
         self.input_bar = InputBar()
         self.input_bar.send_clicked.connect(self._on_send)
-        self.input_bar.stop_clicked.connect(self._on_stop)
 
         # Assemble
         central = QWidget()
@@ -116,7 +115,7 @@ class MainWindow(QMainWindow):
         )
         self.setStatusBar(self._status)
 
-        # Agent + worker
+        # Agent
         registry = build_registry()
         provider = build_provider(config)
         self.agent = Agent(
@@ -127,6 +126,12 @@ class MainWindow(QMainWindow):
         )
         self._worker: AgentWorker | None = None
 
+        # Log file
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        self._log_path = logs_dir / f"agent_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        self._log_path.write_text("", encoding="utf-8")
+
         # Startup debug entry
         self.debug.add_entry(
             "System",
@@ -136,15 +141,11 @@ class MainWindow(QMainWindow):
             "#569cd6",
         )
 
-        # Log file
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
-        self._log_path = logs_dir / f"agent_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        self._log_path.write_text("", encoding="utf-8")
-
     def _on_send(self, text: str):
         self.chat.add_user_message(text)
+        self.chat.show_thinking()
 
+        # Conversation separator in log
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "*" * 60 + "\n")
             f.write(f"User: {text}\n")
@@ -152,87 +153,75 @@ class MainWindow(QMainWindow):
 
         self._worker = AgentWorker(self.agent, text)
         self._worker.thinking.connect(self._on_thinking)
-        self._worker.text_delta.connect(self._on_text_delta)
-        self._worker.tool_use.connect(self._on_tool_use)
-        self._worker.tool_done.connect(self._on_tool_done)
-        self._worker.response_done.connect(self._on_response_done)
+        self._worker.tool_call.connect(self._on_tool_call)
+        self._worker.tool_result.connect(self._on_tool_result)
+        self._worker.response.connect(self._on_response)
         self._worker.done.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._on_worker_finished)
 
-        self.input_bar.set_streaming(True)
+        self.input_bar.set_busy(True)
         self._worker.start()
-
-    def _on_stop(self):
-        if self._worker and self._worker.isRunning():
-            self._worker.cancel()
 
     # ── Callbacks ─────────────────────────────────────────
 
     def _on_thinking(self):
-        self.chat.start_streaming()
+        pass  # thinking label already shown by _on_send
 
-    def _on_text_delta(self, token: str):
-        self.chat.append_token(token)
-        if not hasattr(self, '_tokens_received'):
-            self._tokens_received = 0
-        self._tokens_received += 1
-
-    def _on_tool_use(self, name: str, input_json: str, tool_use_id: str):
+    def _on_tool_call(self, name: str, input_json: str):
         input_dict = json.loads(input_json) if input_json else {}
         preview = ", ".join(
             f"{k}={str(v)[:50]!r}" for k, v in input_dict.items()
         )
         self.chat.add_tool_label(name, preview)
 
-    def _on_tool_done(self, name: str, result: str, is_error: bool):
+    def _on_tool_result(self, name: str, result: str, is_error: bool):
         color = "#f44747" if is_error else "#4ec9b0"
         preview = result[:500].replace("\n", " ")
         msg = f"Tool: {name}\nResult ({len(result)} chars): {preview}"
         self.debug.add_entry("[Tool Result]", msg, color)
 
-    def _on_response_done(self, raw_json: str):
+    def _on_response(self, raw_json: str, text: str):
         raw = json.loads(raw_json) if raw_json else {}
 
+        # Log full request + response
+        req = raw.get("_request", {})
+        resp = {k: v for k, v in raw.items() if k not in ("_request", "_tool_use_blocks")}
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("=" * 40 + " TURN " + "=" * 40 + "\n")
             f.write("── API Request ──\n")
-            f.write(json.dumps(raw.get("_request", {}), ensure_ascii=False, indent=2) + "\n\n")
+            f.write(json.dumps(req, ensure_ascii=False, indent=2) + "\n\n")
             f.write("── API Response ──\n")
-            resp = {k: v for k, v in raw.items() if k != "_request"}
             f.write(json.dumps(resp, ensure_ascii=False, indent=2) + "\n")
             f.write("─" * 90 + "\n")
 
-        tool_blocks = raw.get("_tool_use_blocks", [])
-        usage = raw.get("usage", {})
-        tokens = getattr(self, '_tokens_received', 0)
-        self._tokens_received = 0
-
-        # Show request summary in debug
-        req = raw.get("_request", {})
+        # Show request in debug
         self.debug.add_entry(
-            "Request",
+            "[Request]",
             f"Model: {req.get('model', '?')}\nMessages: {len(req.get('messages', []))}\n"
             f"Tools: {len(req.get('tools', []) or [])}",
             "#569cd6",
         )
 
-        # Show response details in debug
-        response_text = raw.get("_text", "")
+        # Show response in debug
+        tool_blocks = raw.get("_tool_use_blocks", [])
+        usage = raw.get("usage", {})
+        prompt_tokens = usage.get("prompt_tokens", "?")
+        completion_tokens = usage.get("completion_tokens", "?")
+
         if tool_blocks:
             names = [t["tool_name"] for t in tool_blocks]
             self.debug.add_entry(
-                "Response",
-                f"Tool calls: {', '.join(names)}\nTokens received: {tokens}",
+                "[Response]",
+                f"Tool calls: {', '.join(names)}\n"
+                f"prompt={prompt_tokens}, completion={completion_tokens}",
                 "#4ec9b0",
             )
         else:
-            prompt_tokens = usage.get("prompt_tokens", "?")
-            completion_tokens = usage.get("completion_tokens", "?")
-            text_preview = response_text[:300] if response_text else "(empty)"
+            text_preview = text[:300] if text else "(empty)"
             self.debug.add_entry(
-                "Response",
-                f"Text: {text_preview}\nTokens: {tokens} streamed, "
+                "[Response]",
+                f"Text: {text_preview}\n"
                 f"prompt={prompt_tokens}, completion={completion_tokens}",
                 "#4ec9b0",
             )
@@ -240,25 +229,15 @@ class MainWindow(QMainWindow):
         self.debug.update_context_usage(usage)
 
     def _on_done(self, final_text: str):
-        # If no streaming tokens arrived, show the final text in the bubble
-        if self.chat._streaming_bubble:
-            current = self.chat._streaming_bubble.text()
-            if current == "  thinking...":
-                self.chat._streaming_bubble.setText(final_text)
-                self.chat._streaming_bubble.setStyleSheet("""
-                    background: #3c3c3c;
-                    color: #d4d4d4;
-                    padding: 8px 14px;
-                    border-radius: 12px;
-                    font-size: 14px;
-                """)
-        self.chat.finish_streaming()
+        self.chat.hide_thinking()
+        if final_text and not final_text.startswith("Error:"):
+            self.chat.add_assistant_message(final_text)
 
     def _on_error(self, message: str):
         self.debug.add_entry("[Error]", message, "#f44747")
 
     def _on_worker_finished(self):
-        self.input_bar.set_streaming(False)
+        self.input_bar.set_busy(False)
         self._worker = None
 
     def _clear_history(self):
@@ -268,7 +247,7 @@ class MainWindow(QMainWindow):
 
 
 def launch(config: AgentConfig):
-    """Entry point for Qt mode. Creates QApplication and MainWindow."""
+    """Entry point for Qt mode."""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
