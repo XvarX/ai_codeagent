@@ -1,29 +1,33 @@
 """Chat panel: scrollable message bubbles."""
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QFontMetrics, QTextDocument
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
 )
 
 
 class _BubbleLabel(QLabel):
-    """QLabel that correctly reports height-for-width for word wrap."""
+    """QLabel that correctly sizes itself for word-wrapped text."""
 
-    def __init__(self, text: str, parent=None):
-        super().__init__(text, parent)
+    def __init__(self, text: str, max_width: int, parent=None):
+        super().__init__(parent)
         self.setTextFormat(Qt.PlainText)
         self.setWordWrap(True)
+        self.setText(text)
         self.setContentsMargins(10, 8, 10, 8)
-        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        policy.setHeightForWidth(True)
-        self.setSizePolicy(policy)
 
-    def hasHeightForWidth(self) -> bool:
-        return True
+        # Force the label to measure its height at the given max width
+        doc = QTextDocument()
+        doc.setDefaultFont(self.font())
+        doc.setPlainText(text)
+        doc.setTextWidth(max_width - 20)  # padding
+        doc_height = int(doc.size().height() + 24)
 
-    def heightForWidth(self, width: int) -> int:
-        return super().heightForWidth(width)
+        # Set exact size: max width, content-based height
+        self.setFixedWidth(max_width)
+        self.setFixedHeight(max(doc_height, 28))
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
 
 class ChatPanel(QWidget):
@@ -75,8 +79,8 @@ class ChatPanel(QWidget):
         self._title.setText(text)
 
     def add_user_message(self, text: str):
-        label = _BubbleLabel(text)
-        label.setMaximumWidth(int(self._view_width() * 0.7))
+        max_w = int(self._view_width() * 0.7)
+        label = _BubbleLabel(text, max_w)
         label.setStyleSheet("""
             background: #0e639c;
             color: white;
@@ -87,8 +91,8 @@ class ChatPanel(QWidget):
                                        alignment=Qt.AlignRight)
 
     def add_assistant_message(self, text: str):
-        label = _BubbleLabel(text)
-        label.setMaximumWidth(int(self._view_width() * 0.8))
+        max_w = int(self._view_width() * 0.8)
+        label = _BubbleLabel(text, max_w)
         label.setStyleSheet("""
             background: #3c3c3c;
             color: #d4d4d4;
