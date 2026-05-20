@@ -27,11 +27,11 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    def call_stream(
+    async def call_stream(
         self,
-        messages,
-        tools,
-        system,
+        messages: list[Message],
+        tools: list[dict],
+        system: str,
     ):
         """
         Streaming call to LLM. Yields events: TextDeltaEvent, ToolUseEvent,
