@@ -46,7 +46,7 @@ def build_provider(config: AgentConfig):
 
 
 _thinking_phase = 0
-_spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_spinner_chars = "|/-\\"
 
 
 async def _on_thinking():
