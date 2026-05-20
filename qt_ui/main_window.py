@@ -197,12 +197,12 @@ class MainWindow(QMainWindow):
         if "prompt_tokens" not in usage and "input_tokens" in usage:
             # Anthropic: input = base + cache_creation + cache_read
             input_total = (
-                usage.get("input_tokens", 0)
-                + usage.get("cache_creation_input_tokens", 0)
-                + usage.get("cache_read_input_tokens", 0)
+                (usage.get("input_tokens") or 0)
+                + (usage.get("cache_creation_input_tokens") or 0)
+                + (usage.get("cache_read_input_tokens") or 0)
             )
-            output = usage.get("output_tokens", 0)
-            cache_tokens = usage.get("cache_read_input_tokens", 0)
+            output = usage.get("output_tokens") or 0
+            cache_tokens = usage.get("cache_read_input_tokens") or 0
             return {
                 "prompt_tokens": input_total,
                 "completion_tokens": output,
@@ -214,10 +214,16 @@ class MainWindow(QMainWindow):
         return usage
 
     def _on_response(self, raw_json: str, text: str):
-        raw = json.loads(raw_json) if raw_json else {}
+        try:
+            raw = json.loads(raw_json) if raw_json else {}
+        except Exception:
+            raw = {}
 
         # Normalize usage for cross-provider display
-        raw["usage"] = self._normalize_usage(raw.get("usage", {}))
+        try:
+            raw["usage"] = self._normalize_usage(raw.get("usage", {}))
+        except Exception:
+            raw["usage"] = {}
 
         # Log full request + response
         req = raw.get("_request", {})
