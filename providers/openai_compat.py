@@ -126,9 +126,8 @@ class OpenAICompatProvider(BaseProvider):
         raw["_request"] = request_payload
         return assistant_msg, tool_use_blocks, raw
 
-    async def call_stream(self, messages, tools, system):
+    async def call_stream(self, messages: list[Message], tools: list[dict], system: str):
         """OpenAI/GLM/DeepSeek 流式调用，逐 token yield."""
-        from core_types import ToolUseBlock
 
         # Build API messages (same as call())
         api_messages: list[dict] = [{"role": "system", "content": system}]
@@ -170,8 +169,7 @@ class OpenAICompatProvider(BaseProvider):
         try:
             stream = await self.client.chat.completions.create(**request_payload)
 
-            text_parts: list[str] = []
-            tool_calls_buffer: dict[int, dict] = {}
+            tool_use_buffer: dict[int, dict] = {}
             final_usage: dict = {}
 
             async for chunk in stream:
@@ -183,24 +181,23 @@ class OpenAICompatProvider(BaseProvider):
                 delta = chunk.choices[0].delta
 
                 if delta.content:
-                    text_parts.append(delta.content)
                     yield TextDeltaEvent(token=delta.content)
 
                 if delta.tool_calls:
                     for tc in delta.tool_calls:
                         idx = tc.index
-                        if idx not in tool_calls_buffer:
-                            tool_calls_buffer[idx] = {
+                        if idx not in tool_use_buffer:
+                            tool_use_buffer[idx] = {
                                 "id": tc.id or "",
                                 "name": tc.function.name or "",
                                 "arguments": "",
                             }
                         if tc.id:
-                            tool_calls_buffer[idx]["id"] = tc.id
+                            tool_use_buffer[idx]["id"] = tc.id
                         if tc.function.name:
-                            tool_calls_buffer[idx]["name"] = tc.function.name
+                            tool_use_buffer[idx]["name"] = tc.function.name
                         if tc.function.arguments:
-                            tool_calls_buffer[idx]["arguments"] += tc.function.arguments
+                            tool_use_buffer[idx]["arguments"] += tc.function.arguments
 
                 if hasattr(chunk, "usage") and chunk.usage:
                     final_usage = chunk.usage.model_dump() if hasattr(chunk.usage, "model_dump") else {}
@@ -215,7 +212,7 @@ class OpenAICompatProvider(BaseProvider):
 
             # Parse tool calls from buffer
             tool_use_blocks: list[ToolUseBlock] = []
-            for tc_data in tool_calls_buffer.values():
+            for tc_data in tool_use_buffer.values():
                 try:
                     parsed = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
                 except json.JSONDecodeError:

@@ -1,7 +1,6 @@
 """Base provider abstraction — mirrors services/api/claude.ts callModel interface."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
 from core_types import Message, ToolUseBlock
 
 

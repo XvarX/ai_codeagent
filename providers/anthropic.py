@@ -119,9 +119,8 @@ class AnthropicProvider(BaseProvider):
         raw["_request"] = request_payload
         return assistant_msg, tool_use_blocks, raw
 
-    async def call_stream(self, messages, tools, system):
+    async def call_stream(self, messages: list[Message], tools: list[dict], system: str):
         """Anthropic 流式调用，逐 event yield（重构自现有 call()）。"""
-        from core_types import ToolUseBlock
 
         # Build API messages (same as call())
         api_messages: list[dict] = []
@@ -160,7 +159,6 @@ class AnthropicProvider(BaseProvider):
         }
 
         try:
-            text_parts: list[str] = []
             tool_use_buffer: dict[int, dict] = {}
             tool_use_blocks: list[ToolUseBlock] = []
 
@@ -179,7 +177,6 @@ class AnthropicProvider(BaseProvider):
                     elif event.type == "content_block_delta":
                         delta = event.delta
                         if hasattr(delta, "text") and delta.text:
-                            text_parts.append(delta.text)
                             yield TextDeltaEvent(token=delta.text)
                         elif hasattr(delta, "partial_json") and delta.partial_json:
                             idx = event.index
