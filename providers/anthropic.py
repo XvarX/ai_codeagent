@@ -117,6 +117,7 @@ class AnthropicProvider(BaseProvider):
         raw = final_msg.model_dump() if hasattr(final_msg, "model_dump") else {}
         raw["_provider"] = "anthropic"
         raw["_request"] = request_payload
+        raw["_text"] = "\n".join(text_parts) if text_parts else ""
         return assistant_msg, tool_use_blocks, raw
 
     async def call_stream(self, messages: list[Message], tools: list[dict], system: str):

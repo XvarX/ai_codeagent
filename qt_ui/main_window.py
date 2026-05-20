@@ -190,8 +190,25 @@ class MainWindow(QMainWindow):
         msg = f"Tool: {name}\nResult ({len(result)} chars): {preview}"
         self.debug.add_entry("[Tool Result]", msg, color)
 
+    def _normalize_usage(self, usage: dict) -> dict:
+        """Normalize Anthropic usage fields to OpenAI-compatible names."""
+        if not usage:
+            return {}
+        if "prompt_tokens" not in usage and "input_tokens" in usage:
+            return {
+                "prompt_tokens": usage.get("input_tokens", 0),
+                "completion_tokens": usage.get("output_tokens", 0),
+                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+            }
+        if "total_tokens" not in usage:
+            usage["total_tokens"] = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
+        return usage
+
     def _on_response(self, raw_json: str, text: str):
         raw = json.loads(raw_json) if raw_json else {}
+
+        # Normalize usage for cross-provider display
+        raw["usage"] = self._normalize_usage(raw.get("usage", {}))
 
         # Log full request + response
         req = raw.get("_request", {})
