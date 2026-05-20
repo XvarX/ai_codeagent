@@ -195,13 +195,30 @@ class MainWindow(QMainWindow):
             f.write(json.dumps(resp, ensure_ascii=False, indent=2) + "\n")
             f.write("─" * 90 + "\n")
 
-        # Show request in debug
-        self.debug.add_entry(
-            "[Request]",
-            f"Model: {req.get('model', '?')}\nMessages: {len(req.get('messages', []))}\n"
-            f"Tools: {len(req.get('tools', []) or [])}",
-            "#569cd6",
-        )
+        # Show request in debug — actual content
+        msgs = req.get("messages", [])
+        msg_lines = []
+        for m in msgs:
+            content = str(m.get("content", ""))
+            if isinstance(content, list):
+                # Anthropic format: content is a list of blocks
+                parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            parts.append(str(block.get("text", "")))
+                        elif block.get("type") == "tool_result":
+                            parts.append(f"[tool_result: {str(block.get('content', ''))[:80]}]")
+                        elif block.get("type") == "tool_use":
+                            parts.append(f"[tool_use: {block.get('name', '')}]")
+                content = " ".join(parts)
+            role = m.get("role", "?")
+            if role == "system":
+                msg_lines.append(f"[system] ({len(content)} chars)")
+            else:
+                msg_lines.append(f"[{role}] {content[:200]}")
+        req_detail = f"Model: {req.get('model', '?')}\n" + "\n".join(msg_lines[-6:])  # last 6 msgs
+        self.debug.add_entry("[Request]", req_detail, "#569cd6")
 
         # Show response in debug
         tool_blocks = raw.get("_tool_use_blocks", [])
@@ -218,10 +235,9 @@ class MainWindow(QMainWindow):
                 "#4ec9b0",
             )
         else:
-            text_preview = text[:300] if text else "(empty)"
             self.debug.add_entry(
                 "[Response]",
-                f"Text: {text_preview}\n"
+                f"Text:\n{text}\n\n"
                 f"prompt={prompt_tokens}, completion={completion_tokens}",
                 "#4ec9b0",
             )
