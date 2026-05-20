@@ -1,0 +1,9 @@
+# API keys
+config.yaml
+
+# Generated
+__pycache__/
+logs/
+.superpowers/
+.claude/worktrees/
+*.pyc
