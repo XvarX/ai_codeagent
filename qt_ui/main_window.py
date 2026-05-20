@@ -195,10 +195,19 @@ class MainWindow(QMainWindow):
         if not usage:
             return {}
         if "prompt_tokens" not in usage and "input_tokens" in usage:
+            # Anthropic: input = base + cache_creation + cache_read
+            input_total = (
+                usage.get("input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0)
+                + usage.get("cache_read_input_tokens", 0)
+            )
+            output = usage.get("output_tokens", 0)
+            cache_tokens = usage.get("cache_read_input_tokens", 0)
             return {
-                "prompt_tokens": usage.get("input_tokens", 0),
-                "completion_tokens": usage.get("output_tokens", 0),
-                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                "prompt_tokens": input_total,
+                "completion_tokens": output,
+                "total_tokens": input_total + output,
+                "prompt_tokens_details": {"cached_tokens": cache_tokens},
             }
         if "total_tokens" not in usage:
             usage["total_tokens"] = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
