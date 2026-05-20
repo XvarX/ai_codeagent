@@ -182,9 +182,10 @@ class MainWindow(QMainWindow):
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("=" * 40 + " TURN " + "=" * 40 + "\n")
             f.write("── API Request ──\n")
-            f.write(json.dumps(raw.pop("_request", {}), ensure_ascii=False, indent=2) + "\n\n")
+            f.write(json.dumps(raw.get("_request", {}), ensure_ascii=False, indent=2) + "\n\n")
             f.write("── API Response ──\n")
-            f.write(json.dumps(raw, ensure_ascii=False, indent=2) + "\n")
+            resp = {k: v for k, v in raw.items() if k != "_request"}
+            f.write(json.dumps(resp, ensure_ascii=False, indent=2) + "\n")
             f.write("─" * 90 + "\n")
 
         tool_blocks = raw.get("_tool_use_blocks", [])

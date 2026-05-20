@@ -1,7 +1,7 @@
 """Entry point for My Agent.
 
-python main.py                  TUI 双面板界面 (推荐)
-python main.py -s "message"     终端交互模式
+python main.py                  Qt 桌面界面 (默认)
+python main.py -s               终端交互模式
 python main.py -c "message"     单次命令行模式
 """
 
