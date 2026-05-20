@@ -1,6 +1,6 @@
 """Streaming event types shared by Agent, Providers, and UI."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
