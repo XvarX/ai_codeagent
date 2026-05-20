@@ -195,30 +195,37 @@ class MainWindow(QMainWindow):
             f.write(json.dumps(resp, ensure_ascii=False, indent=2) + "\n")
             f.write("─" * 90 + "\n")
 
-        # Show request in debug — actual content
+        # Show request summary in debug
         msgs = req.get("messages", [])
-        msg_lines = []
-        for m in msgs:
-            content = str(m.get("content", ""))
-            if isinstance(content, list):
-                # Anthropic format: content is a list of blocks
+        sys_text = req.get("system", "")  # Anthropic puts system prompt here
+        msg_parts = [f"Model: {req.get('model', '?')}  |  Messages: {len(msgs)}"]
+        if sys_text:
+            msg_parts.append(f"  system: ({len(str(sys_text))} chars)")
+        for i, m in enumerate(msgs):
+            role = m.get("role", "?")
+            raw_content = m.get("content", "")
+            # Handle Anthropic list-of-blocks content format
+            if isinstance(raw_content, list):
                 parts = []
-                for block in content:
+                for block in raw_content:
                     if isinstance(block, dict):
                         if block.get("type") == "text":
                             parts.append(str(block.get("text", "")))
                         elif block.get("type") == "tool_result":
-                            parts.append(f"[tool_result: {str(block.get('content', ''))[:80]}]")
+                            parts.append(f"[tool_result]")
                         elif block.get("type") == "tool_use":
-                            parts.append(f"[tool_use: {block.get('name', '')}]")
-                content = " ".join(parts)
-            role = m.get("role", "?")
+                            parts.append(f"[tool_use:{block.get('name','')}]")
+                raw_content = " ".join(parts)
             if role == "system":
-                msg_lines.append(f"[system] ({len(content)} chars)")
+                msg_parts.append(f"  [{i}] system ({len(str(raw_content))} chars)")
+            elif role == "tool":
+                cid = m.get("tool_call_id", "")
+                preview = str(raw_content)[:100].replace("\n", " ")
+                msg_parts.append(f"  [{i}] tool({cid}): {preview}")
             else:
-                msg_lines.append(f"[{role}] {content[:200]}")
-        req_detail = f"Model: {req.get('model', '?')}\n" + "\n".join(msg_lines[-6:])  # last 6 msgs
-        self.debug.add_entry("[Request]", req_detail, "#569cd6")
+                preview = str(raw_content)[:150].replace("\n", " ").strip()
+                msg_parts.append(f"  [{i}] {role}: {preview}")
+        self.debug.add_entry("[Request]", "\n".join(msg_parts), "#569cd6")
 
         # Show response in debug
         tool_blocks = raw.get("_tool_use_blocks", [])
