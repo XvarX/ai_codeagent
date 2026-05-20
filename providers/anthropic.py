@@ -108,16 +108,17 @@ class AnthropicProvider(BaseProvider):
                 input=parsed,
             ))
 
+        full_text = "".join(text_parts) if text_parts else ""
         assistant_msg = Message(
             role="assistant",
-            content="\n".join(text_parts) if text_parts else "",
+            content=full_text,
             tool_use_blocks=tool_use_blocks,
         )
         final_msg = await stream.get_final_message()
         raw = final_msg.model_dump() if hasattr(final_msg, "model_dump") else {}
         raw["_provider"] = "anthropic"
         raw["_request"] = request_payload
-        raw["_text"] = "\n".join(text_parts) if text_parts else ""
+        raw["_text"] = full_text
         return assistant_msg, tool_use_blocks, raw
 
     async def call_stream(self, messages: list[Message], tools: list[dict], system: str):
