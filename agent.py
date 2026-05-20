@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 from typing import Callable, Awaitable
-from core_types import Message
+from core_types import Message, ToolUseBlock
 from tools.base import ToolContext
 from tools.registry import ToolRegistry
 from providers.base import BaseProvider
@@ -153,7 +153,6 @@ class Agent:
 
             text_parts: list[str] = []
             tool_use_blocks: list[ToolUseBlock] = []
-            raw_response: dict = {}
 
             try:
                 async for event in self.provider.call_stream(
@@ -173,7 +172,6 @@ class Agent:
                         tool_use_blocks.append(block)
                         yield event
                     elif isinstance(event, ResponseDoneEvent):
-                        raw_response = event.raw
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
@@ -184,8 +182,13 @@ class Agent:
                         yield DoneEvent(final_text=f"Error: {event.message}")
                         return
             except Exception as e:
-                yield ErrorEvent(message=str(e))
-                yield DoneEvent(final_text=f"Error: {e}")
+                error_msg_text = f"Error calling LLM: {e}"
+                self.messages.append(Message(
+                    role="assistant",
+                    content=error_msg_text,
+                ))
+                yield ErrorEvent(message=error_msg_text)
+                yield DoneEvent(final_text=error_msg_text)
                 return
 
             assistant_text = "".join(text_parts)
