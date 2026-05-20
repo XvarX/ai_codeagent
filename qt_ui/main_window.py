@@ -130,9 +130,10 @@ class MainWindow(QMainWindow):
         # Calculate fixed token counts
         sys_text = build_system_prompt(registry.get_tool_names(), str(self.agent.cwd))
         tools_json = json.dumps(registry.get_schemas(), ensure_ascii=False)
+        # Token estimation: Chinese ~1.5 chars/tok, English ~4, JSON ~5
         self.debug.set_fixed_tokens(
-            sys_tokens=len(sys_text) // 3,   # mixed CN/EN ~3 chars/token
-            tools_tokens=len(tools_json) // 4,  # JSON ~4 chars/token
+            sys_tokens=int(len(sys_text) * 0.55),   # CN-heavy mixed
+            tools_tokens=int(len(tools_json) * 0.22),  # JSON compact
         )
 
         # Log file
@@ -219,13 +220,11 @@ class MainWindow(QMainWindow):
         except Exception:
             raw = {}
 
-        # Normalize usage for cross-provider display
-        try:
-            raw["usage"] = self._normalize_usage(raw.get("usage", {}))
-        except Exception:
-            raw["usage"] = {}
+        # Preserve original for logging, normalize for display
+        orig_usage = raw.get("usage", {})
+        norm_usage = self._normalize_usage(orig_usage)
 
-        # Log full request + response
+        # Log full request + response (original data, not normalized)
         req = raw.get("_request", {})
         resp = {k: v for k, v in raw.items() if k not in ("_request", "_tool_use_blocks")}
         with open(self._log_path, "a", encoding="utf-8") as f:
@@ -270,9 +269,8 @@ class MainWindow(QMainWindow):
 
         # Show response in debug
         tool_blocks = raw.get("_tool_use_blocks", [])
-        usage = raw.get("usage", {})
-        prompt_tokens = usage.get("prompt_tokens", "?")
-        completion_tokens = usage.get("completion_tokens", "?")
+        prompt_tokens = norm_usage.get("prompt_tokens", "?")
+        completion_tokens = norm_usage.get("completion_tokens", "?")
 
         if tool_blocks:
             names = [t["tool_name"] for t in tool_blocks]
@@ -290,7 +288,7 @@ class MainWindow(QMainWindow):
                 "#4ec9b0",
             )
 
-        self.debug.update_context_usage(usage)
+        self.debug.update_context_usage(norm_usage)
 
     def _on_done(self, final_text: str):
         self.chat.hide_thinking()
