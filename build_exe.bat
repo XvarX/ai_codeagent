@@ -1,14 +1,14 @@
 @echo off
 cd /d "%~dp0"
 echo ========================================
-echo   AI Code Agent - 打包成独立 exe
+echo   AI Code Agent - Build Standalone EXE
 echo ========================================
 echo.
 
-echo [1/2] 安装 PyInstaller...
+echo [1/2] Installing PyInstaller...
 pip install pyinstaller -q
 
-echo [2/2] 打包中...
+echo [2/2] Building...
 pyinstaller --onefile --windowed ^
     --name AI_CodeAgent ^
     --hidden-import PySide6 ^
@@ -21,11 +21,11 @@ pyinstaller --onefile --windowed ^
 
 echo.
 echo ========================================
-echo   完成！输出: dist\AI_CodeAgent.exe
+echo   Done: dist\AI_CodeAgent.exe
 echo ========================================
 echo.
-echo 发给别人用：把以下两个文件放在同一个目录
+echo To distribute: put these two files together:
 echo   1. dist\AI_CodeAgent.exe
-echo   2. config.yaml (从 config.example.yaml 复制并填 key)
+echo   2. config.yaml (copy from config.example.yaml and add API keys)
 echo.
 pause
