@@ -1,0 +1,49 @@
+"""Streaming event types shared by Agent, Providers, and UI."""
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class ThinkingEvent:
+    """Agent 开始思考（发起 LLM 请求前）"""
+
+
+@dataclass
+class TextDeltaEvent:
+    """LLM 返回的一个文本 token"""
+    token: str
+
+
+@dataclass
+class ToolUseEvent:
+    """LLM 请求调用工具"""
+    tool_name: str
+    input: dict[str, Any]
+    tool_use_id: str = ""
+
+
+@dataclass
+class ToolDoneEvent:
+    """工具执行完毕"""
+    tool_name: str
+    result: str
+    is_error: bool = False
+
+
+@dataclass
+class ResponseDoneEvent:
+    """LLM 响应完成，含原始 API 返回数据"""
+    raw: dict[str, Any]
+
+
+@dataclass
+class DoneEvent:
+    """整个 run_stream() 完成"""
+    final_text: str
+
+
+@dataclass
+class ErrorEvent:
+    """发生错误"""
+    message: str
