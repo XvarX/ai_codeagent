@@ -146,10 +146,14 @@ async def main():
     elif len(sys.argv) >= 2 and sys.argv[1] not in ("-s", "-c"):
         await run_one_shot(config, " ".join(sys.argv[1:]))
     else:
-        # Default: launch TUI
-        from tui import main as tui_main
-        tui_main()
+        # Qt mode — handled in __name__ == "__main__"
+        pass
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    if len(sys.argv) == 1:
+        # Default: launch Qt GUI
+        from qt_ui.main_window import launch
+        launch(AgentConfig.from_yaml())
+    else:
+        asyncio.run(main())
