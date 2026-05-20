@@ -1,9 +1,31 @@
 """Chat panel: scrollable message bubbles."""
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
 )
+
+
+def _make_bubble(text: str, align: str, max_width_ratio: float,
+                 bg: str, color: str) -> QLabel:
+    """Create a message bubble label with plain-text rendering."""
+    label = QLabel(text)
+    label.setTextFormat(Qt.PlainText)
+    label.setWordWrap(True)
+    label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+    fm = label.fontMetrics()
+    label.setMaximumWidth(int(fm.averageCharWidth() * 1200 * max_width_ratio))
+    label.setStyleSheet(f"""
+        background: {bg};
+        color: {color};
+        padding: 8px 14px;
+        border-radius: 12px;
+        font-size: 14px;
+    """)
+    if align == "right":
+        label.setAlignment(Qt.AlignRight)
+    return label
 
 
 class ChatPanel(QWidget):
@@ -46,36 +68,18 @@ class ChatPanel(QWidget):
         self._title.setText(text)
 
     def add_user_message(self, text: str):
-        label = QLabel(text)
-        label.setWordWrap(True)
-        label.setMaximumWidth(int(self.width() * 0.7))
-        label.setStyleSheet("""
-            background: #0e639c;
-            color: white;
-            padding: 8px 14px;
-            border-radius: 12px;
-            font-size: 14px;
-        """)
-        label.setAlignment(Qt.AlignRight)
+        label = _make_bubble(text, "right", 0.7, "#0e639c", "white")
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignRight)
 
     def add_assistant_message(self, text: str):
-        label = QLabel(text)
-        label.setWordWrap(True)
-        label.setMaximumWidth(int(self.width() * 0.8))
-        label.setStyleSheet("""
-            background: #3c3c3c;
-            color: #d4d4d4;
-            padding: 8px 14px;
-            border-radius: 12px;
-            font-size: 14px;
-        """)
+        label = _make_bubble(text, "left", 0.8, "#3c3c3c", "#d4d4d4")
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignLeft)
 
     def add_tool_label(self, tool_name: str, input_preview: str):
         label = QLabel(f"🔧 {tool_name} — {input_preview}")
+        label.setTextFormat(Qt.PlainText)
         label.setStyleSheet("""
             color: #c586c0;
             font-size: 12px;
@@ -87,6 +91,7 @@ class ChatPanel(QWidget):
     def show_thinking(self):
         if not self._thinking_label:
             self._thinking_label = QLabel("  thinking...")
+            self._thinking_label.setTextFormat(Qt.PlainText)
             self._thinking_label.setStyleSheet("""
                 color: #888;
                 font-style: italic;
