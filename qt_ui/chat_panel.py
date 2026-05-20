@@ -1,31 +1,9 @@
 """Chat panel: scrollable message bubbles."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
+    QWidget, QVBoxLayout, QScrollArea, QLabel,
 )
-
-
-def _make_bubble(text: str, align: str, max_width_ratio: float,
-                 bg: str, color: str) -> QLabel:
-    """Create a message bubble label with plain-text rendering."""
-    label = QLabel(text)
-    label.setTextFormat(Qt.PlainText)
-    label.setWordWrap(True)
-    label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-    fm = label.fontMetrics()
-    label.setMaximumWidth(int(fm.averageCharWidth() * 1200 * max_width_ratio))
-    label.setStyleSheet(f"""
-        background: {bg};
-        color: {color};
-        padding: 8px 14px;
-        border-radius: 12px;
-        font-size: 14px;
-    """)
-    if align == "right":
-        label.setAlignment(Qt.AlignRight)
-    return label
 
 
 class ChatPanel(QWidget):
@@ -50,6 +28,7 @@ class ChatPanel(QWidget):
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll.setStyleSheet("QScrollArea { border: none; background: #1e1e1e; }")
 
         self._msg_container = QWidget()
@@ -64,16 +43,44 @@ class ChatPanel(QWidget):
 
         self._thinking_label: QLabel | None = None
 
+    def _bubble_width(self) -> int:
+        w = self._scroll.viewport().width()
+        if w < 100:
+            w = self.width()
+        if w < 100:
+            w = 800  # fallback
+        return w
+
     def set_title(self, text: str):
         self._title.setText(text)
 
     def add_user_message(self, text: str):
-        label = _make_bubble(text, "right", 0.7, "#0e639c", "white")
+        label = QLabel(text)
+        label.setTextFormat(Qt.PlainText)
+        label.setWordWrap(True)
+        label.setContentsMargins(10, 8, 10, 8)
+        label.setMaximumWidth(int(self._bubble_width() * 0.7))
+        label.setStyleSheet("""
+            background: #0e639c;
+            color: white;
+            border-radius: 12px;
+            font-size: 14px;
+        """)
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignRight)
 
     def add_assistant_message(self, text: str):
-        label = _make_bubble(text, "left", 0.8, "#3c3c3c", "#d4d4d4")
+        label = QLabel(text)
+        label.setTextFormat(Qt.PlainText)
+        label.setWordWrap(True)
+        label.setContentsMargins(10, 8, 10, 8)
+        label.setMaximumWidth(int(self._bubble_width() * 0.8))
+        label.setStyleSheet("""
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border-radius: 12px;
+            font-size: 14px;
+        """)
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignLeft)
 
@@ -89,18 +96,18 @@ class ChatPanel(QWidget):
                                        alignment=Qt.AlignLeft)
 
     def show_thinking(self):
-        if not self._thinking_label:
-            self._thinking_label = QLabel("  thinking...")
-            self._thinking_label.setTextFormat(Qt.PlainText)
-            self._thinking_label.setStyleSheet("""
-                color: #888;
-                font-style: italic;
-                padding: 4px 8px;
-                font-size: 13px;
-            """)
-            self._msg_layout.insertWidget(self._msg_layout.count() - 1,
-                                           self._thinking_label,
-                                           alignment=Qt.AlignLeft)
+        self.hide_thinking()
+        self._thinking_label = QLabel("  thinking...")
+        self._thinking_label.setTextFormat(Qt.PlainText)
+        self._thinking_label.setStyleSheet("""
+            color: #888;
+            font-style: italic;
+            padding: 4px 8px;
+            font-size: 13px;
+        """)
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1,
+                                       self._thinking_label,
+                                       alignment=Qt.AlignLeft)
 
     def hide_thinking(self):
         if self._thinking_label:
