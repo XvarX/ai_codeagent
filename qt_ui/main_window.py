@@ -99,13 +99,13 @@ class MainWindow(QMainWindow):
         self.input_bar = InputBar()
         self.input_bar.send_clicked.connect(self._on_send)
 
-        # Assemble
+        # Assemble: chat fills space, input bar fixed at bottom
         central = QWidget()
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
-        central_layout.addWidget(self.chat)
-        central_layout.addWidget(self.input_bar)
+        central_layout.addWidget(self.chat, stretch=1)
+        central_layout.addWidget(self.input_bar, stretch=0)
         self.setCentralWidget(central)
 
         # Status bar
