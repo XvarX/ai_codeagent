@@ -27,6 +27,7 @@ from qt_ui.chat_panel import ChatPanel
 from qt_ui.debug_panel import DebugPanel
 from qt_ui.input_bar import InputBar
 from qt_ui.agent_worker import AgentWorker
+from qt_ui.config_dialog import ConfigDialog
 
 
 def build_registry() -> ToolRegistry:
@@ -83,6 +84,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Clear History", self._clear_history)
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
+
+        config_menu = menubar.addMenu("Config")
+        config_menu.addAction("LLM", self._open_config)
 
         # Central: chat + input
         self.chat = ChatPanel()
@@ -304,6 +308,28 @@ class MainWindow(QMainWindow):
     def _on_worker_finished(self):
         self.input_bar.set_busy(False)
         self._worker = None
+
+    def _open_config(self):
+        dlg = ConfigDialog(self)
+        if dlg.exec() == ConfigDialog.Accepted:
+            # Reload config and rebuild agent
+            new_config = AgentConfig.from_yaml()
+            self.agent.provider = build_provider(new_config)
+            self.agent.messages.clear()
+            self.chat.clear()
+            self.debug.clear()
+            self.chat.set_title(
+                f"AI Code Agent  |  {new_config.provider}  |  {new_config.model or 'default'}"
+            )
+            self._status.showMessage(
+                f"Provider: {new_config.provider}  |  Model: {new_config.model or 'default'}  |  "
+                f"CWD: {new_config.cwd or Path.cwd()}"
+            )
+            self.debug.add_entry(
+                "System",
+                f"Config updated: {new_config.provider} / {new_config.model}",
+                "#569cd6",
+            )
 
     def _clear_history(self):
         self.agent.messages.clear()
