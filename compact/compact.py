@@ -85,7 +85,13 @@ async def compact_conversation(
     except Exception:
         summary_text = _fallback_summary(old_messages)
 
-    # 5. Build post-compact message list
+    # 5. Re-read recently accessed files (mirrors createPostCompactFileAttachments)
+    # old_messages has the compacted section; recent_messages is the preserved tail
+    file_messages = await _re_read_recent_files(
+        old_messages, preserved=recent_messages, max_files=3
+    )
+
+    # 6. Build post-compact message list
     boundary = Message(
         role="user",
         content=(
@@ -95,7 +101,7 @@ async def compact_conversation(
         ),
     )
 
-    summary_messages = [boundary]
+    summary_messages = [boundary] + file_messages
     post_tokens = estimate_tokens(summary_messages + recent_messages)
 
     return CompactionResult(
@@ -104,6 +110,66 @@ async def compact_conversation(
         pre_tokens=pre_tokens,
         post_tokens=post_tokens,
     )
+
+
+async def _re_read_recent_files(
+    compacted: list[Message],
+    preserved: list[Message],
+    max_files: int = 3,
+) -> list[Message]:
+    """Re-read recently accessed files after compaction.
+
+    Collects FileRead paths from the compacted messages, excludes files
+    already referenced in preserved messages (no duplicates), re-reads the
+    most recent 3 files. Mirrors createPostCompactFileAttachments.
+    """
+    # Paths already visible in preserved messages — don't re-inject
+    preserved_paths: set[str] = set()
+    for msg in preserved:
+        if msg.has_tool_uses:
+            for block in msg.tool_use_blocks:
+                if block.tool_name == "FileRead" and "file_path" in block.input:
+                    preserved_paths.add(block.input["file_path"])
+
+    # Paths from the compacted section, in order, no duplicates
+    compacted_paths: list[str] = []
+    for msg in compacted:
+        if msg.has_tool_uses:
+            for block in msg.tool_use_blocks:
+                if block.tool_name == "FileRead" and "file_path" in block.input:
+                    path = block.input["file_path"]
+                    if path not in compacted_paths:
+                        compacted_paths.append(path)
+
+    # Filter: skip plan/CLAUDE files and already-in-preserved files
+    candidates = [
+        p for p in compacted_paths
+        if p not in preserved_paths
+        and not p.endswith((".yaml", ".yml", ".md"))
+    ]
+    if not candidates:
+        return []
+
+    # Take most recent N, re-read
+    result_messages: list[Message] = []
+    for path in candidates[-max_files:]:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            if len(content) > 2000:
+                content = content[:2000] + "\n... [truncated]"
+            result_messages.append(Message(
+                role="user",
+                content=(
+                    f"[Post-compact file restore: {path}]\n"
+                    f"{content}\n"
+                    f"[/file: {path}]"
+                ),
+            ))
+        except Exception:
+            pass
+
+    return result_messages
 
 
 def _fallback_summary(messages: list[Message], reason: str = "LLM call failed") -> str:
