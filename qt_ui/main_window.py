@@ -351,39 +351,57 @@ class MainWindow(QMainWindow):
     def _manual_compact(self):
         """Manually compact conversation context."""
         import asyncio
-        from PySide6.QtCore import QThread, Signal
+        import threading
 
-        class CompactThread(QThread):
-            done = Signal(int, int, str)  # pre_tokens, post_tokens, status
+        self.chat.show_thinking()
+        main_window = self  # capture for thread
 
-            def __init__(self, agent, pt):
-                super().__init__()
-                self.agent = agent
-                self.parent = pt
+        def _run_in_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                pre, post, status = loop.run_until_complete(
+                    main_window._do_compact()
+                )
+            except Exception as e:
+                pre, post, status = 0, 0, f"thread error: {e}"
+            finally:
+                loop.close()
 
-            def run(self):
-                asyncio.run(self._run())
+            # Schedule UI update on main thread
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: main_window._on_compact_done(
+                pre, post, status
+            ))
 
-            async def _run(self):
-                from compact.compact import compact_conversation
-                from compact.grouping import estimate_tokens
-                pre = estimate_tokens(self.agent.messages)
-                try:
-                    result = await compact_conversation(
-                        self.agent.provider,
-                        self.agent.messages,
-                        self.agent.registry.get_schemas(),
-                        keep_recent_rounds=2,
-                    )
-                    self.agent.messages = result.summary_messages + result.messages_to_keep
-                    self.agent._compact_count += 1
-                    self.done.emit(pre, result.post_tokens, f"manual (#{self.agent._compact_count})")
-                except Exception as e:
-                    self.done.emit(pre, pre, f"failed: {e}")
+        threading.Thread(target=_run_in_thread, daemon=True).start()
 
-        self._compact_thread = CompactThread(self.agent, self)
-        self._compact_thread.done.connect(self._on_compact)
-        self._compact_thread.start()
+    async def _do_compact(self):
+        """Async compaction logic."""
+        from compact.compact import compact_conversation
+        from compact.grouping import estimate_tokens
+
+        pre = estimate_tokens(self.agent.messages)
+        try:
+            result = await compact_conversation(
+                self.agent.provider,
+                self.agent.messages,
+                self.agent.registry.get_schemas(),
+                keep_recent_rounds=2,
+            )
+            if result.summary_messages:
+                self.agent.messages = result.summary_messages + result.messages_to_keep
+                self.agent._compact_count += 1
+                return pre, result.post_tokens, f"manual (#{self.agent._compact_count})"
+            else:
+                return pre, pre, "skipped (not enough messages)"
+        except Exception as e:
+            return pre, pre, f"failed: {e}"
+
+    def _on_compact_done(self, pre: int, post: int, status: str):
+        """Callback from compaction thread — runs on main thread."""
+        self._on_compact(pre, post, status)
+        self.chat.hide_thinking()
 
     def _clear_history(self):
         self.agent.messages.clear()
