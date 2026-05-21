@@ -1,6 +1,6 @@
 """Chat panel: scrollable message bubbles with Markdown rendering."""
 
-import re
+import markdown
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocument
@@ -9,35 +9,12 @@ from PySide6.QtWidgets import (
 )
 
 
-def _md_to_rich_text(text: str) -> str:
-    """Convert basic Markdown to simple HTML for QLabel RichText."""
-    html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+# Markdown → HTML with table support and dark-friendly styling
+_md = markdown.Markdown(extensions=["tables", "fenced_code", "codehilite"])
 
-    # Code blocks → styled <pre>
-    html = re.sub(
-        r'```(\w*)\n(.*?)```',
-        r'<pre style="background:#1e1e1e;color:#ce9178;padding:6px">\2</pre>',
-        html, flags=re.DOTALL,
-    )
-    # Inline code
-    html = re.sub(
-        r'`([^`]+)`',
-        r'<code style="background:#333;color:#ce9178">\1</code>',
-        html,
-    )
-    # Bold / Italic
-    html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
-    html = re.sub(r'\*(.+?)\*', r'<i>\1</i>', html)
-    # Headers
-    html = re.sub(r'^### (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
-    html = re.sub(r'^## (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
-    html = re.sub(r'^# (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
-    # List items
-    html = re.sub(r'^- (.+)$', r'  \1', html, flags=re.MULTILINE)
-    # Single newlines → <br>
-    html = html.replace("\n", "<br>")
-
-    return html
+def _md_to_html(text: str) -> str:
+    """Convert Markdown to HTML using the markdown library."""
+    return _md.convert(text)
 
 
 def _plain_to_rich(text: str) -> str:
@@ -127,7 +104,7 @@ class ChatPanel(QWidget):
     def add_assistant_message(self, text: str):
         max_w = int(self._view_width() * 0.8)
         h = _measure_h(text, self.font(), max_w)
-        display = _md_to_rich_text(text)
+        display = _md_to_html(text)
 
         label = QLabel(display)
         label.setTextFormat(Qt.RichText)
