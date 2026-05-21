@@ -113,14 +113,25 @@ class ConfigDialog(QDialog):
         return {}
 
     def _on_provider_changed(self, provider: str):
-        """Auto-fill defaults when provider changes."""
+        """Switch all fields to the selected provider's saved values."""
+        api_keys = self._config.get("api_keys", {})
+        base_urls = self._config.get("base_urls", {})
         defaults = PROVIDER_DEFAULTS.get(provider, {})
-        if not self._url_edit.text():
-            self._url_edit.setText(defaults.get("base_url", ""))
-        if not self._model_edit.text() or self._model_edit.text() in [
-            d.get("model", "") for d in PROVIDER_DEFAULTS.values()
-        ]:
-            self._model_edit.setText(defaults.get("model", ""))
+
+        # URL: per-provider saved > single base_url > default
+        self._url_edit.setText(
+            base_urls.get(provider, "")
+            or self._config.get("base_url", "")
+            or defaults.get("base_url", "")
+        )
+        # Key: per-provider saved > single api_key > empty
+        self._key_edit.setText(
+            api_keys.get(provider, "")
+            or self._config.get("api_key", "")
+            or ""
+        )
+        # Model: config.yaml has single model, use default for the switched provider
+        self._model_edit.setText(defaults.get("model", ""))
 
     def _toggle_key_visibility(self):
         if self._key_edit.echoMode() == QLineEdit.Password:
