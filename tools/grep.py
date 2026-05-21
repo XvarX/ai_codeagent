@@ -9,6 +9,7 @@ from .base import Tool, ToolContext
 
 class GrepTool(Tool):
     name = "Grep"
+    max_result_chars = 20_000  # Aligns to Claude Code
     description = (
         "Search file contents using a regex pattern. "
         "Returns file paths and matching lines."

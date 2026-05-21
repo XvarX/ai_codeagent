@@ -182,6 +182,10 @@ class Agent:
                     try:
                         result_text = await tool.call(block.input, context)
                         is_error = False
+                        # Tool result budget
+                        limit = getattr(tool, 'max_result_chars', None)
+                        if limit is not None and len(result_text) > limit:
+                            result_text = result_text[:limit] + "\n... [truncated]"
                     except Exception as e:
                         result_text = f"Tool error: {e}"
                         is_error = True

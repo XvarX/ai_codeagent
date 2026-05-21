@@ -8,6 +8,7 @@ from .base import Tool, ToolContext
 
 class FileReadTool(Tool):
     name = "FileRead"
+    max_result_chars = None  # No truncation — file content must be complete
     description = "Read the contents of a file at the given path."
     parameters = {
         "type": "object",

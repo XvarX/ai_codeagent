@@ -19,11 +19,13 @@ class Tool(ABC):
     Mirrors the Tool type from Tool.ts:
     - name, description, parameters → schema for the LLM
     - call() → execution logic
+    - max_result_chars → truncation limit (None = no limit)
     """
 
     name: str = ""
     description: str = ""
     parameters: dict[str, Any] = field(default_factory=dict)
+    max_result_chars: int | None = 100_000  # 100k default, None = no limit
 
     @abstractmethod
     async def call(self, input: dict[str, Any], context: ToolContext) -> str:

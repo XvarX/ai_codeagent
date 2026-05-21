@@ -1,6 +1,7 @@
 """Shared type definitions for the agent framework."""
 
 from dataclasses import dataclass, field
+from time import time
 from typing import Any
 
 
@@ -19,6 +20,7 @@ class Message:
     content: str = ""
     tool_use_blocks: list[ToolUseBlock] = field(default_factory=list)
     tool_use_id: str | None = None  # for tool_result messages
+    timestamp: float = field(default_factory=time)
 
     @property
     def is_tool_result(self) -> bool:
