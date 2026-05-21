@@ -3,56 +3,56 @@
 import re
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextDocument, QFont
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel, QTextEdit, QSizePolicy,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
 )
 
 
-def _md_to_html(text: str) -> str:
-    """Convert basic Markdown to HTML for QTextEdit rendering."""
+def _md_to_rich_text(text: str) -> str:
+    """Convert basic Markdown to simple HTML for QLabel RichText."""
     html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    # Code blocks
-    html = re.sub(r'```(\w*)\n(.*?)```',
-                  r'<pre style="background:#1e1e1e;color:#ce9178;padding:8px;border-radius:6px;font-size:13px;margin:4px 0">\2</pre>',
-                  html, flags=re.DOTALL)
+    # Code blocks → styled <pre>
+    html = re.sub(
+        r'```(\w*)\n(.*?)```',
+        r'<pre style="background:#1e1e1e;color:#ce9178;padding:6px">\2</pre>',
+        html, flags=re.DOTALL,
+    )
     # Inline code
-    html = re.sub(r'`([^`]+)`',
-                  r'<code style="background:#333;color:#ce9178;padding:1px 4px;border-radius:3px;">\1</code>',
-                  html)
+    html = re.sub(
+        r'`([^`]+)`',
+        r'<code style="background:#333;color:#ce9178">\1</code>',
+        html,
+    )
     # Bold / Italic
     html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
     html = re.sub(r'\*(.+?)\*', r'<i>\1</i>', html)
     # Headers
-    html = re.sub(r'^### (.+)$', r'<h3 style="margin:4px 0">\1</h3>', html, flags=re.MULTILINE)
-    html = re.sub(r'^## (.+)$', r'<h2 style="margin:4px 0">\1</h2>', html, flags=re.MULTILINE)
-    html = re.sub(r'^# (.+)$', r'<h1 style="margin:4px 0">\1</h1>', html, flags=re.MULTILINE)
-    # Unordered lists
-    html = re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
-    html = re.sub(r'(<li>.*</li>)', r'<ul style="margin:4px 0">\1</ul>', html, flags=re.DOTALL)
-
-    # Line breaks: use <p> for paragraphs, single <br> for single newlines
-    # Split on double-newline (paragraph break), then join with single newlines
-    paragraphs = html.split("\n\n")
-    result_parts = []
-    for para in paragraphs:
-        if para.strip():
-            lines = para.split("\n")
-            result_parts.append("<br>".join(lines))
-    html = '<p style="margin:2px 0;line-height:1.4">' + '</p><p style="margin:2px 0;line-height:1.4">'.join(result_parts) + '</p>'
+    html = re.sub(r'^### (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$', r'<b>\1</b>', html, flags=re.MULTILINE)
+    # List items
+    html = re.sub(r'^- (.+)$', r'  \1', html, flags=re.MULTILINE)
+    # Single newlines → <br>
+    html = html.replace("\n", "<br>")
 
     return html
 
 
-def _measure_text_rect(text: str, font: QFont, max_width: int) -> tuple[int, int]:
-    """Measure text height at given width. Returns (width, height)."""
+def _plain_to_rich(text: str) -> str:
+    """Convert plain text to safe HTML (escape + <br> for newlines)."""
+    html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return html.replace("\n", "<br>")
+
+
+def _measure_h(text: str, font, max_w: int) -> int:
+    """Measure plain-text height at given width."""
     doc = QTextDocument()
     doc.setDefaultFont(font)
-    # Use plain text for measurement accuracy
     doc.setPlainText(text)
-    doc.setTextWidth(max_width - 24)
-    return int(doc.size().width()), int(doc.size().height())
+    doc.setTextWidth(max_w - 24)
+    return max(int(doc.size().height()) + 32, 40)
 
 
 class ChatPanel(QWidget):
@@ -105,17 +105,16 @@ class ChatPanel(QWidget):
 
     def add_user_message(self, text: str):
         max_w = int(self._view_width() * 0.7)
-        _, h = _measure_text_rect(text, self.font(), max_w)
-        h = max(h + 40, 44)  # padding + safe margin
+        h = _measure_h(text, self.font(), max_w)
+        display = _plain_to_rich(text)
 
-        label = QLabel(text)
-        label.setTextFormat(Qt.PlainText)
+        label = QLabel(display)
+        label.setTextFormat(Qt.RichText)
         label.setWordWrap(True)
         label.setContentsMargins(14, 12, 14, 12)
         label.setFixedWidth(max_w)
         label.setMinimumHeight(h)
-        label.setMaximumHeight(h + 40)  # allow some grow
-        label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
         label.setStyleSheet("""
             background: #0e639c;
             color: white;
@@ -127,36 +126,23 @@ class ChatPanel(QWidget):
 
     def add_assistant_message(self, text: str):
         max_w = int(self._view_width() * 0.8)
+        h = _measure_h(text, self.font(), max_w)
+        display = _md_to_rich_text(text)
 
-        html = _md_to_html(text)
-
-        bubble = QTextEdit()
-        bubble.setReadOnly(True)
-        bubble.setHtml(html)
-        bubble.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        bubble.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        bubble.setFixedWidth(max_w)
-        bubble.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-        bubble.setStyleSheet("""
-            QTextEdit {
-                background: #3c3c3c;
-                color: #d4d4d4;
-                border: none;
-                border-radius: 12px;
-                font-size: 14px;
-                padding: 10px 12px;
-            }
+        label = QLabel(display)
+        label.setTextFormat(Qt.RichText)
+        label.setWordWrap(True)
+        label.setContentsMargins(14, 12, 14, 12)
+        label.setFixedWidth(max_w)
+        label.setMinimumHeight(h)
+        label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
+        label.setStyleSheet("""
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border-radius: 12px;
+            font-size: 14px;
         """)
-
-        # Measure rendered HTML height
-        doc = bubble.document()
-        doc.setTextWidth(max_w - 24)
-        rendered_h = int(doc.size().height() + 24)
-
-        bubble.setMinimumHeight(max(rendered_h, 40))
-        bubble.setMaximumHeight(max(rendered_h, 40))
-
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble,
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
                                        alignment=Qt.AlignLeft)
 
     def add_tool_label(self, tool_name: str, input_preview: str):
