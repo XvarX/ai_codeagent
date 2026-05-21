@@ -68,19 +68,21 @@ async def compact_conversation(
     ))
 
     # 4. Call LLM for summary (with tools disabled to force text-only)
+    import asyncio
     try:
-        _, tool_blocks, raw = await provider.call(
-            messages=compact_messages,
-            tools=[],  # No tools — force text response
-            system=COMPACT_SYSTEM_PROMPT,
+        assistant_msg, tool_blocks, raw = await asyncio.wait_for(
+            provider.call(
+                messages=compact_messages,
+                tools=[],
+                system=COMPACT_SYSTEM_PROMPT,
+            ),
+            timeout=120,  # 2 minutes max for compaction
         )
-        # Use the assistant response text as summary
-        summary_text = ""
-        if _ and _.content:
-            summary_text = _.content
+        summary_text = assistant_msg.content or ""
         summary_text = format_summary(summary_text)
+    except asyncio.TimeoutError:
+        summary_text = _fallback_summary(old_messages, "compaction timed out")
     except Exception:
-        # Fallback: use a simple truncation-based summary
         summary_text = _fallback_summary(old_messages)
 
     # 5. Build post-compact message list
@@ -104,10 +106,10 @@ async def compact_conversation(
     )
 
 
-def _fallback_summary(messages: list[Message]) -> str:
+def _fallback_summary(messages: list[Message], reason: str = "LLM call failed") -> str:
     """Fallback when LLM summarization fails — just list user messages."""
     user_msgs = [m for m in messages if m.role == "user" and not m.is_tool_result]
-    lines = ["## Conversation Summary (fallback)\n"]
+    lines = [f"## Conversation Summary ({reason})\n"]
     for m in user_msgs:
         preview = (m.content or "")[:200].replace("\n", " ")
         lines.append(f"- {preview}")
