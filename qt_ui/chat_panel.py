@@ -1,6 +1,6 @@
 """Chat panel: scrollable message bubbles with Markdown rendering."""
 
-import markdown
+from markdown_it import MarkdownIt
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocument
@@ -9,12 +9,11 @@ from PySide6.QtWidgets import (
 )
 
 
-# Markdown → HTML with table support and dark-friendly styling
-_md = markdown.Markdown(extensions=["tables", "fenced_code", "codehilite"])
+_md = MarkdownIt().enable("table")
 
 def _md_to_html(text: str) -> str:
-    """Convert Markdown to HTML using the markdown library."""
-    return _md.convert(text)
+    """Convert Markdown to HTML using markdown-it-py."""
+    return _md.render(text)
 
 
 def _plain_to_rich(text: str) -> str:
