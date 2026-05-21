@@ -50,6 +50,7 @@ class Agent:
         self.on_response = on_response
         self.on_compact = on_compact
         self._compact_count = 0
+        self._last_actual_tokens = 0
 
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
@@ -70,9 +71,13 @@ class Agent:
                 from compact.microCompact import micro_compact
                 micro_compact(self.messages)
 
-            # Auto-compact — summarize if approaching context limit
+            # Auto-compact — use actual tokens from last API call as base
             from compact.autoCompact import should_auto_compact
-            if should_auto_compact(self.messages, getattr(self.provider, 'model', None)):
+            if should_auto_compact(
+                self.messages,
+                getattr(self.provider, 'model', None),
+                actual_base=self._last_actual_tokens,
+            ):
                 from compact.compact import compact_conversation
                 pre_tokens = self._est_tokens()
                 try:
@@ -142,6 +147,13 @@ class Agent:
                     return error_msg.content
 
             self.messages.append(assistant_msg)
+
+            # Track actual token usage from API response
+            usage = raw_response.get("usage", {})
+            if usage.get("total_tokens"):
+                self._last_actual_tokens = usage["total_tokens"]
+            elif usage.get("input_tokens"):
+                self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
 
             if self.on_response:
                 await self.on_response(

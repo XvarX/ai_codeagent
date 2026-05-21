@@ -42,21 +42,29 @@ def get_context_window(model: str | None) -> int:
 def should_auto_compact(
     messages: list[Message],
     model: str | None = None,
-    threshold: float = 0.75,
+    threshold: float = 0.85,
+    actual_base: int = 0,
 ) -> bool:
-    """Check if token estimate exceeds the auto-compact threshold.
+    """Check if token count exceeds the auto-compact threshold.
 
-    Triggers when estimated tokens exceed threshold% of context window
-    (minus reserved output space).
+    Uses actual token count from last API response as base,
+    plus estimated tokens from messages added since then.
+
+    Triggers when actual + estimated exceeds threshold% of context window.
     """
-    estimated = estimate_tokens(messages)
     context_window = get_context_window(model)
     effective = context_window - RESERVED_OUTPUT
     max_threshold = int(effective * threshold)
+
+    # Use actual tokens from last API call if available
+    if actual_base > 0:
+        total = actual_base
+    else:
+        total = estimate_tokens(messages)
 
     # Also check that we have enough messages to compact meaningfully
     groups = group_by_api_round(messages)
     if len(groups) < 3:
         return False
 
-    return estimated > max_threshold
+    return total > max_threshold
