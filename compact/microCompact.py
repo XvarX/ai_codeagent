@@ -5,47 +5,41 @@ placeholder text to reduce token usage without invalidating prompt cache.
 """
 
 from core_types import Message
+from compact.grouping import group_by_api_round
 
 # Tools whose results are safe to trim (non-critical for context)
 COMPACTABLE_TOOLS = {"Bash", "FileRead", "Grep", "Glob", "FileEdit", "FileWrite"}
 
-# Keep the last N compactable tool results verbatim
-KEEP_LAST_N = 3
-
-# Only compact messages before this many API rounds ago
-MIN_ROUNDS_AGO = 2
+# Keep tool results in the most recent N API rounds verbatim
+KEEP_RECENT_ROUNDS = 2
 
 
 def micro_compact(messages: list[Message]) -> list[Message]:
     """Replace old tool results with placeholder text.
 
-    Leaves the most recent N tool results intact. Only touches
-    messages in groups older than MIN_ROUNDS_AGO.
-
-    Modifies messages in place for performance (matches Claude Code behavior).
+    Groups messages by API round, keeps tool results in the most
+    recent 2 rounds verbatim, replaces older ones with placeholder.
     """
-    # Find compactable tool result positions
-    tool_result_indices: list[tuple[int, str, int]] = []  # (index, tool_name, content_len)
-
-    for i, msg in enumerate(messages):
-        if msg.is_tool_result and msg.role == "user":
-            # Tool result messages have a tool_use_id
-            # Find which tool generated this
-            tool_name = _find_tool_name(messages, i)
-            if tool_name in COMPACTABLE_TOOLS:
-                tool_result_indices.append((i, tool_name, len(msg.content or "")))
-
-    if len(tool_result_indices) <= KEEP_LAST_N:
+    groups = group_by_api_round(messages)
+    if len(groups) <= KEEP_RECENT_ROUNDS:
         return messages
 
-    # Keep last N, compact the rest
-    to_compact = tool_result_indices[:-KEEP_LAST_N]
-    compacted_bytes = 0
+    # Find the cutoff index — start of the keep-recent region
+    recent_start = 0
+    for g in groups[-KEEP_RECENT_ROUNDS:]:
+        recent_start += len(g)
+    cutoff_idx = len(messages) - recent_start
 
-    for idx, name, length in to_compact:
-        if messages[idx].content and length > 0:
-            messages[idx].content = f"[Old tool result ({name}) — content cleared by micro-compaction]"
-            compacted_bytes += length
+    compacted = 0
+    for i in range(cutoff_idx):
+        msg = messages[i]
+        if msg.is_tool_result and msg.role == "user":
+            tool_name = _find_tool_name(messages, i)
+            if tool_name in COMPACTABLE_TOOLS and msg.content:
+                msg.content = (
+                    f"[Old tool result ({tool_name}) — content cleared by micro-compaction]"
+                )
+                compacted += 1
 
     return messages
 
@@ -59,7 +53,6 @@ def _find_tool_name(messages: list[Message], result_idx: int) -> str:
     if not tool_id:
         return ""
 
-    # Search backwards for the assistant message with matching tool_use block
     for i in range(result_idx - 1, -1, -1):
         msg = messages[i]
         if msg.role == "assistant" and msg.has_tool_uses:
