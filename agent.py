@@ -14,6 +14,7 @@ OnThinking = Callable[[], Awaitable[None]]
 OnToolCall = Callable[[str, dict], Awaitable[None]]
 OnToolResult = Callable[[str, str, bool], Awaitable[None]]
 OnResponse = Callable[[str, list, dict], Awaitable[None]]  # text, tool_use_blocks, raw_response
+OnCompact = Callable[[int, int, str], Awaitable[None]]  # pre_tokens, post_tokens, trigger
 
 
 class Agent:
@@ -35,6 +36,7 @@ class Agent:
         on_tool_call: OnToolCall | None = None,
         on_tool_result: OnToolResult | None = None,
         on_response: OnResponse | None = None,
+        on_compact: OnCompact | None = None,
     ):
         self.provider = provider
         self.registry = registry
@@ -46,6 +48,8 @@ class Agent:
         self.on_tool_call = on_tool_call
         self.on_tool_result = on_tool_result
         self.on_response = on_response
+        self.on_compact = on_compact
+        self._compact_count = 0
 
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
@@ -55,9 +59,39 @@ class Agent:
         while turn_count < self.max_turns:
             turn_count += 1
 
-            # Simple message cap — keep last N messages (naive snip)
+            # ── Compaction Pipeline (mirrors query.ts) ──────────
+
+            # History snip — keep last N messages
             if len(self.messages) > self.max_messages:
                 self.messages = self.messages[-self.max_messages:]
+
+            # Micro-compact — trim old tool results
+            if turn_count > 1:
+                from compact.microCompact import micro_compact
+                micro_compact(self.messages)
+
+            # Auto-compact — summarize if approaching context limit
+            from compact.autoCompact import should_auto_compact
+            if should_auto_compact(self.messages, getattr(self.provider, 'model', None)):
+                from compact.compact import compact_conversation
+                pre_tokens = self._est_tokens()
+                try:
+                    result = await compact_conversation(
+                        self.provider, self.messages,
+                        self.registry.get_schemas(),
+                        keep_recent_rounds=2,
+                    )
+                    # Replace messages with compacted version
+                    self.messages = result.summary_messages + result.messages_to_keep
+                    self._compact_count += 1
+
+                    if self.on_compact:
+                        await self.on_compact(
+                            pre_tokens, result.post_tokens,
+                            f"auto (#{self._compact_count})"
+                        )
+                except Exception:
+                    pass  # compaction failure is non-fatal
 
             # 1. Call LLM — get assistant response + tool_use blocks
             tools_schema = self.registry.get_schemas()
@@ -76,12 +110,36 @@ class Agent:
                     system=system_prompt,
                 )
             except Exception as e:
-                error_msg = Message(
-                    role="assistant",
-                    content=f"Error calling LLM: {e}",
-                )
-                self.messages.append(error_msg)
-                return error_msg.content
+                err_str = str(e)
+                # Reactive compact on prompt-too-long (413)
+                if "413" in err_str or "prompt_too_long" in err_str or "too long" in err_str.lower():
+                    self._reactive_compact()
+                    if self.on_compact:
+                        await self.on_compact(
+                            self._est_tokens(), self._est_tokens(),
+                            "reactive (413)"
+                        )
+                    # Retry after compact
+                    try:
+                        assistant_msg, tool_use_blocks, raw_response = await self.provider.call(
+                            messages=self.messages,
+                            tools=tools_schema,
+                            system=system_prompt,
+                        )
+                    except Exception as e2:
+                        error_msg = Message(
+                            role="assistant",
+                            content=f"Error calling LLM after compaction: {e2}",
+                        )
+                        self.messages.append(error_msg)
+                        return error_msg.content
+                else:
+                    error_msg = Message(
+                        role="assistant",
+                        content=f"Error calling LLM: {e}",
+                    )
+                    self.messages.append(error_msg)
+                    return error_msg.content
 
             self.messages.append(assistant_msg)
 
@@ -126,6 +184,18 @@ class Agent:
                 ))
 
         return "Agent: max turns reached without completing the task."
+
+    def _est_tokens(self) -> int:
+        from compact.grouping import estimate_tokens
+        return estimate_tokens(self.messages)
+
+    def _reactive_compact(self):
+        from compact.grouping import group_by_api_round
+        groups = group_by_api_round(self.messages)
+        if len(groups) <= 2:
+            return
+        keep = max(2, len(groups) // 2)
+        self.messages = [m for g in groups[-keep:] for m in g]
 
     async def run_stream(self, user_message: str):
         """Streaming version of run(). Yields events instead of returning text."""

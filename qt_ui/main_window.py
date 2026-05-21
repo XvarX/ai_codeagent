@@ -170,6 +170,7 @@ class MainWindow(QMainWindow):
 
         self._worker = AgentWorker(self.agent, text)
         self._worker.thinking.connect(self._on_thinking)
+        self._worker.compact.connect(self._on_compact)
         self._worker.tool_call.connect(self._on_tool_call)
         self._worker.tool_result.connect(self._on_tool_result)
         self._worker.response.connect(self._on_response)
@@ -181,6 +182,16 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
     # ── Callbacks ─────────────────────────────────────────
+
+    def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
+        self.chat.add_tool_label(
+            "Compact", f"~{pre_tokens} -> ~{post_tokens} tokens ({trigger})"
+        )
+        self.debug.add_entry(
+            "[Compact]",
+            f"Trigger: {trigger}\nTokens: ~{pre_tokens} -> ~{post_tokens}",
+            "#ce9178",
+        )
 
     def _on_thinking(self):
         pass  # thinking label already shown by _on_send

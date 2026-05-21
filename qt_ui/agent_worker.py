@@ -11,6 +11,7 @@ class AgentWorker(QThread):
     thinking = Signal()
     tool_call = Signal(str, str)      # name, input_json
     tool_result = Signal(str, str, bool)  # name, result, is_error
+    compact = Signal(int, int, str)   # pre_tokens, post_tokens, trigger
     response = Signal(str, str)       # raw_json, text
     done = Signal(str)                # final_text
     error = Signal(str)
@@ -26,6 +27,7 @@ class AgentWorker(QThread):
         self.agent.on_tool_call = self._on_tool_call
         self.agent.on_tool_result = self._on_tool_result
         self.agent.on_response = self._on_response
+        self.agent.on_compact = self._on_compact
 
         try:
             result = asyncio.run(self.agent.run(self.user_message))
@@ -43,6 +45,9 @@ class AgentWorker(QThread):
 
     async def _on_tool_result(self, name: str, result: str, is_error: bool):
         self.tool_result.emit(name, result, is_error)
+
+    async def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
+        self.compact.emit(pre_tokens, post_tokens, trigger)
 
     async def _on_response(self, text: str, tool_use_blocks: list, raw: dict):
         import json
