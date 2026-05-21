@@ -1,33 +1,54 @@
-"""Chat panel: scrollable message bubbles."""
+"""Chat panel: scrollable message bubbles with Markdown rendering."""
 
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFontMetrics, QTextDocument
+import re
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextDocument, QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel, QSizePolicy,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QTextEdit, QSizePolicy,
 )
 
 
-class _BubbleLabel(QLabel):
-    """QLabel that correctly sizes itself for word-wrapped text."""
+def _md_to_html(text: str) -> str:
+    """Convert basic Markdown to HTML for QTextEdit rendering."""
+    # Escape HTML entities first
+    html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    def __init__(self, text: str, max_width: int, parent=None):
-        super().__init__(parent)
-        self.setTextFormat(Qt.PlainText)
-        self.setWordWrap(True)
-        self.setText(text)
-        self.setContentsMargins(10, 8, 10, 8)
+    # Code blocks (```...```)
+    html = re.sub(r'```(\w*)\n(.*?)```', r'<pre style="background:#1e1e1e;color:#ce9178;padding:8px;border-radius:6px;font-size:13px;">\2</pre>', html, flags=re.DOTALL)
 
-        # Force the label to measure its height at the given max width
-        doc = QTextDocument()
-        doc.setDefaultFont(self.font())
-        doc.setPlainText(text)
-        doc.setTextWidth(max_width - 20)  # padding
-        doc_height = int(doc.size().height() + 24)
+    # Inline code (`...`)
+    html = re.sub(r'`([^`]+)`', r'<code style="background:#333;color:#ce9178;padding:1px 4px;border-radius:3px;">\1</code>', html)
 
-        # Set exact size: max width, content-based height
-        self.setFixedWidth(max_width)
-        self.setFixedHeight(max(doc_height, 28))
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+    # Bold (**...**)
+    html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
+
+    # Italic (*...*)
+    html = re.sub(r'\*(.+?)\*', r'<i>\1</i>', html)
+
+    # Headers (### ...)
+    html = re.sub(r'^### (.+)$', r'<h3 style="margin:4px 0">\1</h3>', html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$', r'<h2 style="margin:4px 0">\1</h2>', html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$', r'<h1 style="margin:4px 0">\1</h1>', html, flags=re.MULTILINE)
+
+    # Unordered lists
+    html = re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+    html = re.sub(r'(<li>.*</li>)', r'<ul>\1</ul>', html, flags=re.DOTALL)
+
+    # Line breaks
+    html = html.replace("\n", "<br>")
+
+    return html
+
+
+def _measure_text_rect(text: str, font: QFont, max_width: int) -> tuple[int, int]:
+    """Measure text height at given width. Returns (width, height)."""
+    doc = QTextDocument()
+    doc.setDefaultFont(font)
+    # Use plain text for measurement accuracy
+    doc.setPlainText(text)
+    doc.setTextWidth(max_width - 24)
+    return int(doc.size().width()), int(doc.size().height())
 
 
 class ChatPanel(QWidget):
@@ -80,7 +101,17 @@ class ChatPanel(QWidget):
 
     def add_user_message(self, text: str):
         max_w = int(self._view_width() * 0.7)
-        label = _BubbleLabel(text, max_w)
+        _, h = _measure_text_rect(text, self.font(), max_w)
+        h = max(h + 40, 44)  # padding + safe margin
+
+        label = QLabel(text)
+        label.setTextFormat(Qt.PlainText)
+        label.setWordWrap(True)
+        label.setContentsMargins(14, 12, 14, 12)
+        label.setFixedWidth(max_w)
+        label.setMinimumHeight(h)
+        label.setMaximumHeight(h + 40)  # allow some grow
+        label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         label.setStyleSheet("""
             background: #0e639c;
             color: white;
@@ -92,14 +123,35 @@ class ChatPanel(QWidget):
 
     def add_assistant_message(self, text: str):
         max_w = int(self._view_width() * 0.8)
-        label = _BubbleLabel(text, max_w)
-        label.setStyleSheet("""
-            background: #3c3c3c;
-            color: #d4d4d4;
-            border-radius: 12px;
-            font-size: 14px;
+
+        # Render as Markdown → HTML in a read-only QTextEdit
+        html = _md_to_html(text)
+        inner_w = max_w - 24  # internal padding
+
+        # Measure with plain text for height
+        _, plain_h = _measure_text_rect(text, self.font(), max_w)
+        h = max(plain_h + 50, 48)
+
+        bubble = QTextEdit()
+        bubble.setReadOnly(True)
+        bubble.setHtml(html)
+        bubble.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        bubble.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        bubble.setFixedWidth(max_w)
+        bubble.setMinimumHeight(h)
+        bubble.setMaximumHeight(h * 4 + 100)  # cap for very long content
+        bubble.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        bubble.setStyleSheet("""
+            QTextEdit {
+                background: #3c3c3c;
+                color: #d4d4d4;
+                border: none;
+                border-radius: 12px;
+                font-size: 14px;
+                padding: 10px 12px;
+            }
         """)
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1, label,
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble,
                                        alignment=Qt.AlignLeft)
 
     def add_tool_label(self, tool_name: str, input_preview: str):
