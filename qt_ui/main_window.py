@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
 
         config_menu = menubar.addMenu("Config")
         config_menu.addAction("LLM", self._open_config)
+        config_menu.addAction("Compact Context", self._manual_compact)
 
         # Central: chat + input
         self.chat = ChatPanel()
@@ -159,6 +160,11 @@ class MainWindow(QMainWindow):
         )
 
     def _on_send(self, text: str):
+        # Handle /compact command
+        if text.strip().lower() == "/compact":
+            self._manual_compact()
+            return
+
         self.chat.add_user_message(text)
         self.chat.show_thinking()
 
@@ -341,6 +347,43 @@ class MainWindow(QMainWindow):
                 f"Config updated: {new_config.provider} / {new_config.model}",
                 "#569cd6",
             )
+
+    def _manual_compact(self):
+        """Manually compact conversation context."""
+        import asyncio
+        from PySide6.QtCore import QThread, Signal
+
+        class CompactThread(QThread):
+            done = Signal(int, int, str)  # pre_tokens, post_tokens, status
+
+            def __init__(self, agent, pt):
+                super().__init__()
+                self.agent = agent
+                self.parent = pt
+
+            def run(self):
+                asyncio.run(self._run())
+
+            async def _run(self):
+                from compact.compact import compact_conversation
+                from compact.grouping import estimate_tokens
+                pre = estimate_tokens(self.agent.messages)
+                try:
+                    result = await compact_conversation(
+                        self.agent.provider,
+                        self.agent.messages,
+                        self.agent.registry.get_schemas(),
+                        keep_recent_rounds=2,
+                    )
+                    self.agent.messages = result.summary_messages + result.messages_to_keep
+                    self.agent._compact_count += 1
+                    self.done.emit(pre, result.post_tokens, f"manual (#{self.agent._compact_count})")
+                except Exception as e:
+                    self.done.emit(pre, pre, f"failed: {e}")
+
+        self._compact_thread = CompactThread(self.agent, self)
+        self._compact_thread.done.connect(self._on_compact)
+        self._compact_thread.start()
 
     def _clear_history(self):
         self.agent.messages.clear()
