@@ -9,7 +9,7 @@ echo [1/2] Installing PyInstaller...
 pip install pyinstaller -q
 
 echo [2/2] Building...
-pyinstaller --onefile --windowed ^
+pyinstaller --onedir --windowed ^
     --name AI_CodeAgent ^
     --hidden-import PySide6 ^
     --hidden-import yaml ^
@@ -22,11 +22,12 @@ pyinstaller --onefile --windowed ^
 
 echo.
 echo ========================================
-echo   Done: dist\AI_CodeAgent.exe
+echo   Done: dist\AI_CodeAgent\
 echo ========================================
 echo.
-echo To distribute: put these two files together:
-echo   1. dist\AI_CodeAgent.exe
-echo   2. config.yaml (copy from config.example.yaml and add API keys)
+echo To distribute: copy the folder and add config.yaml inside:
+echo   dist\AI_CodeAgent\
+echo     AI_CodeAgent.exe
+echo     config.yaml  ^<-- copy from config.example.yaml, add API keys
 echo.
 pause
