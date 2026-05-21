@@ -11,32 +11,36 @@ from PySide6.QtWidgets import (
 
 def _md_to_html(text: str) -> str:
     """Convert basic Markdown to HTML for QTextEdit rendering."""
-    # Escape HTML entities first
     html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    # Code blocks (```...```)
-    html = re.sub(r'```(\w*)\n(.*?)```', r'<pre style="background:#1e1e1e;color:#ce9178;padding:8px;border-radius:6px;font-size:13px;">\2</pre>', html, flags=re.DOTALL)
-
-    # Inline code (`...`)
-    html = re.sub(r'`([^`]+)`', r'<code style="background:#333;color:#ce9178;padding:1px 4px;border-radius:3px;">\1</code>', html)
-
-    # Bold (**...**)
+    # Code blocks
+    html = re.sub(r'```(\w*)\n(.*?)```',
+                  r'<pre style="background:#1e1e1e;color:#ce9178;padding:8px;border-radius:6px;font-size:13px;margin:4px 0">\2</pre>',
+                  html, flags=re.DOTALL)
+    # Inline code
+    html = re.sub(r'`([^`]+)`',
+                  r'<code style="background:#333;color:#ce9178;padding:1px 4px;border-radius:3px;">\1</code>',
+                  html)
+    # Bold / Italic
     html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
-
-    # Italic (*...*)
     html = re.sub(r'\*(.+?)\*', r'<i>\1</i>', html)
-
-    # Headers (### ...)
+    # Headers
     html = re.sub(r'^### (.+)$', r'<h3 style="margin:4px 0">\1</h3>', html, flags=re.MULTILINE)
     html = re.sub(r'^## (.+)$', r'<h2 style="margin:4px 0">\1</h2>', html, flags=re.MULTILINE)
     html = re.sub(r'^# (.+)$', r'<h1 style="margin:4px 0">\1</h1>', html, flags=re.MULTILINE)
-
     # Unordered lists
     html = re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
-    html = re.sub(r'(<li>.*</li>)', r'<ul>\1</ul>', html, flags=re.DOTALL)
+    html = re.sub(r'(<li>.*</li>)', r'<ul style="margin:4px 0">\1</ul>', html, flags=re.DOTALL)
 
-    # Line breaks
-    html = html.replace("\n", "<br>")
+    # Line breaks: use <p> for paragraphs, single <br> for single newlines
+    # Split on double-newline (paragraph break), then join with single newlines
+    paragraphs = html.split("\n\n")
+    result_parts = []
+    for para in paragraphs:
+        if para.strip():
+            lines = para.split("\n")
+            result_parts.append("<br>".join(lines))
+    html = '<p style="margin:2px 0;line-height:1.4">' + '</p><p style="margin:2px 0;line-height:1.4">'.join(result_parts) + '</p>'
 
     return html
 
@@ -124,13 +128,7 @@ class ChatPanel(QWidget):
     def add_assistant_message(self, text: str):
         max_w = int(self._view_width() * 0.8)
 
-        # Render as Markdown → HTML in a read-only QTextEdit
         html = _md_to_html(text)
-        inner_w = max_w - 24  # internal padding
-
-        # Measure with plain text for height
-        _, plain_h = _measure_text_rect(text, self.font(), max_w)
-        h = max(plain_h + 50, 48)
 
         bubble = QTextEdit()
         bubble.setReadOnly(True)
@@ -138,8 +136,6 @@ class ChatPanel(QWidget):
         bubble.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         bubble.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         bubble.setFixedWidth(max_w)
-        bubble.setMinimumHeight(h)
-        bubble.setMaximumHeight(h * 4 + 100)  # cap for very long content
         bubble.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         bubble.setStyleSheet("""
             QTextEdit {
@@ -151,6 +147,15 @@ class ChatPanel(QWidget):
                 padding: 10px 12px;
             }
         """)
+
+        # Measure rendered HTML height
+        doc = bubble.document()
+        doc.setTextWidth(max_w - 24)
+        rendered_h = int(doc.size().height() + 24)
+
+        bubble.setMinimumHeight(max(rendered_h, 40))
+        bubble.setMaximumHeight(max(rendered_h, 40))
+
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble,
                                        alignment=Qt.AlignLeft)
 
