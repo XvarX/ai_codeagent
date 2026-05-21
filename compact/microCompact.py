@@ -1,25 +1,26 @@
 """Micro-compaction — lightweight context reduction without API call.
 
-Matches Claude Code's timeBasedMC: keeps the last N compactable tool
-results verbatim, clears older ones with placeholder text.
+Matches Claude Code's timeBasedMC: triggers when (1) compactable tool results > 5
+AND (2) gap since last assistant message > 60 min (server cache expired).
+
+Keeps the last 5 compactable results, clears older ones with placeholder.
 """
 
+from time import time
 from core_types import Message
 
-# Tools whose results are safe to trim (non-critical for context)
 COMPACTABLE_TOOLS = {"Bash", "FileRead", "Grep", "Glob", "FileEdit", "FileWrite"}
-
-# Keep the most recent N compactable tool results (matches Claude Code default)
 KEEP_RECENT = 5
+GAP_THRESHOLD_MINUTES = 60
 
 
 def micro_compact(messages: list[Message]) -> list[Message]:
-    """Clear old tool result content, keeping the most recent KEEP_RECENT.
+    """Clear old tool results if trigger conditions are met.
 
-    Collects all compactable tool results by their tool_use_id,
-    keeps the last KEEP_RECENT, replaces older content with placeholder.
+    1. > KEEP_RECENT compactable tool results
+    2. Last assistant message > GAP_THRESHOLD_MINUTES ago
     """
-    # Collect all compactable tool results: (index, tool_name, tool_use_id)
+    # Condition 1: enough compactable results?
     tool_results: list[tuple[int, str, str]] = []
     for i, msg in enumerate(messages):
         if msg.is_tool_result and msg.role == "user":
@@ -30,9 +31,15 @@ def micro_compact(messages: list[Message]) -> list[Message]:
     if len(tool_results) <= KEEP_RECENT:
         return messages
 
-    # Keep last N, compact the rest
-    keep_ids = {tid for _, _, tid in tool_results[-KEEP_RECENT:]}
+    # Condition 2: time gap since last assistant?
+    last_asst = _find_last_assistant(messages)
+    if last_asst is not None:
+        gap_minutes = (time() - last_asst.timestamp) / 60
+        if gap_minutes < GAP_THRESHOLD_MINUTES:
+            return messages  # cache still warm, don't compact
 
+    # Both conditions met — clear old results
+    keep_ids = {tid for _, _, tid in tool_results[-KEEP_RECENT:]}
     for idx, name, tid in tool_results[:-KEEP_RECENT]:
         if tid not in keep_ids and messages[idx].content:
             messages[idx].content = (
@@ -40,6 +47,14 @@ def micro_compact(messages: list[Message]) -> list[Message]:
             )
 
     return messages
+
+
+def _find_last_assistant(messages: list[Message]) -> Message | None:
+    """Find the most recent assistant message."""
+    for msg in reversed(messages):
+        if msg.role == "assistant":
+            return msg
+    return None
 
 
 def _find_tool_name(messages: list[Message], result_idx: int) -> str:
