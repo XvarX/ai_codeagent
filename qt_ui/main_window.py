@@ -381,6 +381,7 @@ class MainWindow(QMainWindow):
                     )
                     if result.summary_messages:
                         self.agent.messages = result.summary_messages + result.messages_to_keep
+                        self.agent._last_actual_tokens = result.post_tokens
                         self.agent._compact_count += 1
                         self.done.emit(pre, result.post_tokens,
                                        f"manual (#{self.agent._compact_count})")
@@ -397,6 +398,10 @@ class MainWindow(QMainWindow):
         """Handle compaction result — main thread via signal."""
         self.chat.hide_thinking()
         self._on_compact(pre, post, status)
+        # Refresh context panel with compacted token count
+        self.debug.update_context_usage(
+            {"prompt_tokens": post, "total_tokens": post}
+        )
 
     def _clear_history(self):
         self.agent.messages.clear()

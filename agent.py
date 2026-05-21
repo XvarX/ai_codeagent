@@ -88,6 +88,7 @@ class Agent:
                     )
                     # Replace messages with compacted version
                     self.messages = result.summary_messages + result.messages_to_keep
+                    self._last_actual_tokens = result.post_tokens
                     self._compact_count += 1
 
                     if self.on_compact:
