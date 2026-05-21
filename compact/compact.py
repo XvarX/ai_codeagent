@@ -39,6 +39,7 @@ async def compact_conversation(
     messages: list[Message],
     tools_schema: list[dict],
     keep_recent_rounds: int = 2,
+    log_path: str | None = None,
 ) -> CompactionResult:
     """Summarize old messages via LLM, keep recent rounds verbatim.
 
@@ -103,6 +104,26 @@ async def compact_conversation(
 
     summary_messages = [boundary] + file_messages
     post_tokens = estimate_tokens(summary_messages + recent_messages)
+
+    # Log compact request/response if log_path provided
+    if log_path:
+        import json
+        with open(log_path, "a", encoding="utf-8") as lf:
+            lf.write("\n" + "=" * 40 + " COMPACT " + "=" * 40 + "\n")
+            lf.write("── Compact API Request ──\n")
+            req_info = {
+                "model": getattr(provider, "model", "?"),
+                "messages_count": len(compact_messages),
+                "tools": [],
+                "system": COMPACT_SYSTEM_PROMPT[:200] + "...",
+            }
+            lf.write(json.dumps(req_info, ensure_ascii=False, indent=2) + "\n\n")
+            lf.write(f"── Compact Result ──\n")
+            lf.write(f"Pre-tokens: ~{pre_tokens}\n")
+            lf.write(f"Post-tokens: ~{post_tokens}\n")
+            lf.write(f"Files restored: {len(file_messages)}\n")
+            lf.write(f"Summary:\n{summary_text[:1000]}\n")
+            lf.write("─" * 90 + "\n")
 
     return CompactionResult(
         summary_messages=summary_messages,

@@ -358,9 +358,10 @@ class MainWindow(QMainWindow):
         class _CompactWorker(QThread):
             done = Signal(int, int, str)
 
-            def __init__(self, agent, pt=None):
+            def __init__(self, agent, log_path, pt=None):
                 super().__init__(pt)
                 self.agent = agent
+                self._log_path = log_path
 
             def run(self):
                 asyncio.run(self._run())
@@ -376,6 +377,7 @@ class MainWindow(QMainWindow):
                         self.agent.messages,
                         self.agent.registry.get_schemas(),
                         keep_recent_rounds=2,
+                        log_path=self._log_path,
                     )
                     if result.summary_messages:
                         self.agent.messages = result.summary_messages + result.messages_to_keep
@@ -387,7 +389,7 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     self.done.emit(pre, pre, f"failed: {e}")
 
-        self._compact_thread = _CompactWorker(self.agent, self)
+        self._compact_thread = _CompactWorker(self.agent, self._log_path, self)
         self._compact_thread.done.connect(self._on_compact_done)
         self._compact_thread.start()
 
