@@ -1,7 +1,8 @@
 """Message grouping by API round — mirrors compact/grouping.ts.
 
-Each new assistant Message starts a new group. Groups are the atomic unit
-for truncation and partial compaction.
+Two grouping modes:
+- by_api_round: splits at each assistant message (per-LLM-call)
+- by_user_round: splits at each user message (per-send, excludes tool_results)
 """
 
 from core_types import Message
@@ -12,12 +13,36 @@ def group_by_api_round(messages: list[Message]) -> list[list[Message]]:
 
     A new group starts at each assistant message (not tool_result).
     This ensures tool_use/tool_result pairs stay with their assistant response.
+    Used for reactive compact and truncation.
     """
     groups: list[list[Message]] = []
     current: list[Message] = []
 
     for msg in messages:
         if msg.role == "assistant" and current:
+            groups.append(current)
+            current = [msg]
+        else:
+            current.append(msg)
+
+    if current:
+        groups.append(current)
+
+    return groups
+
+
+def group_by_user_round(messages: list[Message]) -> list[list[Message]]:
+    """Split messages by user conversation round.
+
+    A new group starts at each user message (not a tool_result).
+    One user send + all subsequent LLM responses/tool calls = one round.
+    Used for micro-compaction keep-recent logic.
+    """
+    groups: list[list[Message]] = []
+    current: list[Message] = []
+
+    for msg in messages:
+        if msg.role == "user" and not msg.is_tool_result and current:
             groups.append(current)
             current = [msg]
         else:
