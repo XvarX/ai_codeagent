@@ -224,9 +224,11 @@ class FletApp:
         )
 
     def _on_response_done(self, raw: dict):
+        # Save text before clearing
+        final_text = self._current_md_text
         if self._current_assistant_bubble is not None:
             self._current_assistant_bubble.content = ft.Markdown(
-                self._current_md_text,
+                final_text,
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
@@ -265,7 +267,7 @@ class FletApp:
         if tool_blocks:
             resp_lines.append("Tool calls: " + ", ".join(t["tool_name"] for t in tool_blocks))
         else:
-            text_preview = (self._current_md_text or "")[:200].replace("\n", " ")
+            text_preview = final_text[:200].replace("\n", " ")
             resp_lines.append(f"Text: {text_preview}")
         self.debug_drawer.add_event(
             "[Response]", "\n".join(resp_lines), "#10B981",
@@ -327,21 +329,22 @@ class FletApp:
         provider_name = self.controller.agent.provider.model or self.config.provider
         agent = self.controller.agent
         msg_count = len(agent.messages) + 1
-        est_tokens = agent.est_tokens()
+        est_tokens = agent.est_tokens() + len(text) // 2
         tools_count = len(agent.registry.get_schemas())
 
-        # Build message summary
+        # Build message summary (include current user message)
         msg_lines = [f"Model: {provider_name}"]
         msg_lines.append(f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools")
-        for i, m in enumerate(agent.messages[-6:]):
+        msg_lines.append(f"  [new] user: {text[:80]}")
+        for i, m in enumerate(agent.messages[-5:]):
             role = m.role
-            content_preview = (m.content or "")[:60].replace("\n", " ")
+            content_preview = (m.content or "")[:50].replace("\n", " ")
             if m.tool_use_id:
                 msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
             else:
                 msg_lines.append(f"  [{i}] {role}: {content_preview}")
-        if len(agent.messages) > 6:
-            msg_lines.append(f"  ... +{len(agent.messages) - 6} earlier messages")
+        if len(agent.messages) > 5:
+            msg_lines.append(f"  ... +{len(agent.messages) - 5} earlier messages")
         self.debug_drawer.add_event(
             "[Request]", "\n".join(msg_lines), "#569cd6",
         )
