@@ -306,14 +306,103 @@ class Agent:
                         yield DoneEvent(final_text=f"Error: {event.message}")
                         return
             except Exception as e:
-                error_msg_text = f"Error calling LLM: {e}"
-                self.messages.append(Message(
-                    role="assistant",
-                    content=error_msg_text,
-                ))
-                yield ErrorEvent(message=error_msg_text)
-                yield DoneEvent(final_text=error_msg_text)
-                return
+                err_str = str(e)
+                # Reactive compact on prompt-too-long (413)
+                if "413" in err_str or "prompt_too_long" in err_str or "too long" in err_str.lower():
+                    self._reactive_compact()
+                    yield CompactEvent(
+                        pre_tokens=self._est_tokens(),
+                        post_tokens=self._est_tokens(),
+                        trigger="reactive (413)",
+                    )
+                    # Retry after compact
+                    try:
+                        text_parts = []
+                        tool_use_blocks = []
+                        async for event in self.provider.call_stream(
+                            messages=self.messages,
+                            tools=tools_schema,
+                            system=system_prompt,
+                        ):
+                            if isinstance(event, TextDeltaEvent):
+                                text_parts.append(event.token)
+                                yield event
+                            elif isinstance(event, ToolUseEvent):
+                                block = ToolUseBlock(
+                                    tool_use_id=event.tool_use_id,
+                                    tool_name=event.tool_name,
+                                    input=event.input,
+                                )
+                                tool_use_blocks.append(block)
+                                yield event
+                            elif isinstance(event, ResponseDoneEvent):
+                                usage = event.raw.get("usage", {})
+                                if usage.get("total_tokens"):
+                                    self._last_actual_tokens = usage["total_tokens"]
+                                elif usage.get("input_tokens"):
+                                    self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                                yield event
+                            elif isinstance(event, ErrorEvent):
+                                self.messages.append(Message(
+                                    role="assistant",
+                                    content=f"Error after compaction: {event.message}",
+                                ))
+                                yield event
+                                yield DoneEvent(final_text=f"Error after compaction: {event.message}")
+                                return
+                        # Retry succeeded — process response
+                        assistant_text = "".join(text_parts)
+                        assistant_msg = Message(
+                            role="assistant",
+                            content=assistant_text,
+                            tool_use_blocks=tool_use_blocks,
+                        )
+                        self.messages.append(assistant_msg)
+                        if not tool_use_blocks:
+                            yield DoneEvent(final_text=assistant_text or "(no response)")
+                            return
+                        context = ToolContext(cwd=self.cwd, messages=list(self.messages))
+                        for block in tool_use_blocks:
+                            tool = self.registry.get(block.tool_name)
+                            if tool is None:
+                                result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
+                                is_error = True
+                            else:
+                                try:
+                                    result_text = await tool.call(block.input, context)
+                                    is_error = False
+                                except Exception as te:
+                                    result_text = f"Tool error: {te}"
+                                    is_error = True
+                            yield ToolDoneEvent(
+                                tool_name=block.tool_name,
+                                result=result_text,
+                                is_error=is_error,
+                            )
+                            self.messages.append(Message(
+                                role="user",
+                                content=result_text,
+                                tool_use_id=block.tool_use_id,
+                            ))
+                        continue  # back to while loop top
+                    except Exception as e2:
+                        error_msg_text = f"Error calling LLM after compaction: {e2}"
+                        self.messages.append(Message(
+                            role="assistant",
+                            content=error_msg_text,
+                        ))
+                        yield ErrorEvent(message=error_msg_text)
+                        yield DoneEvent(final_text=error_msg_text)
+                        return
+                else:
+                    error_msg_text = f"Error calling LLM: {e}"
+                    self.messages.append(Message(
+                        role="assistant",
+                        content=error_msg_text,
+                    ))
+                    yield ErrorEvent(message=error_msg_text)
+                    yield DoneEvent(final_text=error_msg_text)
+                    return
 
             assistant_text = "".join(text_parts)
             assistant_msg = Message(
