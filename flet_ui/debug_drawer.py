@@ -6,11 +6,13 @@ import flet as ft
 class DebugDrawer(ft.Container):
     """Right-side debug panel with expand/collapse animation."""
 
-    def __init__(self, on_compact=None, on_clear=None):
+    def __init__(self, on_compact=None, on_clear=None, on_event_click=None):
         super().__init__()
         self._on_compact = on_compact
         self._on_clear = on_clear
+        self._on_event_click = on_event_click
         self._is_open = False
+        self._event_data: list[dict] = []
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -107,19 +109,34 @@ class DebugDrawer(ft.Container):
             )
         self.update()
 
-    def add_event(self, prefix: str, message: str, color: str) -> None:
-        entry = ft.Column([
-            ft.Row([
-                ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
-            ]),
-            ft.Text(message, size=9, color="#475569", selectable=True,
-                    max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
-        ], spacing=1)
+    def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> None:
+        idx = len(self._event_data)
+        if event_data:
+            self._event_data.insert(0, event_data)
+
+        entry = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
+                ]),
+                ft.Text(message, size=9, color="#475569", selectable=True,
+                        max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
+            ], spacing=1),
+            padding=ft.Padding.symmetric(horizontal=4, vertical=2),
+            border_radius=4,
+            data=idx,
+            on_click=self._on_entry_click if self._on_event_click else None,
+        )
         self._event_log.controls.insert(0, entry)
         if len(self._event_log.controls) > 50:
             self._event_log.controls = self._event_log.controls[:50]
         if self._is_open and self._event_log.page:
             self._event_log.update()
+
+    def _on_entry_click(self, e):
+        idx = e.control.data
+        if 0 <= idx < len(self._event_data):
+            self._on_event_click(self._event_data[idx])
 
     def update_context_usage(self, usage: dict) -> None:
         prompt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
@@ -133,6 +150,7 @@ class DebugDrawer(ft.Container):
             self._usage_text.update()
 
     def clear(self) -> None:
+        self._event_data.clear()
         self._event_log.controls.clear()
         if self._is_open and self._event_log.page:
             self._event_log.update()

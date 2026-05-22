@@ -59,12 +59,15 @@ class FletApp:
         self.debug_drawer = DebugDrawer(
             on_compact=self._manual_compact,
             on_clear=self._clear_history,
+            on_event_click=self._on_debug_event_click,
         )
         self.input_bar = InputBar(on_send=self._on_send)
 
         self._current_assistant_bubble: ft.Container | None = None
         self._current_md_text: str = ""
         self._log_path = self._init_log()
+
+        self._stored_events: list[dict] = []  # indexed same as debug_drawer._event_data
 
         self._build_ui()
 
@@ -211,6 +214,9 @@ class FletApp:
         )
         self.debug_drawer.add_event(
             f"[Tool] {name}", detail, "#6366F1",
+            event_data={"type": "Tool", "name": name, "input": input_dict,
+                        "formatted": f"Tool: {name}\n\n" + detail,
+                        "raw_json": json.dumps(input_dict, ensure_ascii=False, indent=2)},
         )
 
     def _on_tool_result(self, name: str, result: str, is_error: bool):
@@ -221,6 +227,18 @@ class FletApp:
             f"  status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
             f"  {preview}",
             color,
+            event_data={
+                "type": "Tool Result",
+                "name": name,
+                "result": result,
+                "is_error": is_error,
+                "formatted": f"Tool: {name}\n"
+                            f"Status: {'ERROR' if is_error else 'OK'}\n"
+                            f"Size: {len(result)} chars\n\n{result[:5000]}",
+                "raw_json": json.dumps(
+                    {"tool": name, "result": result, "is_error": is_error},
+                    ensure_ascii=False, indent=2),
+            },
         )
 
     def _on_response_done(self, raw: dict):
@@ -269,13 +287,112 @@ class FletApp:
         else:
             text_preview = final_text[:200].replace("\n", " ")
             resp_lines.append(f"Text: {text_preview}")
+        # Store full response data for detail dialog
+        response_data = {
+            "type": "Response",
+            "model": model,
+            "raw": raw,
+            "raw_json": json.dumps(raw, ensure_ascii=False, indent=2),
+            "formatted": "\n".join(resp_lines),
+            "text": final_text,
+        }
         self.debug_drawer.add_event(
             "[Response]", "\n".join(resp_lines), "#10B981",
+            event_data=response_data,
         )
 
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
+
+    def _on_debug_event_click(self, event_data: dict):
+        """Open detail dialog when a debug event entry is clicked."""
+        if not event_data:
+            return
+        self._show_detail_dialog(event_data)
+
+    def _show_detail_dialog(self, data: dict):
+        event_type = data.get("type", "")
+        formatted = data.get("formatted", "")
+        raw_json = data.get("raw_json", "")
+
+        if event_type == "Request":
+            lines = [f"Model: {data.get('model', '?')}"]
+            lines.append(f"Messages: {data.get('message_count', '?')}  |  "
+                        f"~{data.get('est_tokens', '?')} tokens  |  "
+                        f"{data.get('tools_count', '?')} tools")
+            lines.append(f"=== User Message ===")
+            lines.append(data.get('user_message', ''))
+            lines.append("=== History ===")
+            for i, m in enumerate(data.get("messages", [])):
+                role = m["role"]
+                content = m["content"]
+                tool_blocks = m.get("tool_use_blocks", [])
+                if tool_blocks:
+                    for tb in tool_blocks:
+                        lines.append(f"[{i}] {role} -> tool_use: {tb['tool_name']}")
+                        for k, v in tb.get("input", {}).items():
+                            lines.append(f"     {k}: {str(v)[:200]}")
+                else:
+                    lines.append(f"[{i}] {role}: {content}")
+            formatted = "\n".join(lines)
+            raw_json = json.dumps({
+                "model": data.get("model"),
+                "messages": [
+                    {"role": m["role"], "content": m["content"],
+                     "tool_use_id": m.get("tool_use_id") or None,
+                     "tool_use_blocks": m.get("tool_use_blocks") or None}
+                    for m in data.get("messages", [])
+                ],
+            }, ensure_ascii=False, indent=2)
+
+        formatted_text = ft.Text(
+            formatted, size=11, color="#1E1B3A",
+            font_family="monospace", selectable=True,
+        )
+        raw_text = ft.Text(
+            raw_json, size=11, color="#1E1B3A",
+            font_family="monospace", selectable=True,
+        )
+
+        content_area = ft.Column([formatted_text], expand=True, scroll=ft.ScrollMode.AUTO)
+
+        self._dlg_tab = 0  # 0=formatted, 1=raw
+
+        def make_tab_btn(label, idx):
+            def click(e):
+                self._dlg_tab = idx
+                content_area.controls[0] = formatted_text if idx == 0 else raw_text
+                for i, btn in enumerate(tab_row.controls):
+                    btn.content.color = "#6366F1" if i == idx else "#64748B"
+                    btn.update()
+                content_area.update()
+            return ft.TextButton(
+                content=ft.Text(label, size=11, color="#6366F1" if idx == 0 else "#64748B"),
+                on_click=click,
+            )
+
+        tab_row = ft.Row([
+            make_tab_btn("格式化", 0),
+            make_tab_btn("原始 JSON", 1),
+        ], spacing=0)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text(f"{event_type} 详情", size=14, weight=ft.FontWeight.W_600),
+            content=ft.Column([
+                tab_row,
+                ft.Container(height=8),
+                content_area,
+            ], height=500, width=650),
+            actions=[
+                ft.TextButton(
+                    content=ft.Text("关闭", color="#64748B"),
+                    on_click=lambda e: self.page.pop_dialog(),
+                ),
+            ],
+            shape=ft.RoundedRectangleBorder(radius=10),
+        )
+        self.page.show_dialog(dlg)
 
     def _on_error(self, message: str):
         self.debug_drawer.add_event("[Error]", message, "#EF4444")
@@ -345,8 +462,29 @@ class FletApp:
                 msg_lines.append(f"  [{i}] {role}: {content_preview}")
         if len(agent.messages) > 5:
             msg_lines.append(f"  ... +{len(agent.messages) - 5} earlier messages")
+        # Store full request data for detail dialog
+        request_data = {
+            "type": "Request",
+            "provider": provider_name,
+            "model": provider_name,
+            "message_count": msg_count,
+            "est_tokens": est_tokens,
+            "tools_count": tools_count,
+            "user_message": text,
+            "messages": [
+                {"role": m.role, "content": m.content or "",
+                 "tool_use_id": getattr(m, "tool_use_id", ""),
+                 "tool_use_blocks": [
+                    {"tool_name": b.tool_name, "input": b.input}
+                    for b in (getattr(m, "tool_use_blocks", None) or [])
+                 ]}
+                for m in agent.messages
+            ],
+            "formatted": "\n".join(msg_lines),
+        }
         self.debug_drawer.add_event(
             "[Request]", "\n".join(msg_lines), "#569cd6",
+            event_data=request_data,
         )
         self.page.update()
 
