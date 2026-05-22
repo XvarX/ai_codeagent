@@ -24,9 +24,9 @@ def show_config_dialog(page: ft.Page, on_save=None):
             config = yaml.safe_load(f) or {}
 
     provider = config.get("provider", "glm")
-    api_key = config.get("api_key", "")
+    api_key = config.get("api_key") or config.get("api_keys", {}).get(provider, "")
     model = config.get("model", "")
-    base_url = config.get("base_url", "")
+    base_url = config.get("base_url") or config.get("base_urls", {}).get(provider, "")
 
     provider_dd = ft.Dropdown(
         value=provider,
@@ -62,15 +62,14 @@ def show_config_dialog(page: ft.Page, on_save=None):
     status_text = ft.Text("", size=10, color="#EF4444")
 
     def save_click(e):
-        new_config = {
-            "provider": provider_dd.value,
-            "api_key": api_key_field.value,
-            "model": model_field.value,
-            "base_url": base_url_field.value,
-        }
+        # Merge into existing config to preserve nested structure
+        config["provider"] = provider_dd.value
+        config["model"] = model_field.value or None
+        config.setdefault("api_keys", {})[provider_dd.value] = api_key_field.value
+        config.setdefault("base_urls", {})[provider_dd.value] = base_url_field.value
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-                yaml.dump(new_config, f, allow_unicode=True, default_flow_style=False)
+                yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
             from config import AgentConfig
             updated_config = AgentConfig.from_yaml()
             if on_save:
