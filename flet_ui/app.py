@@ -142,6 +142,16 @@ class FletApp:
 
         self.page.on_keyboard_event = self._on_keyboard
 
+        # Startup system info
+        registry = self.controller.registry
+        self.debug_drawer.add_event(
+            "System",
+            f"Provider: {self.config.provider}  |  Model: {self.config.model or 'default'}\n"
+            f"Tools: {', '.join(registry.get_tool_names())}\n"
+            f"CWD: {self.config.cwd or Path.cwd()}",
+            "#569cd6",
+        )
+
     def _on_thinking(self):
         self.chat_view.show_thinking()
 
@@ -193,19 +203,23 @@ class FletApp:
 
     def _on_tool_use(self, name: str, input_dict: dict):
         preview = ", ".join(
-            f"{k}={str(v)[:50]!r}" for k, v in input_dict.items()
+            f"{k}={str(v)[:40]!r}" for k, v in input_dict.items()
         )
         self.chat_view.add_tool_label(name, preview)
+        detail = "\n".join(
+            f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()
+        )
         self.debug_drawer.add_event(
-            "[Tool Call]", f"{name}: {preview}", "#6366F1",
+            f"[Tool] {name}", detail, "#6366F1",
         )
 
     def _on_tool_result(self, name: str, result: str, is_error: bool):
         color = "#EF4444" if is_error else "#10B981"
-        preview = result[:300].replace("\n", " ")
+        preview = result[:500].replace("\n", " ")
         self.debug_drawer.add_event(
-            "[Tool Result]",
-            f"{name} ({len(result)} chars): {preview}",
+            f"[Tool] {name} done",
+            f"  status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
+            f"  {preview}",
             color,
         )
 
@@ -240,10 +254,21 @@ class FletApp:
         model = req.get("model", "?")
         prompt_tokens = norm_usage.get("prompt_tokens", "?")
         completion_tokens = norm_usage.get("completion_tokens", "?")
+        total_tokens = norm_usage.get("total_tokens", "?")
+        cache_read = norm_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+
+        resp_lines = [f"Model: {model}  |  Msgs: {len(msgs)}"]
+        resp_lines.append(f"prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
+        if cache_read:
+            resp_lines.append(f"cache hit: {cache_read} tokens ({cache_read * 100 // max(prompt_tokens, 1)}%)")
+        tool_blocks = raw.get("_tool_use_blocks", [])
+        if tool_blocks:
+            resp_lines.append("Tool calls: " + ", ".join(t["tool_name"] for t in tool_blocks))
+        else:
+            text_preview = (self._current_md_text or "")[:200].replace("\n", " ")
+            resp_lines.append(f"Text: {text_preview}")
         self.debug_drawer.add_event(
-            "[Response]", f"Model: {model}  |  Msgs: {len(msgs)}  |  "
-            f"prompt={prompt_tokens}, completion={completion_tokens}",
-            "#10B981",
+            "[Response]", "\n".join(resp_lines), "#10B981",
         )
 
     def _on_done(self, final_text: str):
@@ -300,11 +325,25 @@ class FletApp:
 
         # Show request info immediately
         provider_name = self.controller.agent.provider.model or self.config.provider
-        msg_count = len(self.controller.agent.messages) + 1
+        agent = self.controller.agent
+        msg_count = len(agent.messages) + 1
+        est_tokens = agent.est_tokens()
+        tools_count = len(agent.registry.get_schemas())
+
+        # Build message summary
+        msg_lines = [f"Model: {provider_name}"]
+        msg_lines.append(f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools")
+        for i, m in enumerate(agent.messages[-6:]):
+            role = m.role
+            content_preview = (m.content or "")[:60].replace("\n", " ")
+            if m.tool_use_id:
+                msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
+            else:
+                msg_lines.append(f"  [{i}] {role}: {content_preview}")
+        if len(agent.messages) > 6:
+            msg_lines.append(f"  ... +{len(agent.messages) - 6} earlier messages")
         self.debug_drawer.add_event(
-            "[Request]",
-            f"Model: {provider_name}  |  Messages: {msg_count}",
-            "#569cd6",
+            "[Request]", "\n".join(msg_lines), "#569cd6",
         )
         self.page.update()
 
