@@ -95,10 +95,8 @@ def show_config_dialog(page: ft.Page, on_save=None):
             status_text,
         ], height=320, width=360),
         actions=[
-            ft.TextButton("取消", on_click=lambda e: page.close(dlg),
-                         style=ft.ButtonStyle(color="#94A3B8")),
-            ft.TextButton("保存", on_click=save_click,
-                         style=ft.ButtonStyle(color="#6366F1")),
+            ft.TextButton(content=ft.Text("取消", color="#94A3B8"), on_click=lambda e: page.close(dlg)),
+            ft.TextButton(content=ft.Text("保存", color="#6366F1"), on_click=save_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
         shape=ft.RoundedRectangleBorder(radius=10),

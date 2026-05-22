@@ -25,7 +25,7 @@ class InputBar(ft.Container):
         )
 
         self._send_button = ft.IconButton(
-            icon=ft.icons.SEND,
+            icon=ft.Icons.SEND,
             icon_size=16,
             bgcolor="#6366F1",
             icon_color="white",

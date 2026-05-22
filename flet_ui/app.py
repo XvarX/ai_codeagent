@@ -92,11 +92,11 @@ class FletApp:
                                    weight=ft.FontWeight.W_700),
                     width=22, height=22, border_radius=5,
                     gradient=ft.LinearGradient(
-                        begin=ft.alignment.top_left,
-                        end=ft.alignment.bottom_right,
+                        begin=ft.alignment.Alignment.TOP_LEFT,
+                        end=ft.alignment.Alignment.BOTTOM_RIGHT,
                         colors=["#6366F1", "#8B5CF6"],
                     ),
-                    alignment=ft.alignment.center,
+                    alignment=ft.alignment.Alignment.CENTER,
                 ),
                 ft.Text("AI Code Agent", size=14, weight=ft.FontWeight.W_600,
                         color="#1E1B3A"),
@@ -111,22 +111,16 @@ class FletApp:
             ], spacing=10),
             actions=[
                 ft.TextButton(
-                    text="配置", style=ft.ButtonStyle(
-                        color="#64748B", text_style=ft.TextStyle(size=11),
-                    ),
+                    content=ft.Text("配置", size=11, color="#64748B"),
                     on_click=lambda e: show_config_dialog(
                         self.page, on_save=self._on_config_saved),
                 ),
                 ft.TextButton(
-                    text="清除", style=ft.ButtonStyle(
-                        color="#64748B", text_style=ft.TextStyle(size=11),
-                    ),
+                    content=ft.Text("清除", size=11, color="#64748B"),
                     on_click=lambda e: self._clear_history(),
                 ),
                 ft.TextButton(
-                    text="调试", style=ft.ButtonStyle(
-                        color="#94A3B8", text_style=ft.TextStyle(size=11),
-                    ),
+                    content=ft.Text("调试", size=11, color="#94A3B8"),
                     on_click=lambda e: self.debug_drawer._toggle(),
                 ),
             ],
@@ -154,14 +148,14 @@ class FletApp:
                                weight=ft.FontWeight.W_600),
                 width=28, height=28, border_radius=14,
                 gradient=ft.LinearGradient(
-                    begin=ft.alignment.top_left,
-                    end=ft.alignment.bottom_right,
+                    begin=ft.alignment.Alignment.TOP_LEFT,
+                    end=ft.alignment.Alignment.BOTTOM_RIGHT,
                     colors=["#6366F1", "#8B5CF6"],
                 ),
-                alignment=ft.alignment.center,
+                alignment=ft.alignment.Alignment.CENTER,
                 shadow=ft.BoxShadow(
                     blur_radius=4,
-                    color=ft.colors.with_opacity(0.25, "#6366F1"),
+                    color=ft.Colors.with_opacity(0.25, "#6366F1"),
                     offset=ft.Offset(0, 1),
                 ),
             )

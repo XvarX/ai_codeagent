@@ -23,7 +23,7 @@ class ChatView(ft.ListView):
                 top_left=15, top_right=15, bottom_left=15, bottom_right=3,
             ),
             padding=ft.Padding.symmetric(horizontal=15, vertical=10),
-            alignment=ft.alignment.center_right,
+            alignment=ft.alignment.Alignment.CENTER_RIGHT,
         )
         row = ft.Row([bubble], alignment=ft.MainAxisAlignment.END)
         self.controls.append(row)
@@ -34,13 +34,13 @@ class ChatView(ft.ListView):
             width=28, height=28,
             border_radius=14,
             gradient=ft.LinearGradient(
-                begin=ft.alignment.top_left,
-                end=ft.alignment.bottom_right,
+                begin=ft.alignment.Alignment.TOP_LEFT,
+                end=ft.alignment.Alignment.BOTTOM_RIGHT,
                 colors=["#6366F1", "#8B5CF6"],
             ),
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.Alignment.CENTER,
             shadow=ft.BoxShadow(
-                blur_radius=4, color=ft.colors.with_opacity(0.25, "#6366F1"),
+                blur_radius=4, color=ft.Colors.with_opacity(0.25, "#6366F1"),
                 offset=ft.Offset(0, 1),
             ),
         )

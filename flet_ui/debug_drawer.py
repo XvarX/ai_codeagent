@@ -48,20 +48,20 @@ class DebugDrawer(ft.Container):
     def _build_expanded(self):
         title_bar = ft.Row([
             ft.Text("调试面板", size=12, weight=ft.FontWeight.W_600, color="#1E1B3A"),
-            ft.IconButton(icon=ft.icons.CLOSE, icon_size=14, icon_color="#94A3B8",
+            ft.IconButton(icon=ft.Icons.CLOSE, icon_size=14, icon_color="#94A3B8",
                           on_click=self._toggle),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         compact_btn = ft.TextButton(
-            text="Compact", style=ft.ButtonStyle(
-                color="#64748B", text_style=ft.TextStyle(size=10),
+            content=ft.Text("Compact", size=10, color="#64748B"),
+            style=ft.ButtonStyle(
                 padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
             on_click=lambda e: self._on_compact and self._on_compact(),
         )
         clear_btn = ft.TextButton(
-            text="Clear History", style=ft.ButtonStyle(
-                color="#EF4444", text_style=ft.TextStyle(size=10),
+            content=ft.Text("Clear History", size=10, color="#EF4444"),
+            style=ft.ButtonStyle(
                 padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
             on_click=lambda e: self._on_clear and self._on_clear(),
