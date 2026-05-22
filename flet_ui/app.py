@@ -186,7 +186,6 @@ class FletApp:
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
-                code_style=ft.TextStyle(size=11, font_family="monospace"),
             )
         self.page.update()
 
@@ -215,7 +214,6 @@ class FletApp:
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
-                code_style=ft.TextStyle(size=11, font_family="monospace"),
             )
             self.page.update()
         self._current_md_text = ""

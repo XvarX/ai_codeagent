@@ -50,9 +50,6 @@ class ChatView(ft.ListView):
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
-                code_style=ft.TextStyle(
-                    size=11, font_family="monospace",
-                ),
                 auto_follow_links=True,
             ),
             bgcolor="#FAFBFC",
