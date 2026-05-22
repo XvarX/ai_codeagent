@@ -47,3 +47,11 @@ class DoneEvent:
 class ErrorEvent:
     """发生错误"""
     message: str
+
+
+@dataclass
+class CompactEvent:
+    """上下文压缩完成"""
+    pre_tokens: int
+    post_tokens: int
+    trigger: str = ""

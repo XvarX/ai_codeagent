@@ -218,7 +218,7 @@ class Agent:
         """Streaming version of run(). Yields events instead of returning text."""
         from events import (
             ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
-            ResponseDoneEvent, DoneEvent, ErrorEvent,
+            ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent,
         )
 
         self.messages.append(Message(role="user", content=user_message))
@@ -227,8 +227,39 @@ class Agent:
         while turn_count < self.max_turns:
             turn_count += 1
 
+            # ── Compaction Pipeline (mirrors run()) ──────────
             if len(self.messages) > self.max_messages:
                 self.messages = self.messages[-self.max_messages:]
+
+            if turn_count > 1:
+                from compact.microCompact import micro_compact
+                micro_compact(self.messages)
+
+            from compact.autoCompact import should_auto_compact
+            if should_auto_compact(
+                self.messages,
+                getattr(self.provider, 'model', None),
+                actual_base=self._last_actual_tokens,
+            ):
+                from compact.compact import compact_conversation
+                pre_tokens = self._est_tokens()
+                try:
+                    result = await compact_conversation(
+                        self.provider, self.messages,
+                        self.registry.get_schemas(),
+                        keep_recent_rounds=2,
+                    )
+                    self.messages = result.summary_messages + result.messages_to_keep
+                    self._last_actual_tokens = result.post_tokens
+                    self._compact_count += 1
+
+                    yield CompactEvent(
+                        pre_tokens=pre_tokens,
+                        post_tokens=result.post_tokens,
+                        trigger=f"auto (#{self._compact_count})",
+                    )
+                except Exception:
+                    pass
 
             tools_schema = self.registry.get_schemas()
             system_prompt = build_system_prompt(
@@ -259,6 +290,12 @@ class Agent:
                         tool_use_blocks.append(block)
                         yield event
                     elif isinstance(event, ResponseDoneEvent):
+                        # Track actual token usage
+                        usage = event.raw.get("usage", {})
+                        if usage.get("total_tokens"):
+                            self._last_actual_tokens = usage["total_tokens"]
+                        elif usage.get("input_tokens"):
+                            self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
