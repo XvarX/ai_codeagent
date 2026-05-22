@@ -75,7 +75,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             updated_config = AgentConfig.from_yaml()
             if on_save:
                 on_save(updated_config)
-            page.close(dlg)
+            page.pop_dialog()
         except Exception as ex:
             status_text.value = f"Save failed: {ex}"
             status_text.update()
@@ -95,11 +95,11 @@ def show_config_dialog(page: ft.Page, on_save=None):
             status_text,
         ], height=320, width=360),
         actions=[
-            ft.TextButton(content=ft.Text("取消", color="#64748B"), on_click=lambda e: page.close(dlg)),
+            ft.TextButton(content=ft.Text("取消", color="#64748B"), on_click=lambda e: page.pop_dialog()),
             ft.TextButton(content=ft.Text("保存", color="#6366F1"), on_click=save_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
         shape=ft.RoundedRectangleBorder(radius=10),
     )
 
-    page.open(dlg)
+    page.show_dialog(dlg)
