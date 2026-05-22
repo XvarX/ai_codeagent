@@ -48,7 +48,7 @@ class EventHandler:
 
     async def on_thinking(self): pass
     async def on_text_delta(self, token: str): pass
-    async def on_tool_use(self, name: str, input_dict: dict): pass
+    async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""): pass
     async def on_tool_result(self, name: str, result: str, is_error: bool): pass
     async def on_response_done(self, raw: dict): pass
     async def on_done(self, final_text: str): pass
@@ -92,7 +92,7 @@ class AgentController:
                 elif isinstance(event, TextDeltaEvent):
                     await self.handler.on_text_delta(event.token)
                 elif isinstance(event, ToolUseEvent):
-                    await self.handler.on_tool_use(event.tool_name, event.input)
+                    await self.handler.on_tool_use(event.tool_name, event.input, event.tool_use_id)
                 elif isinstance(event, ToolDoneEvent):
                     await self.handler.on_tool_result(
                         event.tool_name, event.result, event.is_error)
@@ -107,6 +107,8 @@ class AgentController:
                         event.pre_tokens, event.post_tokens, event.trigger)
         except asyncio.CancelledError:
             pass
+        except Exception as e:
+            await self.handler.on_error(f"Agent error: {e}")
         finally:
             self._current_task = None
 
@@ -131,5 +133,5 @@ class AgentController:
     def estimate_usage(self) -> dict:
         return {
             "message_count": len(self.agent.messages),
-            "estimated_tokens": self.agent._est_tokens(),
+            "estimated_tokens": self.agent.est_tokens(),
         }

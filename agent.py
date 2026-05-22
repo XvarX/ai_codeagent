@@ -79,7 +79,7 @@ class Agent:
                 actual_base=self._last_actual_tokens,
             ):
                 from compact.compact import compact_conversation
-                pre_tokens = self._est_tokens()
+                pre_tokens = self.est_tokens()
                 try:
                     result = await compact_conversation(
                         self.provider, self.messages,
@@ -122,7 +122,7 @@ class Agent:
                     self._reactive_compact()
                     if self.on_compact:
                         await self.on_compact(
-                            self._est_tokens(), self._est_tokens(),
+                            self.est_tokens(), self.est_tokens(),
                             "reactive (413)"
                         )
                     # Retry after compact
@@ -202,7 +202,7 @@ class Agent:
 
         return "Agent: max turns reached without completing the task."
 
-    def _est_tokens(self) -> int:
+    def est_tokens(self) -> int:
         from compact.grouping import estimate_tokens
         return estimate_tokens(self.messages)
 
@@ -242,7 +242,7 @@ class Agent:
                 actual_base=self._last_actual_tokens,
             ):
                 from compact.compact import compact_conversation
-                pre_tokens = self._est_tokens()
+                pre_tokens = self.est_tokens()
                 try:
                     result = await compact_conversation(
                         self.provider, self.messages,
@@ -311,8 +311,8 @@ class Agent:
                 if "413" in err_str or "prompt_too_long" in err_str or "too long" in err_str.lower():
                     self._reactive_compact()
                     yield CompactEvent(
-                        pre_tokens=self._est_tokens(),
-                        post_tokens=self._est_tokens(),
+                        pre_tokens=self.est_tokens(),
+                        post_tokens=self.est_tokens(),
                         trigger="reactive (413)",
                     )
                     # Retry after compact
