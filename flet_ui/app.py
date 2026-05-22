@@ -296,6 +296,16 @@ class FletApp:
         self.chat_view.show_thinking()
         self.input_bar.set_busy(True)
 
+        # Show request info immediately
+        provider_name = self.controller.agent.provider.model or self.config.provider
+        msg_count = len(self.controller.agent.messages) + 1
+        self.debug_drawer.add_event(
+            "[Request]",
+            f"Model: {provider_name}  |  Messages: {msg_count}",
+            "#569cd6",
+        )
+        self.page.update()
+
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "*" * 60 + "\n")
             f.write(f"User: {text}\n")
