@@ -341,15 +341,17 @@ class FletApp:
                 else:
                     lines.append(f"[{i}] {role}: {content}")
             formatted = "\n".join(lines)
-            raw_json = json.dumps({
-                "model": data.get("model"),
-                "messages": [
-                    {"role": m["role"], "content": m["content"],
-                     "tool_use_id": m.get("tool_use_id") or None,
-                     "tool_use_blocks": m.get("tool_use_blocks") or None}
-                    for m in data.get("messages", [])
-                ],
-            }, ensure_ascii=False, indent=2)
+            if not raw_json:
+                # Fallback: construct minimal request JSON
+                raw_json = json.dumps({
+                    "model": data.get("model"),
+                    "messages": [
+                        {"role": m["role"], "content": m["content"],
+                         "tool_use_id": m.get("tool_use_id") or None,
+                         "tool_use_blocks": m.get("tool_use_blocks") or None}
+                        for m in data.get("messages", [])
+                    ],
+                }, ensure_ascii=False, indent=2)
 
         formatted_text = ft.Text(
             formatted, size=11, color="#1E1B3A",
