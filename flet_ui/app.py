@@ -103,7 +103,7 @@ class FletApp:
                 ft.Container(
                     content=ft.Text(
                         f"{self.config.provider}  |  {self.config.model or 'default'}",
-                        size=10, color="#94A3B8",
+                        size=10, color="#64748B",
                     ),
                     bgcolor="#F1F3F6", border_radius=4,
                     padding=ft.Padding.symmetric(horizontal=7, vertical=2),
@@ -120,7 +120,7 @@ class FletApp:
                     on_click=lambda e: self._clear_history(),
                 ),
                 ft.TextButton(
-                    content=ft.Text("调试", size=11, color="#94A3B8"),
+                    content=ft.Text("调试", size=11, color="#64748B"),
                     on_click=lambda e: self.debug_drawer._toggle(),
                 ),
             ],
@@ -130,10 +130,15 @@ class FletApp:
         main_row = ft.Row(
             [self.chat_view, self.debug_drawer],
             spacing=0,
+            expand=True,
         )
 
-        self.page.add(main_row)
-        self.page.add(self.input_bar)
+        layout = ft.Column(
+            [main_row, self.input_bar],
+            spacing=0,
+            expand=True,
+        )
+        self.page.add(layout)
 
         self.page.on_keyboard_event = self._on_keyboard
 
@@ -183,7 +188,7 @@ class FletApp:
                 code_theme="atom-one-light",
                 code_style=ft.TextStyle(size=11, font_family="monospace"),
             )
-        self._current_assistant_bubble.update()
+        self.page.update()
 
     def _on_tool_use(self, name: str, input_dict: dict):
         preview = ", ".join(
@@ -212,7 +217,7 @@ class FletApp:
                 code_theme="atom-one-light",
                 code_style=ft.TextStyle(size=11, font_family="monospace"),
             )
-            self._current_assistant_bubble.update()
+            self.page.update()
         self._current_md_text = ""
         self._current_assistant_bubble = None
 

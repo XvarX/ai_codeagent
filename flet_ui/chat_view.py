@@ -73,7 +73,7 @@ class ChatView(ft.ListView):
         label = ft.Container(
             content=ft.Text(
                 f"{name}  {preview}",
-                size=10, color="#64748B",
+                size=10, color="#475569",
             ),
             bgcolor="#F8F9FB",
             border=ft.Border.all(1, "#EEF0F4"),
@@ -89,15 +89,15 @@ class ChatView(ft.ListView):
         dots = ft.Row(
             [
                 ft.Container(width=6, height=6, border_radius=3,
-                             bgcolor="#A0A0B8"),
+                             bgcolor="#94A3B8"),
                 ft.Container(width=6, height=6, border_radius=3,
-                             bgcolor="#A0A0B8"),
+                             bgcolor="#94A3B8"),
                 ft.Container(width=6, height=6, border_radius=3,
-                             bgcolor="#A0A0B8"),
+                             bgcolor="#94A3B8"),
             ],
             spacing=4,
         )
-        label = ft.Text("思考中...", size=10, color="#A0A0B8")
+        label = ft.Text("思考中...", size=10, color="#94A3B8")
         self._thinking_row = ft.Row(
             [dots, label], spacing=6,
             alignment=ft.MainAxisAlignment.START,

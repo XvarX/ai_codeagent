@@ -12,7 +12,7 @@ class InputBar(ft.Container):
 
         self._text_field = ft.TextField(
             hint_text="输入消息... (Ctrl+Enter 发送)",
-            hint_style=ft.TextStyle(size=12, color="#94A3B8"),
+            hint_style=ft.TextStyle(size=12, color="#64748B"),
             text_style=ft.TextStyle(size=12, color="#1E1B3A"),
             multiline=True,
             shift_enter=True,

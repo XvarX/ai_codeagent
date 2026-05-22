@@ -22,8 +22,8 @@ class DebugDrawer(ft.Container):
         self._collapsed_view = ft.Container(
             content=ft.Column([
                 ft.Container(height=12),
-                ft.Text("调", size=10, color="#94A3B8", text_align=ft.TextAlign.CENTER),
-                ft.Text("试", size=10, color="#94A3B8", text_align=ft.TextAlign.CENTER),
+                ft.Text("调", size=10, color="#64748B", text_align=ft.TextAlign.CENTER),
+                ft.Text("试", size=10, color="#64748B", text_align=ft.TextAlign.CENTER),
                 ft.Container(
                     width=6, height=6, border_radius=3,
                     bgcolor="#E2E6EC",
@@ -41,14 +41,14 @@ class DebugDrawer(ft.Container):
 
         self._usage_bar = ft.ProgressBar(value=0, color="#6366F1", bgcolor="#E8E8EF",
                                          bar_height=6)
-        self._usage_text = ft.Text("-- tokens", size=10, color="#94A3B8")
+        self._usage_text = ft.Text("-- tokens", size=10, color="#64748B")
 
         self.content = self._collapsed_view
 
     def _build_expanded(self):
         title_bar = ft.Row([
             ft.Text("调试面板", size=12, weight=ft.FontWeight.W_600, color="#1E1B3A"),
-            ft.IconButton(icon=ft.Icons.CLOSE, icon_size=14, icon_color="#94A3B8",
+            ft.IconButton(icon=ft.Icons.CLOSE, icon_size=14, icon_color="#64748B",
                           on_click=self._toggle),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
@@ -71,13 +71,13 @@ class DebugDrawer(ft.Container):
             title_bar,
             ft.Divider(height=1, color="#EEF0F4"),
             ft.Container(height=6),
-            ft.Text("上下文窗口", size=10, color="#94A3B8"),
+            ft.Text("上下文窗口", size=10, color="#64748B"),
             ft.Container(height=4),
             self._usage_bar,
             ft.Container(height=2),
             self._usage_text,
             ft.Container(height=10),
-            ft.Text("事件日志", size=10, color="#94A3B8"),
+            ft.Text("事件日志", size=10, color="#64748B"),
             ft.Container(
                 content=self._event_log,
                 expand=True,
@@ -112,7 +112,7 @@ class DebugDrawer(ft.Container):
             ft.Row([
                 ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
             ]),
-            ft.Text(message, size=9, color="#64748B", selectable=True,
+            ft.Text(message, size=9, color="#475569", selectable=True,
                     max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
         ], spacing=1)
         self._event_log.controls.insert(0, entry)
