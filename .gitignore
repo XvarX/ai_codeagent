@@ -1,6 +1,9 @@
 # API keys
 config.yaml
 
+# Local config
+.claude/
+
 # Generated
 __pycache__/
 logs/
