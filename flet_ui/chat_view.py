@@ -10,7 +10,7 @@ class ChatView(ft.ListView):
         super().__init__()
         self.expand = True
         self.spacing = 10
-        self.padding = ft.padding.symmetric(horizontal=18, vertical=14)
+        self.padding = ft.Padding.symmetric(horizontal=18, vertical=14)
         self.auto_scroll = True
         self._thinking_row: ft.Row | None = None
 
@@ -18,11 +18,11 @@ class ChatView(ft.ListView):
         bubble = ft.Container(
             content=ft.Text(text, size=12, color="#1E1B3A", selectable=True),
             bgcolor="#F1F3F6",
-            border=ft.border.all(1, "#EAEAEF"),
-            border_radius=ft.border_radius.only(
+            border=ft.Border.all(1, "#EAEAEF"),
+            border_radius=ft.BorderRadius.only(
                 top_left=15, top_right=15, bottom_left=15, bottom_right=3,
             ),
-            padding=ft.padding.symmetric(horizontal=15, vertical=10),
+            padding=ft.Padding.symmetric(horizontal=15, vertical=10),
             alignment=ft.alignment.center_right,
         )
         row = ft.Row([bubble], alignment=ft.MainAxisAlignment.END)
@@ -56,11 +56,11 @@ class ChatView(ft.ListView):
                 auto_follow_links=True,
             ),
             bgcolor="#FAFBFC",
-            border=ft.border.all(1, "#EEF0F4"),
-            border_radius=ft.border_radius.only(
+            border=ft.Border.all(1, "#EEF0F4"),
+            border_radius=ft.BorderRadius.only(
                 top_left=3, top_right=15, bottom_left=15, bottom_right=15,
             ),
-            padding=ft.padding.symmetric(horizontal=15, vertical=10),
+            padding=ft.Padding.symmetric(horizontal=15, vertical=10),
         )
         row = ft.Row(
             [avatar, bubble],
@@ -76,9 +76,9 @@ class ChatView(ft.ListView):
                 size=10, color="#64748B",
             ),
             bgcolor="#F8F9FB",
-            border=ft.border.all(1, "#EEF0F4"),
+            border=ft.Border.all(1, "#EEF0F4"),
             border_radius=6,
-            padding=ft.padding.symmetric(horizontal=9, vertical=3),
+            padding=ft.Padding.symmetric(horizontal=9, vertical=3),
         )
         row = ft.Row([label], alignment=ft.MainAxisAlignment.START)
         self.controls.append(row)

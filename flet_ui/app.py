@@ -106,7 +106,7 @@ class FletApp:
                         size=10, color="#94A3B8",
                     ),
                     bgcolor="#F1F3F6", border_radius=4,
-                    padding=ft.padding.symmetric(horizontal=7, vertical=2),
+                    padding=ft.Padding.symmetric(horizontal=7, vertical=2),
                 ),
             ], spacing=10),
             actions=[
@@ -169,11 +169,11 @@ class FletApp:
                 content=ft.Text(self._current_md_text, size=12, color="#1E1B3A",
                                selectable=True),
                 bgcolor="#FAFBFC",
-                border=ft.border.all(1, "#EEF0F4"),
-                border_radius=ft.border_radius.only(
+                border=ft.Border.all(1, "#EEF0F4"),
+                border_radius=ft.BorderRadius.only(
                     top_left=3, top_right=15, bottom_left=15, bottom_right=15,
                 ),
-                padding=ft.padding.symmetric(horizontal=15, vertical=10),
+                padding=ft.Padding.symmetric(horizontal=15, vertical=10),
             )
             row = ft.Row(
                 [avatar, self._current_assistant_bubble],

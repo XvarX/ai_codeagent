@@ -14,9 +14,9 @@ class DebugDrawer(ft.Container):
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
-        self.border = ft.border.only(left=ft.BorderSide(1, "#F1F3F6"))
+        self.border = ft.Border.only(left=ft.BorderSide(1, "#F1F3F6"))
         self.animate = ft.Animation(200, ft.AnimationCurve.EASE_OUT)
-        self.padding = ft.padding.all(0)
+        self.padding = ft.Padding.all(0)
 
         # Collapsed view
         self._collapsed_view = ft.Container(
@@ -30,13 +30,13 @@ class DebugDrawer(ft.Container):
                 ),
             ], alignment=ft.MainAxisAlignment.START,
                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=ft.padding.symmetric(vertical=14),
+            padding=ft.Padding.symmetric(vertical=14),
             on_click=self._toggle,
         )
 
         # Expanded view — built lazily
         self._expanded_view = None
-        self._event_log = ft.ListView(spacing=2, padding=ft.padding.only(top=4),
+        self._event_log = ft.ListView(spacing=2, padding=ft.Padding.only(top=4),
                                       auto_scroll=True)
 
         self._usage_bar = ft.ProgressBar(value=0, color="#6366F1", bgcolor="#E8E8EF",
@@ -55,14 +55,14 @@ class DebugDrawer(ft.Container):
         compact_btn = ft.TextButton(
             text="Compact", style=ft.ButtonStyle(
                 color="#64748B", text_style=ft.TextStyle(size=10),
-                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
             on_click=lambda e: self._on_compact and self._on_compact(),
         )
         clear_btn = ft.TextButton(
             text="Clear History", style=ft.ButtonStyle(
                 color="#EF4444", text_style=ft.TextStyle(size=10),
-                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
             on_click=lambda e: self._on_clear and self._on_clear(),
         )
@@ -83,8 +83,8 @@ class DebugDrawer(ft.Container):
                 expand=True,
                 bgcolor="#F8F9FB",
                 border_radius=6,
-                padding=ft.padding.all(8),
-                border=ft.border.all(1, "#EEF0F4"),
+                padding=ft.Padding.all(8),
+                border=ft.Border.all(1, "#EEF0F4"),
             ),
             ft.Container(height=8),
             ft.Row([compact_btn, clear_btn],
@@ -103,7 +103,7 @@ class DebugDrawer(ft.Container):
                 self._expanded_view = self._build_expanded()
             self.content = ft.Container(
                 content=self._expanded_view,
-                padding=ft.padding.all(12),
+                padding=ft.Padding.all(12),
             )
         self.update()
 

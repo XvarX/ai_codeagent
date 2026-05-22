@@ -21,7 +21,7 @@ class InputBar(ft.Container):
             border=ft.InputBorder.NONE,
             expand=True,
             bgcolor="transparent",
-            content_padding=ft.padding.symmetric(horizontal=4, vertical=4),
+            content_padding=ft.Padding.symmetric(horizontal=4, vertical=4),
         )
 
         self._send_button = ft.IconButton(
@@ -31,7 +31,7 @@ class InputBar(ft.Container):
             icon_color="white",
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=9),
-                padding=ft.padding.all(8),
+                padding=ft.Padding.all(8),
             ),
         )
 
@@ -39,9 +39,9 @@ class InputBar(ft.Container):
             [
                 ft.Container(
                     content=self._text_field,
-                    border=ft.border.all(1, "#E2E6EC"),
+                    border=ft.Border.all(1, "#E2E6EC"),
                     border_radius=10,
-                    padding=ft.padding.symmetric(horizontal=14, vertical=9),
+                    padding=ft.Padding.symmetric(horizontal=14, vertical=9),
                     expand=True,
                     bgcolor="#FFFFFF",
                 ),
@@ -53,8 +53,8 @@ class InputBar(ft.Container):
         )
 
         self.bgcolor = "#FAFBFC"
-        self.border = ft.border.only(top=ft.BorderSide(1, "#F1F3F6"))
-        self.padding = ft.padding.symmetric(horizontal=18, vertical=10)
+        self.border = ft.Border.only(top=ft.BorderSide(1, "#F1F3F6"))
+        self.padding = ft.Padding.symmetric(horizontal=18, vertical=10)
 
         self._send_button.on_click = self._on_send_click
 
