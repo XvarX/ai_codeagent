@@ -275,8 +275,10 @@ class FletApp:
         total_tokens = norm_usage.get("total_tokens", "?")
         cache_read = norm_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
 
-        # Save full request for Request detail dialog
-        self._last_full_request_json = json.dumps(req, ensure_ascii=False, indent=2)
+        # Inject full request into the corresponding Request entry's event_data
+        if hasattr(self, '_pending_request_data') and self._pending_request_data:
+            self._pending_request_data["raw_json"] = json.dumps(req, ensure_ascii=False, indent=2)
+            self._pending_request_data = None
 
         resp_lines = [f"Model: {model}  |  Msgs: {len(msgs)}"]
         resp_lines.append(f"prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
@@ -319,9 +321,7 @@ class FletApp:
         raw_json = data.get("raw_json", "")
 
         if event_type == "Request":
-            # Use full request from response if available (contains actual API request)
-            if hasattr(self, '_last_full_request_json') and self._last_full_request_json:
-                raw_json = self._last_full_request_json
+            # raw_json may have been injected from _on_response_done via mutable dict reference
             lines = [f"Model: {data.get('model', '?')}"]
             lines.append(f"Messages: {data.get('message_count', '?')}  |  "
                         f"~{data.get('est_tokens', '?')} tokens  |  "
@@ -489,6 +489,7 @@ class FletApp:
             ],
             "formatted": "\n".join(msg_lines),
         }
+        self._pending_request_data = request_data
         self.debug_drawer.add_event(
             "[Request]", "\n".join(msg_lines), "#569cd6",
             event_data=request_data,
