@@ -12,7 +12,6 @@ class DebugDrawer(ft.Container):
         self._on_clear = on_clear
         self._on_event_click = on_event_click
         self._is_open = False
-        self._event_data: list[dict] = []
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -110,9 +109,12 @@ class DebugDrawer(ft.Container):
         self.update()
 
     def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> None:
-        idx = len(self._event_data)
-        if event_data:
-            self._event_data.insert(0, event_data)
+        # Capture event_data in closure to avoid index mismatch
+        captured_data = event_data
+
+        def on_click(e, data=captured_data):
+            if data and self._on_event_click:
+                self._on_event_click(data)
 
         entry = ft.Container(
             content=ft.Column([
@@ -124,19 +126,13 @@ class DebugDrawer(ft.Container):
             ], spacing=1),
             padding=ft.Padding.symmetric(horizontal=4, vertical=2),
             border_radius=4,
-            data=idx,
-            on_click=self._on_entry_click if self._on_event_click else None,
+            on_click=on_click if self._on_event_click else None,
         )
         self._event_log.controls.insert(0, entry)
         if len(self._event_log.controls) > 50:
             self._event_log.controls = self._event_log.controls[:50]
         if self._is_open and self._event_log.page:
             self._event_log.update()
-
-    def _on_entry_click(self, e):
-        idx = e.control.data
-        if 0 <= idx < len(self._event_data):
-            self._on_event_click(self._event_data[idx])
 
     def update_context_usage(self, usage: dict) -> None:
         prompt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
@@ -150,7 +146,6 @@ class DebugDrawer(ft.Container):
             self._usage_text.update()
 
     def clear(self) -> None:
-        self._event_data.clear()
         self._event_log.controls.clear()
         if self._is_open and self._event_log.page:
             self._event_log.update()

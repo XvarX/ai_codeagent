@@ -67,8 +67,6 @@ class FletApp:
         self._current_md_text: str = ""
         self._log_path = self._init_log()
 
-        self._stored_events: list[dict] = []  # indexed same as debug_drawer._event_data
-
         self._build_ui()
 
     def _init_log(self) -> Path:
