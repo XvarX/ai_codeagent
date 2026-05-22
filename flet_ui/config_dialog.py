@@ -37,26 +37,26 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     api_key_field = ft.TextField(
         value=api_key,
-        label="API Key",
-        label_style=ft.TextStyle(size=10),
+        hint_text="API Key",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
         text_style=ft.TextStyle(size=12),
         password=True,
         can_reveal_password=True,
-        border_color="#E2E6EC",
+        border=ft.InputBorder.UNDERLINE,
     )
     model_field = ft.TextField(
         value=model,
-        label="Model",
-        label_style=ft.TextStyle(size=10),
+        hint_text="Model (e.g. glm-5.1)",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
         text_style=ft.TextStyle(size=12),
-        border_color="#E2E6EC",
+        border=ft.InputBorder.UNDERLINE,
     )
     base_url_field = ft.TextField(
         value=base_url,
-        label="Base URL (optional)",
-        label_style=ft.TextStyle(size=10),
+        hint_text="Base URL (optional)",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
         text_style=ft.TextStyle(size=12),
-        border_color="#E2E6EC",
+        border=ft.InputBorder.UNDERLINE,
     )
 
     status_text = ft.Text("", size=10, color="#EF4444")
@@ -83,17 +83,17 @@ def show_config_dialog(page: ft.Page, on_save=None):
     dlg = ft.AlertDialog(
         title=ft.Text("LLM 配置", size=14, weight=ft.FontWeight.W_600),
         content=ft.Column([
-            ft.Text("Provider", size=10, color="#64748B"),
+            ft.Text("Provider", size=11, color="#475569"),
             provider_dd,
-            ft.Container(height=8),
+            ft.Container(height=12),
             api_key_field,
-            ft.Container(height=8),
+            ft.Container(height=12),
             model_field,
-            ft.Container(height=8),
+            ft.Container(height=12),
             base_url_field,
-            ft.Container(height=4),
+            ft.Container(height=6),
             status_text,
-        ], height=320, width=360),
+        ], width=400),
         actions=[
             ft.TextButton(content=ft.Text("取消", color="#64748B"), on_click=lambda e: page.pop_dialog()),
             ft.TextButton(content=ft.Text("保存", color="#6366F1"), on_click=save_click),
