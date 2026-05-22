@@ -275,6 +275,9 @@ class FletApp:
         total_tokens = norm_usage.get("total_tokens", "?")
         cache_read = norm_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
 
+        # Save full request for Request detail dialog
+        self._last_full_request_json = json.dumps(req, ensure_ascii=False, indent=2)
+
         resp_lines = [f"Model: {model}  |  Msgs: {len(msgs)}"]
         resp_lines.append(f"prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
         if cache_read:
@@ -285,12 +288,13 @@ class FletApp:
         else:
             text_preview = final_text[:200].replace("\n", " ")
             resp_lines.append(f"Text: {text_preview}")
-        # Store full response data for detail dialog
+        # Store full response data for detail dialog (strip _request, only keep response part)
+        resp_only = {k: v for k, v in raw.items()
+                     if k not in ("_request", "_tool_use_blocks")}
         response_data = {
             "type": "Response",
             "model": model,
-            "raw": raw,
-            "raw_json": json.dumps(raw, ensure_ascii=False, indent=2),
+            "raw_json": json.dumps(resp_only, ensure_ascii=False, indent=2),
             "formatted": "\n".join(resp_lines),
             "text": final_text,
         }
@@ -315,6 +319,9 @@ class FletApp:
         raw_json = data.get("raw_json", "")
 
         if event_type == "Request":
+            # Use full request from response if available (contains actual API request)
+            if hasattr(self, '_last_full_request_json') and self._last_full_request_json:
+                raw_json = self._last_full_request_json
             lines = [f"Model: {data.get('model', '?')}"]
             lines.append(f"Messages: {data.get('message_count', '?')}  |  "
                         f"~{data.get('est_tokens', '?')} tokens  |  "
