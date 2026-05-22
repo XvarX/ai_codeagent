@@ -565,4 +565,4 @@ def launch_flet(config: AgentConfig):
     def main(page: ft.Page):
         FletApp(page, config)
 
-    ft.app(target=main)
+    ft.run(main, host="127.0.0.1")
