@@ -61,6 +61,14 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     status_text = ft.Text("", size=10, color="#EF4444")
 
+    def on_provider_select(e):
+        new_provider = provider_dd.value
+        api_key_field.value = config.get("api_keys", {}).get(new_provider, "")
+        base_url_field.value = config.get("base_urls", {}).get(new_provider, "")
+        page.update()
+
+    provider_dd.on_select = on_provider_select
+
     def save_click(e):
         # Merge into existing config to preserve nested structure
         config["provider"] = provider_dd.value
