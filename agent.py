@@ -279,7 +279,8 @@ class Agent:
                     system=system_prompt,
                 ):
                     if isinstance(event, TextDeltaEvent):
-                        text_parts.append(event.token)
+                        if not event.reasoning:
+                            text_parts.append(event.token)
                         yield event
                     elif isinstance(event, ToolUseEvent):
                         block = ToolUseBlock(
@@ -325,7 +326,8 @@ class Agent:
                             system=system_prompt,
                         ):
                             if isinstance(event, TextDeltaEvent):
-                                text_parts.append(event.token)
+                                if not event.reasoning:
+                                    text_parts.append(event.token)
                                 yield event
                             elif isinstance(event, ToolUseEvent):
                                 block = ToolUseBlock(

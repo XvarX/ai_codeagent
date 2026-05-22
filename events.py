@@ -13,6 +13,7 @@ class ThinkingEvent:
 class TextDeltaEvent:
     """LLM 返回的一个文本 token"""
     token: str
+    reasoning: bool = False  # True for model internal thinking (GLM reasoning_content)
 
 
 @dataclass

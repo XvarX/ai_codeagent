@@ -182,12 +182,14 @@ class OpenAICompatProvider(BaseProvider):
                 delta = chunk.choices[0].delta
 
                 # GLM puts thinking in reasoning_content, final text in content
+                is_reasoning = False
                 token_text = delta.content or ""
                 if not token_text and hasattr(delta, "reasoning_content"):
                     token_text = delta.reasoning_content or ""
+                    is_reasoning = bool(token_text)
                 if token_text:
                     all_text.append(token_text)
-                    yield TextDeltaEvent(token=token_text)
+                    yield TextDeltaEvent(token=token_text, reasoning=is_reasoning)
 
                 if delta.tool_calls:
                     for tc in delta.tool_calls:

@@ -23,8 +23,8 @@ class _FletEventHandler(EventHandler):
     async def on_thinking(self):
         self.app._on_thinking()
 
-    async def on_text_delta(self, token: str):
-        self.app._on_text_delta(token)
+    async def on_text_delta(self, token: str, reasoning: bool = False):
+        self.app._on_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self.app._on_tool_use(name, input_dict)
@@ -145,7 +145,9 @@ class FletApp:
     def _on_thinking(self):
         self.chat_view.show_thinking()
 
-    def _on_text_delta(self, token: str):
+    def _on_text_delta(self, token: str, reasoning: bool = False):
+        if reasoning:
+            return  # skip internal thinking, don't show in chat
         self._current_md_text += token
         if self._current_assistant_bubble is None:
             avatar = ft.Container(

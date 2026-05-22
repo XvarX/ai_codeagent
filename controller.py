@@ -47,7 +47,7 @@ class EventHandler:
     """Base event handler — override methods in UI layer."""
 
     async def on_thinking(self): pass
-    async def on_text_delta(self, token: str): pass
+    async def on_text_delta(self, token: str, reasoning: bool = False): pass
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""): pass
     async def on_tool_result(self, name: str, result: str, is_error: bool): pass
     async def on_response_done(self, raw: dict): pass
@@ -90,7 +90,7 @@ class AgentController:
                 if isinstance(event, ThinkingEvent):
                     await self.handler.on_thinking()
                 elif isinstance(event, TextDeltaEvent):
-                    await self.handler.on_text_delta(event.token)
+                    await self.handler.on_text_delta(event.token, event.reasoning)
                 elif isinstance(event, ToolUseEvent):
                     await self.handler.on_tool_use(event.tool_name, event.input, event.tool_use_id)
                 elif isinstance(event, ToolDoneEvent):
