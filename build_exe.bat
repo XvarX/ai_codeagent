@@ -12,7 +12,7 @@ flet build windows ^
     --no-cdn ^
     --product "AI Code Agent" ^
     --description "AI Code Agent" ^
-    -y
+    --yes
 
 echo.
 echo ========================================
