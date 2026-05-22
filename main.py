@@ -146,14 +146,14 @@ async def main():
     elif len(sys.argv) >= 2 and sys.argv[1] not in ("-s", "-c"):
         await run_one_shot(config, " ".join(sys.argv[1:]))
     else:
-        # Qt mode — handled in __name__ == "__main__"
+        # Flet mode — handled in __name__ == "__main__"
         pass
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        # Default: launch Qt GUI
-        from qt_ui.main_window import launch
-        launch(AgentConfig.from_yaml())
+        # Default: launch Flet GUI
+        from flet_ui.app import launch_flet
+        launch_flet(AgentConfig.from_yaml())
     else:
         asyncio.run(main())
