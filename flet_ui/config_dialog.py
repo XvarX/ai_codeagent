@@ -25,7 +25,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     provider = config.get("provider", "glm")
     api_key = config.get("api_key") or config.get("api_keys", {}).get(provider, "")
-    model = config.get("model", "")
+    model = config.get("models", {}).get(provider, "") or config.get("model", "")
     base_url = config.get("base_url") or config.get("base_urls", {}).get(provider, "")
 
     provider_dd = ft.Dropdown(
@@ -61,10 +61,18 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     status_text = ft.Text("", size=10, color="#EF4444")
 
+    DEFAULT_MODELS = {
+        "anthropic": "claude-sonnet-4-6-20250514",
+        "openai": "gpt-4o",
+        "glm": "glm-5.1",
+        "deepseek": "deepseek-chat",
+    }
+
     def on_provider_select(e):
         new_provider = provider_dd.value
         api_key_field.value = config.get("api_keys", {}).get(new_provider, "")
         base_url_field.value = config.get("base_urls", {}).get(new_provider, "")
+        model_field.value = config.get("models", {}).get(new_provider, "") or DEFAULT_MODELS.get(new_provider, "")
         page.update()
 
     provider_dd.on_select = on_provider_select
@@ -73,6 +81,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         # Merge into existing config to preserve nested structure
         config["provider"] = provider_dd.value
         config["model"] = model_field.value or None
+        config.setdefault("models", {})[provider_dd.value] = model_field.value or None
         config.setdefault("api_keys", {})[provider_dd.value] = api_key_field.value
         config.setdefault("base_urls", {})[provider_dd.value] = base_url_field.value
         try:
