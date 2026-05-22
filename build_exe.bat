@@ -1,23 +1,22 @@
 @echo off
 cd /d "%~dp0"
 echo ========================================
-echo   AI Code Agent - Build Standalone EXE
+echo   AI Code Agent - Build with Flet Build
 echo ========================================
 echo.
+echo Flet Build wraps Python app in a native Flutter desktop shell.
+echo First run will auto-install Flutter SDK (one-time).
+echo.
 
-echo Building with Flet Pack...
-flet pack main.py ^
-    --name AI_CodeAgent ^
-    --onedir ^
-    --product-name "AI Code Agent" ^
-    --file-description "AI Code Agent" ^
+flet build windows ^
+    --no-cdn ^
+    --product "AI Code Agent" ^
+    --description "AI Code Agent" ^
     -y
 
 echo.
 echo ========================================
-echo   Done: dist\AI_CodeAgent\
+echo   Done: build\windows\
 echo ========================================
-echo.
-echo Place config.yaml next to AI_CodeAgent.exe before running.
 echo.
 pause
