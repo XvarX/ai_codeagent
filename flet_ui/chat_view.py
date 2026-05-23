@@ -52,8 +52,8 @@ class ChatView(ft.ListView):
                 code_theme="atom-one-light",
                 auto_follow_links=True,
             ),
-            bgcolor="#FAFBFC",
-            border=ft.Border.all(1, "#EEF0F4"),
+            bgcolor="#EBEEF2",
+            border=ft.Border.all(1, "#DDE0E5"),
             border_radius=ft.BorderRadius.only(
                 top_left=3, top_right=15, bottom_left=15, bottom_right=15,
             ),
