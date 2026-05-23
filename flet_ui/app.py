@@ -216,7 +216,7 @@ class FletApp:
         self.chat_view.add_tool_label(name, preview)
         # Defer debug entry to _on_response_done so [Response] appears first
         detail = "\n".join(
-            f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()
+            f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
         )
         if not hasattr(self, '_pending_tool_events'):
             self._pending_tool_events = []
@@ -228,7 +228,7 @@ class FletApp:
         color = "#EF4444" if is_error else "#10B981"
         preview = result[:500].replace("\n", " ")
         self.debug_drawer.add_event(
-            f"[Tool] {name} done",
+            f"[Tool Result] {name}",
             f"  status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
             f"  {preview}",
             color,
@@ -314,10 +314,10 @@ class FletApp:
         # Flush deferred tool call entries so they appear AFTER [Response]
         for te in getattr(self, '_pending_tool_events', []) or []:
             self.debug_drawer.add_event(
-                f"[Tool] {te['name']}", te["detail"], "#6366F1",
-                event_data={"type": "Tool", "name": te["name"],
+                f"[Tool Call] {te['name']}", te["detail"], "#6366F1",
+                event_data={"type": "Tool Call", "name": te["name"],
                             "input": te["input_dict"],
-                            "formatted": f"Tool: {te['name']}\n\n" + te["detail"],
+                            "formatted": f"Tool Call: {te['name']}\n\n" + te["detail"],
                             "raw_json": json.dumps(te["input_dict"], ensure_ascii=False, indent=2)},
             )
         self._pending_tool_events = []

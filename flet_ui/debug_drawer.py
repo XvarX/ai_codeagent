@@ -6,12 +6,16 @@ import flet as ft
 class DebugDrawer(ft.Container):
     """Right-side debug panel with expand/collapse animation."""
 
+    MIN_WIDTH = 200
+    MAX_WIDTH = 600
+
     def __init__(self, on_compact=None, on_clear=None, on_event_click=None):
         super().__init__()
         self._on_compact = on_compact
         self._on_clear = on_clear
         self._on_event_click = on_event_click
         self._is_open = False
+        self._expanded_width = 280
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -33,6 +37,13 @@ class DebugDrawer(ft.Container):
                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.Padding.symmetric(vertical=14),
             on_click=self._toggle,
+        )
+
+        # Drag handle (shown when expanded, on left edge)
+        self._drag_handle = ft.GestureDetector(
+            content=ft.Container(width=4, bgcolor="#00000000"),
+            on_horizontal_drag_update=self._on_drag_resize,
+            cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
         )
 
         # Expanded view — built lazily
@@ -92,20 +103,33 @@ class DebugDrawer(ft.Container):
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=0)
 
+    def _on_drag_resize(self, e: ft.DragUpdateEvent):
+        new_w = self._expanded_width - e.delta_x
+        new_w = max(self.MIN_WIDTH, min(self.MAX_WIDTH, new_w))
+        self._expanded_width = new_w
+        self.width = new_w
+        self.animate = None  # disable animation during drag
+        self.update()
+
     def _toggle(self, e=None):
         if self._is_open:
             self.width = 36
             self._is_open = False
             self.content = self._collapsed_view
+            self.animate = ft.Animation(200, ft.AnimationCurve.EASE_OUT)
         else:
-            self.width = 280
+            self.width = self._expanded_width
             self._is_open = True
             if self._expanded_view is None:
                 self._expanded_view = self._build_expanded()
-            self.content = ft.Container(
-                content=self._expanded_view,
-                padding=ft.Padding.all(12),
-            )
+            self.content = ft.Row([
+                self._drag_handle,
+                ft.Container(
+                    content=self._expanded_view,
+                    padding=ft.Padding.all(12),
+                    expand=True,
+                ),
+            ], spacing=0)
         self.update()
 
     def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> None:
