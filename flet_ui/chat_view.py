@@ -16,7 +16,7 @@ class ChatView(ft.ListView):
 
     def add_user_message(self, text: str) -> None:
         bubble = ft.Container(
-            content=ft.Text(text, size=12, color="#1E1B3A", selectable=True),
+            content=ft.Text(text, size=13, color="#1E1B3A", selectable=True),
             bgcolor="#F1F3F6",
             border=ft.Border.all(1, "#EAEAEF"),
             border_radius=ft.BorderRadius.only(

@@ -78,6 +78,7 @@ class FletApp:
 
     def _build_ui(self):
         self.page.title = "AI Code Agent"
+        self.page.theme = ft.Theme(font_family="Microsoft YaHei")
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.window.width = 1200
         self.page.window.height = 750
