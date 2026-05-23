@@ -155,6 +155,7 @@ class FletApp:
 
     def _on_thinking(self):
         self.chat_view.show_thinking()
+        self._pending_tool_events = []
 
     def _on_text_delta(self, token: str, reasoning: bool = False):
         if reasoning:
@@ -207,15 +208,15 @@ class FletApp:
             f"{k}={str(v)[:40]!r}" for k, v in input_dict.items()
         )
         self.chat_view.add_tool_label(name, preview)
+        # Defer debug entry to _on_response_done so [Response] appears first
         detail = "\n".join(
             f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()
         )
-        self.debug_drawer.add_event(
-            f"[Tool] {name}", detail, "#6366F1",
-            event_data={"type": "Tool", "name": name, "input": input_dict,
-                        "formatted": f"Tool: {name}\n\n" + detail,
-                        "raw_json": json.dumps(input_dict, ensure_ascii=False, indent=2)},
-        )
+        if not hasattr(self, '_pending_tool_events'):
+            self._pending_tool_events = []
+        self._pending_tool_events.append({
+            "name": name, "detail": detail, "input_dict": input_dict,
+        })
 
     def _on_tool_result(self, name: str, result: str, is_error: bool):
         color = "#EF4444" if is_error else "#10B981"
@@ -304,6 +305,16 @@ class FletApp:
             "[Response]", "\n".join(resp_lines), "#10B981",
             event_data=response_data,
         )
+        # Flush deferred tool call entries so they appear AFTER [Response]
+        for te in getattr(self, '_pending_tool_events', []) or []:
+            self.debug_drawer.add_event(
+                f"[Tool] {te['name']}", te["detail"], "#6366F1",
+                event_data={"type": "Tool", "name": te["name"],
+                            "input": te["input_dict"],
+                            "formatted": f"Tool: {te['name']}\n\n" + te["detail"],
+                            "raw_json": json.dumps(te["input_dict"], ensure_ascii=False, indent=2)},
+            )
+        self._pending_tool_events = []
 
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
