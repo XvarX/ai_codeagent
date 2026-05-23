@@ -26,6 +26,12 @@ class GlobTool(Tool):
     async def call(self, input: dict[str, Any], context: ToolContext) -> str:
         pattern = input["pattern"]
         try:
+            # Convert absolute patterns to relative (Path.glob requires relative)
+            cwd_str = str(context.cwd.resolve())
+            if pattern.startswith(cwd_str):
+                pattern = pattern[len(cwd_str):].lstrip("\\/")
+            elif pattern.startswith("/") or (len(pattern) > 1 and pattern[1] == ":"):
+                return f"Error: absolute patterns outside CWD are unsupported. Use a relative pattern within {cwd_str}"
             results = sorted(str(p) for p in context.cwd.glob(pattern))
             if not results:
                 return f"No files matched pattern: {pattern}"
