@@ -58,6 +58,7 @@ class ChatView(ft.ListView):
                 top_left=3, top_right=15, bottom_left=15, bottom_right=15,
             ),
             padding=ft.Padding.symmetric(horizontal=15, vertical=10),
+            expand=True,
         )
         row = ft.Row(
             [avatar, bubble],
