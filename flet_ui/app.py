@@ -179,8 +179,12 @@ class FletApp:
                 ),
             )
             self._current_assistant_bubble = ft.Container(
-                content=ft.Text(self._current_md_text, size=12, color="#1E1B3A",
-                               selectable=True),
+                content=ft.Markdown(
+                    self._current_md_text,
+                    selectable=True,
+                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    code_theme="atom-one-light",
+                ),
                 bgcolor="#FAFBFC",
                 border=ft.Border.all(1, "#EEF0F4"),
                 border_radius=ft.BorderRadius.only(
