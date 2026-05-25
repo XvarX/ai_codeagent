@@ -42,7 +42,7 @@ class DebugDrawer(ft.Container):
 
         # Expanded view — built lazily
         self._expanded_view = None
-        self._event_log = ft.ListView(spacing=2, padding=ft.Padding.only(top=4),
+        self._event_log = ft.ListView(spacing=1, padding=ft.Padding.only(top=4),
                                       auto_scroll=True)
 
         self._usage_bar = ft.ProgressBar(value=0, color="#6366F1", bgcolor="#E8E8EF",
@@ -124,18 +124,13 @@ class DebugDrawer(ft.Container):
             if data and self._on_event_click:
                 self._on_event_click(data)
 
-        text = ft.Text(
-            spans=[
-                ft.TextSpan(prefix, style=ft.TextStyle(size=10, weight=ft.FontWeight.W_600, color=color)),
-                ft.TextSpan("\n" + message, style=ft.TextStyle(size=9, color="#475569")),
-            ],
-            selectable=True,
-            max_lines=4,
-            overflow=ft.TextOverflow.ELLIPSIS,
-        )
         entry = ft.Container(
-            content=text,
-            padding=ft.Padding.symmetric(horizontal=4, vertical=2),
+            content=ft.Column([
+                ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
+                ft.Text(message, size=9, color="#475569",
+                        max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
+            ], spacing=0, tight=True),
+            padding=ft.Padding.only(left=4, right=4, top=1, bottom=1),
             border_radius=4,
             on_click=on_click if self._on_event_click else None,
         )
