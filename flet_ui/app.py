@@ -53,7 +53,12 @@ class FletApp:
         self.config = config
 
         self.handler = _FletEventHandler(self)
-        self.controller = AgentController(config, self.handler)
+        self._init_error: str | None = None
+        try:
+            self.controller = AgentController(config, self.handler)
+        except Exception as e:
+            self.controller = None
+            self._init_error = str(e)
 
         self.chat_view = ChatView()
         self.debug_drawer = DebugDrawer(
@@ -165,14 +170,25 @@ class FletApp:
         self.page.on_keyboard_event = self._on_keyboard
 
         # Startup system info
-        registry = self.controller.registry
-        self.debug_drawer.add_event(
-            "System",
-            f"Provider: {self.config.provider}  |  Model: {self.config.model or 'default'}\n"
-            f"Tools: {', '.join(registry.get_tool_names())}\n"
-            f"CWD: {self.config.cwd or Path.cwd()}",
-            "#569cd6",
-        )
+        if self.controller:
+            registry = self.controller.registry
+            self.debug_drawer.add_event(
+                "System",
+                f"Provider: {self.config.provider}  |  Model: {self.config.model or 'default'}\n"
+                f"Tools: {', '.join(registry.get_tool_names())}\n"
+                f"CWD: {self.config.cwd or Path.cwd()}",
+                "#569cd6",
+            )
+        else:
+            self.debug_drawer.add_event(
+                "System",
+                f"Init failed: {self._init_error}\nClick「配置」to set up API keys.",
+                "#EF4444",
+            )
+            self.chat_view.add_assistant_message(
+                f"**启动失败**\n\n{self._init_error}\n\n"
+                f"请点击顶部菜单「配置」设置 Provider 和 API Key。"
+            )
 
     def _on_thinking(self):
         self.chat_view.show_thinking()
@@ -493,6 +509,15 @@ class FletApp:
             self._manual_compact()
             return
 
+        if self.controller is None:
+            self.chat_view.add_assistant_message(
+                f"**未配置 API Key** — 请先点击顶部「配置」设置 Provider 和 API Key。\n\n"
+                f"上次错误: {self._init_error or '未知'}"
+            )
+            self.chat_view.hide_thinking()
+            self.input_bar.set_busy(False)
+            return
+
         self.chat_view.hide_thinking()  # clear stale thinking from previous round
         self.chat_view.add_user_message(text)
         self.chat_view.show_thinking()
@@ -553,23 +578,39 @@ class FletApp:
         self.page.run_task(self.controller.send_message, text)
 
     def _clear_history(self):
-        self.controller.clear_history()
+        if self.controller:
+            self.controller.clear_history()
         self.chat_view.clear()
         self.debug_drawer.clear()
 
     def _on_config_saved(self, new_config: AgentConfig):
         self.config = new_config
-        self.controller.reconfigure(new_config)
+        if self.controller:
+            self.controller.reconfigure(new_config)
+        else:
+            try:
+                self.controller = AgentController(new_config, self.handler)
+                self._init_error = None
+            except Exception as e:
+                self._init_error = str(e)
         self.chat_view.clear()
         self.debug_drawer.clear()
-        self.debug_drawer.add_event(
-            "System",
-            f"Config updated: {new_config.provider} / {new_config.model}",
-            "#6366F1",
-        )
+        if self.controller:
+            self.debug_drawer.add_event(
+                "System",
+                f"Config updated: {new_config.provider} / {new_config.model}",
+                "#6366F1",
+            )
+        else:
+            self.debug_drawer.add_event(
+                "System",
+                f"Config saved but init still failed: {self._init_error}",
+                "#EF4444",
+            )
 
     def _manual_compact(self):
-        self.page.run_task(self._do_compact)
+        if self.controller:
+            self.page.run_task(self._do_compact)
 
     async def _do_compact(self):
         from compact.compact import compact_conversation
