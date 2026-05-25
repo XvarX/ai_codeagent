@@ -175,7 +175,6 @@ class FletApp:
 
     def _on_thinking(self):
         self.chat_view.show_thinking()
-        self._pending_tool_events = []
 
     def _on_text_delta(self, token: str, reasoning: bool = False):
         if reasoning:
