@@ -132,7 +132,7 @@ class FletApp:
 
         def _on_drag(e: ft.DragUpdateEvent):
             if self.debug_drawer._is_open:
-                new_w = self.debug_drawer._expanded_width - e.delta_x
+                new_w = self.debug_drawer._expanded_width - (e.primary_delta or 0)
                 new_w = max(200, min(600, new_w))
                 self.debug_drawer._expanded_width = new_w
                 self.debug_drawer.width = new_w
