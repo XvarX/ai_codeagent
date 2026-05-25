@@ -489,6 +489,7 @@ class FletApp:
             self._manual_compact()
             return
 
+        self.chat_view.hide_thinking()  # clear stale thinking from previous round
         self.chat_view.add_user_message(text)
         self.chat_view.show_thinking()
         self.input_bar.set_busy(True)
