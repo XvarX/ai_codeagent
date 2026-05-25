@@ -212,16 +212,26 @@ def show_config_dialog(page: ft.Page, on_save=None):
     )
 
     def save_click(e):
-        # Auto-add pending new provider before save
+        # If adding a new provider, just switch to it and stay open
         pending = new_provider_field.value.strip().lower()
-        if pending and pending not in [o.key for o in provider_dd.options]:
-            provider_dd.options.append(ft.dropdown.Option(pending, pending.title()))
-            config.setdefault("provider_types", {})[pending] = new_provider_type_dd.value
-        # If a new provider was typed (even if already added), make it current
         if pending:
             config.setdefault("provider_types", {})[pending] = new_provider_type_dd.value
+            if pending not in [o.key for o in provider_dd.options]:
+                provider_dd.options.append(ft.dropdown.Option(pending, pending.title()))
+            provider_dd.value = pending
+            on_provider_select(None)
+            new_provider_field.visible = False
+            new_provider_type_dd.visible = False
+            add_provider_row.visible = False
+            config_fields.visible = True
+            new_provider_field.update()
+            new_provider_type_dd.update()
+            add_provider_row.update()
+            config_fields.update()
+            provider_dd.update()
+            return  # Stay open for user to fill in fields
 
-        # Merge into existing config to preserve nested structure
+        # Normal save — write to config and close
         config["provider"] = provider_dd.value
         config["model"] = model_field.value or None
         config.setdefault("models", {})[provider_dd.value] = model_field.value or None
@@ -230,10 +240,6 @@ def show_config_dialog(page: ft.Page, on_save=None):
         config.setdefault("context_windows", {})[provider_dd.value] = int(context_window_field.value or 128000)
         config.setdefault("compact_thresholds", {})[provider_dd.value] = float(compact_threshold_field.value or 0.85)
         config.setdefault("reserved_outputs", {})[provider_dd.value] = int(reserved_output_field.value or 8000)
-        # Hide add row if still visible
-        new_provider_field.visible = False
-        new_provider_type_dd.visible = False
-        add_provider_row.visible = False
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
