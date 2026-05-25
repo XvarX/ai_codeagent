@@ -11,6 +11,9 @@ logs/
 .claude/worktrees/
 *.pyc
 
+# Tool results
+.myagent/
+
 # Packaging
 offline_deps/
 build/

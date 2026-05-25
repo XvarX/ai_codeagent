@@ -6,6 +6,11 @@ from typing import Callable, Awaitable
 from core_types import Message, ToolUseBlock
 from tools.base import ToolContext
 from tools.registry import ToolRegistry
+from tools.tool_result_storage import (
+    process_tool_result_block,
+    apply_tool_result_budget,
+    ContentReplacementState,
+)
 from providers.base import BaseProvider
 from prompts import build_system_prompt
 
@@ -57,6 +62,7 @@ class Agent:
         self.compact_threshold = compact_threshold
         self.reserved_output = reserved_output
         self._last_actual_tokens = 0
+        self._replacement_state = ContentReplacementState()
 
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
@@ -107,6 +113,10 @@ class Agent:
                         )
                 except Exception:
                     pass  # compaction failure is non-fatal
+
+            # Layer 2: Per-message tool result budget before LLM call
+            self.messages = apply_tool_result_budget(
+                self.messages, self._replacement_state, self.cwd)
 
             # 1. Call LLM — get assistant response + tool_use blocks
             tools_schema = self.registry.get_schemas()
@@ -192,10 +202,14 @@ class Agent:
                     try:
                         result_text = await tool.call(block.input, context)
                         is_error = False
-                        # Tool result budget
-                        limit = getattr(tool, 'max_result_chars', None)
-                        if limit is not None and len(result_text) > limit:
-                            result_text = result_text[:limit] + "\n... [truncated]"
+                        # Layer 1: Per-tool persistence threshold
+                        result_text = process_tool_result_block(
+                            result_text,
+                            tool.name,
+                            block.tool_use_id,
+                            getattr(tool, 'max_result_chars', None),
+                            self.cwd,
+                        )
                     except Exception as e:
                         result_text = f"Tool error: {e}"
                         is_error = True
@@ -272,6 +286,10 @@ class Agent:
                     )
                 except Exception:
                     pass
+
+            # Layer 2: Per-message tool result budget before LLM call
+            self.messages = apply_tool_result_budget(
+                self.messages, self._replacement_state, self.cwd)
 
             tools_schema = self.registry.get_schemas()
             system_prompt = build_system_prompt(
@@ -387,6 +405,9 @@ class Agent:
                                 try:
                                     result_text = await tool.call(block.input, context)
                                     is_error = False
+                                    result_text = process_tool_result_block(
+                                        result_text, tool.name, block.tool_use_id,
+                                        getattr(tool, 'max_result_chars', None), self.cwd)
                                 except Exception as te:
                                     result_text = f"Tool error: {te}"
                                     is_error = True
@@ -448,6 +469,9 @@ class Agent:
                     try:
                         result_text = await tool.call(block.input, context)
                         is_error = False
+                        result_text = process_tool_result_block(
+                            result_text, tool.name, block.tool_use_id,
+                            getattr(tool, 'max_result_chars', None), self.cwd)
                     except Exception as e:
                         result_text = f"Tool error: {e}"
                         is_error = True
