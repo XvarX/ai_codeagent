@@ -233,16 +233,17 @@ class FletApp:
         )
         self.chat_view.add_tool_label(name, preview)
         if not hasattr(self, '_pending_tool_calls'):
-            self._pending_tool_calls = {}
-        self._pending_tool_calls[name] = {
+            self._pending_tool_calls = []
+        self._pending_tool_calls.append({
             "name": name, "input_dict": input_dict,
-        }
+        })
 
     def _on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0):
         color = "#10B981" if not is_error else "#EF4444"
         preview = result[:500].replace("\n", " ")
         # Merge with pending tool call if exists
-        tc = getattr(self, '_pending_tool_calls', {}).pop(name, None)
+        pending = getattr(self, '_pending_tool_calls', None) or []
+        tc = pending.pop(0) if pending else None
         input_dict = tc["input_dict"] if tc else {}
         call_detail = "\n".join(
             f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
