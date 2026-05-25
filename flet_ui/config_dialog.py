@@ -125,6 +125,8 @@ def show_config_dialog(page: ft.Page, on_save=None):
             config.get("reserved_output")
             or config.get("reserved_outputs", {}).get(new_provider, 8000)
         )
+        delete_btn.visible = new_provider not in BUILTIN_PROVIDERS
+        delete_btn.update()
         page.update()
 
     provider_dd.on_select = on_provider_select
@@ -234,6 +236,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
     delete_btn = ft.TextButton(
         content=ft.Text("Delete Provider", size=12, color="#EF4444"),
         on_click=delete_provider,
+        visible=provider not in BUILTIN_PROVIDERS,
     )
 
     provider_actions = ft.Row([
