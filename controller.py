@@ -49,7 +49,7 @@ class EventHandler:
     async def on_thinking(self): pass
     async def on_text_delta(self, token: str, reasoning: bool = False): pass
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""): pass
-    async def on_tool_result(self, name: str, result: str, is_error: bool): pass
+    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0): pass
     async def on_response_done(self, raw: dict): pass
     async def on_done(self, final_text: str): pass
     async def on_error(self, message: str): pass
@@ -95,7 +95,7 @@ class AgentController:
                     await self.handler.on_tool_use(event.tool_name, event.input, event.tool_use_id)
                 elif isinstance(event, ToolDoneEvent):
                     await self.handler.on_tool_result(
-                        event.tool_name, event.result, event.is_error)
+                        event.tool_name, event.result, event.is_error, event.duration_ms)
                 elif isinstance(event, ResponseDoneEvent):
                     await self.handler.on_response_done(event.raw)
                 elif isinstance(event, DoneEvent):

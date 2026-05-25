@@ -30,6 +30,7 @@ class ToolDoneEvent:
     tool_name: str
     result: str
     is_error: bool = False
+    duration_ms: float = 0
 
 
 @dataclass

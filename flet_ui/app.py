@@ -29,8 +29,8 @@ class _FletEventHandler(EventHandler):
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self.app._on_tool_use(name, input_dict)
 
-    async def on_tool_result(self, name: str, result: str, is_error: bool):
-        self.app._on_tool_result(name, result, is_error)
+    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0):
+        self.app._on_tool_result(name, result, is_error, duration_ms)
 
     async def on_response_done(self, raw: dict):
         self.app._on_response_done(raw)
@@ -239,7 +239,7 @@ class FletApp:
             "name": name, "input_dict": input_dict,
         }
 
-    def _on_tool_result(self, name: str, result: str, is_error: bool):
+    def _on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0):
         color = "#10B981" if not is_error else "#EF4444"
         preview = result[:500].replace("\n", " ")
         # Merge with pending tool call if exists
@@ -248,10 +248,12 @@ class FletApp:
         call_detail = "\n".join(
             f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
         )
+        dur_str = f"{duration_ms:.0f}ms" if duration_ms else ""
         self.debug_drawer.add_event(
             f"[Tool] {name} ✓",
             f"{call_detail}\n---\n"
-            f"status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
+            f"status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars"
+            f"{'  |  ' + dur_str if dur_str else ''}\n"
             f"{preview}",
             color,
             event_data={
@@ -260,16 +262,19 @@ class FletApp:
                 "input": input_dict,
                 "result": result,
                 "is_error": is_error,
+                "duration_ms": duration_ms,
                 "formatted": (
-                    f"=== Tool Call ===\nTool: {name}\n\n" +
+                    f"━━━ Tool Call ━━━\nTool: {name}\n\n" +
                     "\n".join(f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()) +
-                    f"\n\n=== Tool Result ===\n"
+                    f"\n\n━━━ Tool Result ━━━\n"
                     f"Status: {'ERROR' if is_error else 'OK'}\n"
+                    f"Duration: {dur_str or 'N/A'}\n"
                     f"Size: {len(result)} chars\n\n{result[:5000]}"
                 ),
                 "raw_json": json.dumps(
                     {"tool": name, "input": input_dict,
-                     "result": result, "is_error": is_error},
+                     "result": result, "is_error": is_error,
+                     "duration_ms": duration_ms},
                     ensure_ascii=False, indent=2),
             },
         )

@@ -370,16 +370,20 @@ class Agent:
                                 result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                                 is_error = True
                             else:
+                                import time
+                                t0 = time.time()
                                 try:
                                     result_text = await tool.call(block.input, context)
                                     is_error = False
                                 except Exception as te:
                                     result_text = f"Tool error: {te}"
                                     is_error = True
+                                duration_ms = (time.time() - t0) * 1000
                             yield ToolDoneEvent(
                                 tool_name=block.tool_name,
                                 result=result_text,
                                 is_error=is_error,
+                                duration_ms=duration_ms,
                             )
                             self.messages.append(Message(
                                 role="user",
@@ -427,17 +431,21 @@ class Agent:
                     result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                     is_error = True
                 else:
+                    import time
+                    t0 = time.time()
                     try:
                         result_text = await tool.call(block.input, context)
                         is_error = False
                     except Exception as e:
                         result_text = f"Tool error: {e}"
                         is_error = True
+                    duration_ms = (time.time() - t0) * 1000
 
                 yield ToolDoneEvent(
                     tool_name=block.tool_name,
                     result=result_text,
                     is_error=is_error,
+                    duration_ms=duration_ms,
                 )
 
                 self.messages.append(Message(
