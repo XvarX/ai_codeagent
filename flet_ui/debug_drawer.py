@@ -124,6 +124,12 @@ class DebugDrawer(ft.Container):
             if data and self._on_event_click:
                 self._on_event_click(data)
 
+        is_first = len(self._event_log.controls) == 0
+        if not is_first:
+            self._event_log.controls.append(
+                ft.Divider(height=1, color="#E8EAF0")
+            )
+
         entry = ft.Container(
             content=ft.Column([
                 ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
@@ -134,9 +140,9 @@ class DebugDrawer(ft.Container):
             border_radius=4,
             on_click=on_click if self._on_event_click else None,
         )
-        self._event_log.controls.insert(0, entry)
-        if len(self._event_log.controls) > 50:
-            self._event_log.controls = self._event_log.controls[:50]
+        self._event_log.controls.append(entry)
+        if len(self._event_log.controls) > 100:  # div+entry pairs
+            self._event_log.controls = self._event_log.controls[-100:]
         if self._is_open and self._event_log.page:
             self._event_log.update()
 

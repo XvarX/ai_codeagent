@@ -233,34 +233,43 @@ class FletApp:
             f"{k}={str(v)[:40]!r}" for k, v in input_dict.items()
         )
         self.chat_view.add_tool_label(name, preview)
-        # Defer debug entry to _on_response_done so [Response] appears first
-        detail = "\n".join(
-            f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
-        )
-        if not hasattr(self, '_pending_tool_events'):
-            self._pending_tool_events = []
-        self._pending_tool_events.append({
-            "name": name, "detail": detail, "input_dict": input_dict,
-        })
+        if not hasattr(self, '_pending_tool_calls'):
+            self._pending_tool_calls = {}
+        self._pending_tool_calls[name] = {
+            "name": name, "input_dict": input_dict,
+        }
 
     def _on_tool_result(self, name: str, result: str, is_error: bool):
-        color = "#EF4444" if is_error else "#10B981"
+        color = "#10B981" if not is_error else "#EF4444"
         preview = result[:500].replace("\n", " ")
+        # Merge with pending tool call if exists
+        tc = getattr(self, '_pending_tool_calls', {}).pop(name, None)
+        input_dict = tc["input_dict"] if tc else {}
+        call_detail = "\n".join(
+            f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
+        )
         self.debug_drawer.add_event(
-            f"[Tool Result] {name}",
+            f"[Tool] {name} ✓",
+            f"{call_detail}\n---\n"
             f"status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
             f"{preview}",
             color,
             event_data={
-                "type": "Tool Result",
+                "type": "Tool",
                 "name": name,
+                "input": input_dict,
                 "result": result,
                 "is_error": is_error,
-                "formatted": f"Tool: {name}\n"
-                            f"Status: {'ERROR' if is_error else 'OK'}\n"
-                            f"Size: {len(result)} chars\n\n{result[:5000]}",
+                "formatted": (
+                    f"=== Tool Call ===\nTool: {name}\n\n" +
+                    "\n".join(f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()) +
+                    f"\n\n=== Tool Result ===\n"
+                    f"Status: {'ERROR' if is_error else 'OK'}\n"
+                    f"Size: {len(result)} chars\n\n{result[:5000]}"
+                ),
                 "raw_json": json.dumps(
-                    {"tool": name, "result": result, "is_error": is_error},
+                    {"tool": name, "input": input_dict,
+                     "result": result, "is_error": is_error},
                     ensure_ascii=False, indent=2),
             },
         )
@@ -330,17 +339,6 @@ class FletApp:
             "[Response]", "\n".join(resp_lines), "#10B981",
             event_data=response_data,
         )
-        # Flush deferred tool call entries so they appear AFTER [Response]
-        for te in getattr(self, '_pending_tool_events', []) or []:
-            self.debug_drawer.add_event(
-                f"[Tool Call] {te['name']}", te["detail"], "#6366F1",
-                event_data={"type": "Tool Call", "name": te["name"],
-                            "input": te["input_dict"],
-                            "formatted": f"Tool Call: {te['name']}\n\n" + te["detail"],
-                            "raw_json": json.dumps(te["input_dict"], ensure_ascii=False, indent=2)},
-            )
-        self._pending_tool_events = []
-
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
