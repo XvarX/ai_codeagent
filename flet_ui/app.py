@@ -140,12 +140,12 @@ class FletApp:
 
         self._resize_handle = ft.GestureDetector(
             content=ft.Container(
-                width=0, bgcolor="#E8EAF0",
+                width=6, bgcolor="#00000000",
                 border_radius=3,
-                visible=False,
             ),
             mouse_cursor=ft.MouseCursor.BASIC,
             on_horizontal_drag_update=_on_drag,
+            on_horizontal_drag_start=lambda e: None,
         )
 
         main_row = ft.Row(
@@ -347,9 +347,6 @@ class FletApp:
 
     def _on_drawer_toggle(self, is_open: bool):
         if hasattr(self, '_resize_handle'):
-            self._resize_handle.content.visible = is_open
-            self._resize_handle.content.width = 6 if is_open else 0
-            self._resize_handle.content.update()
             self._resize_handle.mouse_cursor = (
                 ft.MouseCursor.RESIZE_LEFT_RIGHT if is_open
                 else ft.MouseCursor.BASIC
