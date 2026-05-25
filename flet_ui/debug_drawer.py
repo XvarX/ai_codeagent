@@ -43,7 +43,6 @@ class DebugDrawer(ft.Container):
         self._drag_handle = ft.GestureDetector(
             content=ft.Container(width=4, bgcolor="#00000000"),
             on_horizontal_drag_update=self._on_drag_resize,
-            cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
         )
 
         # Expanded view — built lazily
