@@ -37,6 +37,9 @@ class Agent:
         on_tool_result: OnToolResult | None = None,
         on_response: OnResponse | None = None,
         on_compact: OnCompact | None = None,
+        context_window: int = 128000,
+        compact_threshold: float = 0.85,
+        reserved_output: int = 8000,
     ):
         self.provider = provider
         self.registry = registry
@@ -50,6 +53,9 @@ class Agent:
         self.on_response = on_response
         self.on_compact = on_compact
         self._compact_count = 0
+        self.context_window = context_window
+        self.compact_threshold = compact_threshold
+        self.reserved_output = reserved_output
         self._last_actual_tokens = 0
 
     async def run(self, user_message: str) -> str:
@@ -76,7 +82,10 @@ class Agent:
             if should_auto_compact(
                 self.messages,
                 getattr(self.provider, 'model', None),
+                threshold=self.compact_threshold,
                 actual_base=self._last_actual_tokens,
+                context_window=self.context_window,
+                reserved_output=self.reserved_output,
             ):
                 from compact.compact import compact_conversation
                 pre_tokens = self.est_tokens()
@@ -239,7 +248,10 @@ class Agent:
             if should_auto_compact(
                 self.messages,
                 getattr(self.provider, 'model', None),
+                threshold=self.compact_threshold,
                 actual_base=self._last_actual_tokens,
+                context_window=self.context_window,
+                reserved_output=self.reserved_output,
             ):
                 from compact.compact import compact_conversation
                 pre_tokens = self.est_tokens()

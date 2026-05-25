@@ -24,6 +24,9 @@ class AgentConfig:
     max_turns: int = 50
     max_messages: int = 200
     verbose: bool = False
+    context_window: int = 128000
+    compact_threshold: float = 0.85
+    reserved_output: int = 8000
 
     @classmethod
     def from_yaml(cls, path: str | None = None) -> "AgentConfig":
@@ -86,6 +89,15 @@ class AgentConfig:
             verbose=bool(
                 os.environ.get("AGENT_VERBOSE")
                 or cfg.get("verbose", False)
+            ),
+            context_window=int(
+                os.environ.get("AGENT_CONTEXT_WINDOW") or cfg.get("context_window", 128000)
+            ),
+            compact_threshold=float(
+                os.environ.get("AGENT_COMPACT_THRESHOLD") or cfg.get("compact_threshold", 0.85)
+            ),
+            reserved_output=int(
+                os.environ.get("AGENT_RESERVED_OUTPUT") or cfg.get("reserved_output", 8000)
             ),
         )
 

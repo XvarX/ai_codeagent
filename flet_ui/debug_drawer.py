@@ -9,7 +9,7 @@ class DebugDrawer(ft.Container):
     MIN_WIDTH = 200
     MAX_WIDTH = 600
 
-    def __init__(self, on_compact=None, on_clear=None, on_event_click=None, on_toggle=None):
+    def __init__(self, on_compact=None, on_clear=None, on_event_click=None, on_toggle=None, max_tokens: int = 128000):
         super().__init__()
         self._on_compact = on_compact
         self._on_clear = on_clear
@@ -17,6 +17,7 @@ class DebugDrawer(ft.Container):
         self._on_toggle_cb = on_toggle
         self._is_open = False
         self._expanded_width = 280
+        self._max_tokens = max_tokens
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -150,7 +151,7 @@ class DebugDrawer(ft.Container):
         prompt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
         completion = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0) or 0
         total = usage.get("total_tokens", 0) or prompt + completion
-        ratio = min(total / 100000, 1.0)
+        ratio = min(total / max(self._max_tokens, 1), 1.0)
         self._usage_bar.value = ratio
         self._usage_text.value = f"~{total}  tokens  ({int(ratio * 100)}%)"
         if self._is_open and self._usage_bar.page:

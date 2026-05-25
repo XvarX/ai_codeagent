@@ -76,6 +76,9 @@ class AgentController:
             cwd=config.cwd,
             max_turns=config.max_turns,
             max_messages=config.max_messages,
+            context_window=config.context_window,
+            compact_threshold=config.compact_threshold,
+            reserved_output=config.reserved_output,
         )
 
     async def send_message(self, text: str) -> None:

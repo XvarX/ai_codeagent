@@ -44,6 +44,8 @@ def should_auto_compact(
     model: str | None = None,
     threshold: float = 0.85,
     actual_base: int = 0,
+    context_window: int = 0,
+    reserved_output: int = 8000,
 ) -> bool:
     """Check if token count exceeds the auto-compact threshold.
 
@@ -52,8 +54,9 @@ def should_auto_compact(
 
     Triggers when actual + estimated exceeds threshold% of context window.
     """
-    context_window = get_context_window(model)
-    effective = context_window - RESERVED_OUTPUT
+    if context_window <= 0:
+        context_window = get_context_window(model)
+    effective = context_window - reserved_output
     max_threshold = int(effective * threshold)
 
     # Use actual tokens from last API call if available

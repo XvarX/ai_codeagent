@@ -61,6 +61,7 @@ class FletApp:
             on_clear=self._clear_history,
             on_event_click=self._on_debug_event_click,
             on_toggle=self._on_drawer_toggle,
+            max_tokens=config.context_window,
         )
         self.input_bar = InputBar(on_send=self._on_send)
 
