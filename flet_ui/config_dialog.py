@@ -133,26 +133,47 @@ def show_config_dialog(page: ft.Page, on_save=None):
         border=ft.InputBorder.UNDERLINE,
         visible=False,
     )
+    new_provider_type_dd = ft.Dropdown(
+        value="openai",
+        options=[
+            ft.dropdown.Option("openai", "OpenAI-compatible"),
+            ft.dropdown.Option("anthropic", "Anthropic-compatible"),
+        ],
+        text_style=ft.TextStyle(size=11),
+        visible=False,
+    )
 
     def show_add_provider(e):
         new_provider_field.visible = not new_provider_field.visible
+        new_provider_type_dd.visible = new_provider_field.visible
         new_provider_field.value = ""
         new_provider_field.update()
+        new_provider_type_dd.update()
 
     def add_provider(e):
         name = new_provider_field.value.strip().lower()
         if name:
             if name not in [o.key for o in provider_dd.options]:
                 provider_dd.options.append(ft.dropdown.Option(name, name.title()))
+            config.setdefault("provider_types", {})[name] = new_provider_type_dd.value
             provider_dd.value = name
             on_provider_select(None)
             new_provider_field.visible = False
+            new_provider_type_dd.visible = False
             new_provider_field.value = ""
             new_provider_field.update()
+            new_provider_type_dd.update()
             provider_dd.update()
         page.update()
 
     new_provider_field.on_submit = add_provider
+
+    new_provider_field.on_submit = add_provider
+
+    add_provider_row = ft.Row([
+        new_provider_field,
+        new_provider_type_dd,
+    ], spacing=8, visible=False)
 
     add_provider_btn = ft.TextButton(
         content=ft.Text("+ Add Provider", size=10, color="#6366F1"),
@@ -187,7 +208,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             ft.Text("Provider", size=11, color="#475569"),
             provider_dd,
             add_provider_btn,
-            new_provider_field,
+            add_provider_row,
             ft.Container(height=12),
             api_key_field,
             ft.Container(height=12),

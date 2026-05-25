@@ -28,9 +28,23 @@ def _build_registry() -> ToolRegistry:
     return registry
 
 
+def _load_provider_type(provider_name: str) -> str:
+    """Check config.yaml for provider type (anthropic vs openai)."""
+    import yaml
+    from pathlib import Path
+    config_path = Path("config.yaml")
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        return cfg.get("provider_types", {}).get(provider_name, "").lower()
+    return ""
+
+
 def _build_provider(config: AgentConfig):
     provider_name = config.provider.lower()
-    if provider_name == "anthropic":
+    provider_type = _load_provider_type(provider_name)
+    # Known defaults: anthropic → Anthropic, others → OpenAI-compatible
+    if provider_type == "anthropic" or (not provider_type and provider_name == "anthropic"):
         return AnthropicProvider(
             model=config.model or "claude-sonnet-4-6-20250514",
             api_key=config.api_key,
