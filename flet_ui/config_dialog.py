@@ -220,8 +220,11 @@ def show_config_dialog(page: ft.Page, on_save=None):
             config.get(section, {}).pop(name, None)
         # Remove from dropdown
         provider_dd.options = [o for o in provider_dd.options if o.key != name]
+        # Switch to anthropic (safe default) if deleting current provider
+        if name == config.get("provider"):
+            config["provider"] = "anthropic"
         if provider_dd.options:
-            provider_dd.value = provider_dd.options[0].key
+            provider_dd.value = "anthropic" if "anthropic" in [o.key for o in provider_dd.options] else provider_dd.options[0].key
             on_provider_select(None)
         provider_dd.update()
         # Write immediately to config
