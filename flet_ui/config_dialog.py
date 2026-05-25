@@ -211,6 +211,36 @@ def show_config_dialog(page: ft.Page, on_save=None):
         on_click=show_add_provider,
     )
 
+    def delete_provider(e):
+        name = provider_dd.value
+        if name in BUILTIN_PROVIDERS:
+            status_text.value = "Cannot delete built-in provider"
+            status_text.update()
+            return
+        # Remove from all config sections
+        for section in ["api_keys", "base_urls", "models", "provider_types",
+                        "context_windows", "compact_thresholds", "reserved_outputs"]:
+            config.get(section, {}).pop(name, None)
+        # Remove from dropdown
+        provider_dd.options = [o for o in provider_dd.options if o.key != name]
+        # Switch to first available
+        if provider_dd.options:
+            provider_dd.value = provider_dd.options[0].key
+            on_provider_select(None)
+        provider_dd.update()
+        status_text.value = f"Deleted {name}. Click Save to confirm."
+        status_text.update()
+
+    delete_btn = ft.TextButton(
+        content=ft.Text("Delete Provider", size=12, color="#EF4444"),
+        on_click=delete_provider,
+    )
+
+    provider_actions = ft.Row([
+        add_provider_btn,
+        delete_btn,
+    ], spacing=8)
+
     def save_click(e):
         # If adding a new provider, just switch to it and stay open
         pending = new_provider_field.value.strip().lower()
@@ -258,7 +288,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         content=ft.Column([
             ft.Text("Provider", size=13, color="#475569"),
             provider_dd,
-            add_provider_btn,
+            provider_actions,
             add_provider_row,
             config_fields,
         ], width=550, height=580, scroll=ft.ScrollMode.AUTO),
