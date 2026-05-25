@@ -106,6 +106,7 @@ class ChatView(ft.ListView):
         if self._thinking_row is not None:
             self.controls.remove(self._thinking_row)
             self._thinking_row = None
+            self.update()
 
     def clear(self) -> None:
         self._thinking_row = None
