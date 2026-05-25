@@ -248,8 +248,8 @@ class FletApp:
         preview = result[:500].replace("\n", " ")
         self.debug_drawer.add_event(
             f"[Tool Result] {name}",
-            f"  status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
-            f"  {preview}",
+            f"status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars\n"
+            f"{preview}",
             color,
             event_data={
                 "type": "Tool Result",

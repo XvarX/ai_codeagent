@@ -129,7 +129,7 @@ class DebugDrawer(ft.Container):
                 ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
                 ft.Text(message, size=9, color="#475569", selectable=True,
                         max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
-            ], spacing=1),
+            ], spacing=0),
             padding=ft.Padding.symmetric(horizontal=4, vertical=2),
             border_radius=4,
             on_click=on_click if self._on_event_click else None,
