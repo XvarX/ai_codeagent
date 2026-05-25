@@ -146,14 +146,37 @@ def show_config_dialog(page: ft.Page, on_save=None):
         visible=False,
     )
 
+    config_fields = ft.Column([
+        ft.Container(height=14),
+        api_key_field,
+        ft.Container(height=14),
+        model_field,
+        ft.Container(height=14),
+        base_url_field,
+        ft.Container(height=18),
+        ft.Divider(height=1, color="#EEF0F4"),
+        ft.Container(height=10),
+        ft.Text("上下文设置", size=13, weight=ft.FontWeight.W_600, color="#475569"),
+        ft.Container(height=10),
+        context_window_field,
+        ft.Container(height=14),
+        compact_threshold_field,
+        ft.Container(height=14),
+        reserved_output_field,
+        ft.Container(height=8),
+        status_text,
+    ], visible=True)
+
     def show_add_provider(e):
         new_provider_field.visible = not new_provider_field.visible
         new_provider_type_dd.visible = new_provider_field.visible
         add_provider_row.visible = new_provider_field.visible
+        config_fields.visible = not new_provider_field.visible
         new_provider_field.value = ""
         new_provider_field.update()
         new_provider_type_dd.update()
         add_provider_row.update()
+        config_fields.update()
 
     def add_provider(e):
         name = new_provider_field.value.strip().lower()
@@ -167,10 +190,12 @@ def show_config_dialog(page: ft.Page, on_save=None):
             new_provider_field.visible = False
             new_provider_type_dd.visible = False
             add_provider_row.visible = False
+            config_fields.visible = True
             new_provider_field.value = ""
             new_provider_field.update()
             new_provider_type_dd.update()
             add_provider_row.update()
+            config_fields.update()
             provider_dd.update()
         page.update()
 
@@ -228,24 +253,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             provider_dd,
             add_provider_btn,
             add_provider_row,
-            ft.Container(height=14),
-            api_key_field,
-            ft.Container(height=14),
-            model_field,
-            ft.Container(height=14),
-            base_url_field,
-            ft.Container(height=18),
-            ft.Divider(height=1, color="#EEF0F4"),
-            ft.Container(height=10),
-            ft.Text("上下文设置", size=13, weight=ft.FontWeight.W_600, color="#475569"),
-            ft.Container(height=10),
-            context_window_field,
-            ft.Container(height=14),
-            compact_threshold_field,
-            ft.Container(height=14),
-            reserved_output_field,
-            ft.Container(height=8),
-            status_text,
+            config_fields,
         ], width=550, height=580, scroll=ft.ScrollMode.AUTO),
         actions=[
             ft.TextButton(content=ft.Text("取消", size=14, color="#64748B"), on_click=lambda e: page.pop_dialog()),
