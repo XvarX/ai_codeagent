@@ -77,8 +77,8 @@ class FletApp:
         self._build_ui()
 
     def _init_log(self) -> Path:
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
+        logs_dir = Path(".myagent") / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
         log_path = logs_dir / f"agent_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         log_path.write_text("", encoding="utf-8")
         return log_path
