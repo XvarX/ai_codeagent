@@ -51,15 +51,15 @@ def show_config_dialog(page: ft.Page, on_save=None):
     provider_dd = ft.Dropdown(
         value=provider,
         options=PROVIDER_OPTIONS,
-        text_style=ft.TextStyle(size=12),
+        text_style=ft.TextStyle(size=14),
         border_color="#E2E6EC",
     )
 
     api_key_field = ft.TextField(
         value=api_key,
         hint_text="API Key",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         password=True,
         can_reveal_password=True,
         border=ft.InputBorder.UNDERLINE,
@@ -67,42 +67,42 @@ def show_config_dialog(page: ft.Page, on_save=None):
     model_field = ft.TextField(
         value=model,
         hint_text="Model (e.g. glm-5.1)",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         border=ft.InputBorder.UNDERLINE,
     )
     base_url_field = ft.TextField(
         value=base_url,
         hint_text="Base URL (optional)",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         border=ft.InputBorder.UNDERLINE,
     )
     context_window_field = ft.TextField(
         value=context_window,
         hint_text="Context Window (tokens)",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         border=ft.InputBorder.UNDERLINE,
         keyboard_type=ft.KeyboardType.NUMBER,
     )
     compact_threshold_field = ft.TextField(
         value=compact_threshold,
         hint_text="Compact Threshold (0.1 - 1.0)",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         border=ft.InputBorder.UNDERLINE,
     )
     reserved_output_field = ft.TextField(
         value=reserved_output,
         hint_text="Reserved Output (tokens)",
-        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
-        text_style=ft.TextStyle(size=12),
+        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
+        text_style=ft.TextStyle(size=14),
         border=ft.InputBorder.UNDERLINE,
         keyboard_type=ft.KeyboardType.NUMBER,
     )
 
-    status_text = ft.Text("", size=10, color="#EF4444")
+    status_text = ft.Text("", size=12, color="#EF4444")
 
     def on_provider_select(e):
         new_provider = provider_dd.value
@@ -128,8 +128,8 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     new_provider_field = ft.TextField(
         hint_text="New provider name...",
-        hint_style=ft.TextStyle(size=11, color="#94A3B8"),
-        text_style=ft.TextStyle(size=11),
+        hint_style=ft.TextStyle(size=13, color="#94A3B8"),
+        text_style=ft.TextStyle(size=13),
         border=ft.InputBorder.UNDERLINE,
         visible=False,
     )
@@ -139,7 +139,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             ft.dropdown.Option("openai", "OpenAI-compatible"),
             ft.dropdown.Option("anthropic", "Anthropic-compatible"),
         ],
-        text_style=ft.TextStyle(size=11),
+        text_style=ft.TextStyle(size=13),
         visible=False,
     )
 
@@ -180,7 +180,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
     ], spacing=8, visible=False)
 
     add_provider_btn = ft.TextButton(
-        content=ft.Text("+ Add Provider", size=10, color="#6366F1"),
+        content=ft.Text("+ Add Provider", size=12, color="#6366F1"),
         on_click=show_add_provider,
     )
 
@@ -207,34 +207,34 @@ def show_config_dialog(page: ft.Page, on_save=None):
             status_text.update()
 
     dlg = ft.AlertDialog(
-        title=ft.Text("LLM 配置", size=14, weight=ft.FontWeight.W_600),
+        title=ft.Text("LLM 配置", size=16, weight=ft.FontWeight.W_600),
         content=ft.Column([
-            ft.Text("Provider", size=11, color="#475569"),
+            ft.Text("Provider", size=13, color="#475569"),
             provider_dd,
             add_provider_btn,
             add_provider_row,
-            ft.Container(height=12),
+            ft.Container(height=14),
             api_key_field,
-            ft.Container(height=12),
+            ft.Container(height=14),
             model_field,
-            ft.Container(height=12),
+            ft.Container(height=14),
             base_url_field,
-            ft.Container(height=16),
+            ft.Container(height=18),
             ft.Divider(height=1, color="#EEF0F4"),
-            ft.Container(height=8),
-            ft.Text("上下文设置", size=11, weight=ft.FontWeight.W_600, color="#475569"),
-            ft.Container(height=8),
+            ft.Container(height=10),
+            ft.Text("上下文设置", size=13, weight=ft.FontWeight.W_600, color="#475569"),
+            ft.Container(height=10),
             context_window_field,
-            ft.Container(height=12),
+            ft.Container(height=14),
             compact_threshold_field,
-            ft.Container(height=12),
+            ft.Container(height=14),
             reserved_output_field,
-            ft.Container(height=6),
+            ft.Container(height=8),
             status_text,
-        ], width=400, height=520, scroll=ft.ScrollMode.AUTO),
+        ], width=550, height=580, scroll=ft.ScrollMode.AUTO),
         actions=[
-            ft.TextButton(content=ft.Text("取消", color="#64748B"), on_click=lambda e: page.pop_dialog()),
-            ft.TextButton(content=ft.Text("保存", color="#6366F1"), on_click=save_click),
+            ft.TextButton(content=ft.Text("取消", size=14, color="#64748B"), on_click=lambda e: page.pop_dialog()),
+            ft.TextButton(content=ft.Text("保存", size=14, color="#6366F1"), on_click=save_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
         shape=ft.RoundedRectangleBorder(radius=10),
