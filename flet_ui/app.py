@@ -94,6 +94,10 @@ class FletApp:
         self.page.padding = 0
         self.page.bgcolor = "#FFFFFF"
 
+        self._provider_label = ft.Text(
+            f"{self.config.provider}  |  {self.config.model or 'default'}",
+            size=10, color="#64748B",
+        )
         self.page.appbar = ft.AppBar(
             title=ft.Row([
                 ft.Container(
@@ -110,10 +114,7 @@ class FletApp:
                 ft.Text("AI Code Agent", size=14, weight=ft.FontWeight.W_600,
                         color="#1E1B3A"),
                 ft.Container(
-                    content=ft.Text(
-                        f"{self.config.provider}  |  {self.config.model or 'default'}",
-                        size=10, color="#64748B",
-                    ),
+                    content=self._provider_label,
                     bgcolor="#F1F3F6", border_radius=4,
                     padding=ft.Padding.symmetric(horizontal=7, vertical=2),
                 ),
@@ -585,6 +586,8 @@ class FletApp:
 
     def _on_config_saved(self, new_config: AgentConfig):
         self.config = new_config
+        self._provider_label.value = f"{new_config.provider}  |  {new_config.model or 'default'}"
+        self._provider_label.update()
         if self.controller:
             self.controller.reconfigure(new_config)
         else:
