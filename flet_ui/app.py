@@ -144,6 +144,7 @@ class FletApp:
                 border_radius=3,
                 visible=False,
             ),
+            mouse_cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
             on_horizontal_drag_update=_on_drag,
         )
 
