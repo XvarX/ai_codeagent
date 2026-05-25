@@ -27,6 +27,9 @@ def show_config_dialog(page: ft.Page, on_save=None):
     api_key = config.get("api_key") or config.get("api_keys", {}).get(provider, "")
     model = config.get("models", {}).get(provider, "") or config.get("model", "")
     base_url = config.get("base_url") or config.get("base_urls", {}).get(provider, "")
+    context_window = str(config.get("context_window", 128000))
+    compact_threshold = str(config.get("compact_threshold", 0.85))
+    reserved_output = str(config.get("reserved_output", 8000))
 
     provider_dd = ft.Dropdown(
         value=provider,
@@ -58,6 +61,29 @@ def show_config_dialog(page: ft.Page, on_save=None):
         text_style=ft.TextStyle(size=12),
         border=ft.InputBorder.UNDERLINE,
     )
+    context_window_field = ft.TextField(
+        value=context_window,
+        hint_text="Context Window (tokens)",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
+        text_style=ft.TextStyle(size=12),
+        border=ft.InputBorder.UNDERLINE,
+        keyboard_type=ft.KeyboardType.NUMBER,
+    )
+    compact_threshold_field = ft.TextField(
+        value=compact_threshold,
+        hint_text="Compact Threshold (0.1 - 1.0)",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
+        text_style=ft.TextStyle(size=12),
+        border=ft.InputBorder.UNDERLINE,
+    )
+    reserved_output_field = ft.TextField(
+        value=reserved_output,
+        hint_text="Reserved Output (tokens)",
+        hint_style=ft.TextStyle(size=12, color="#94A3B8"),
+        text_style=ft.TextStyle(size=12),
+        border=ft.InputBorder.UNDERLINE,
+        keyboard_type=ft.KeyboardType.NUMBER,
+    )
 
     status_text = ft.Text("", size=10, color="#EF4444")
 
@@ -84,6 +110,9 @@ def show_config_dialog(page: ft.Page, on_save=None):
         config.setdefault("models", {})[provider_dd.value] = model_field.value or None
         config.setdefault("api_keys", {})[provider_dd.value] = api_key_field.value
         config.setdefault("base_urls", {})[provider_dd.value] = base_url_field.value
+        config["context_window"] = int(context_window_field.value or 128000)
+        config["compact_threshold"] = float(compact_threshold_field.value or 0.85)
+        config["reserved_output"] = int(reserved_output_field.value or 8000)
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
@@ -107,9 +136,19 @@ def show_config_dialog(page: ft.Page, on_save=None):
             model_field,
             ft.Container(height=12),
             base_url_field,
+            ft.Container(height=16),
+            ft.Divider(height=1, color="#EEF0F4"),
+            ft.Container(height=8),
+            ft.Text("上下文设置", size=11, weight=ft.FontWeight.W_600, color="#475569"),
+            ft.Container(height=8),
+            context_window_field,
+            ft.Container(height=12),
+            compact_threshold_field,
+            ft.Container(height=12),
+            reserved_output_field,
             ft.Container(height=6),
             status_text,
-        ], width=400),
+        ], width=400, height=520, scroll=ft.ScrollMode.AUTO),
         actions=[
             ft.TextButton(content=ft.Text("取消", color="#64748B"), on_click=lambda e: page.pop_dialog()),
             ft.TextButton(content=ft.Text("保存", color="#6366F1"), on_click=save_click),
