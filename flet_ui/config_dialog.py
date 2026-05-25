@@ -7,12 +7,7 @@ from pathlib import Path
 
 CONFIG_PATH = Path("config.yaml")
 
-PROVIDER_OPTIONS = [
-    ft.dropdown.Option("anthropic", "Anthropic"),
-    ft.dropdown.Option("openai", "OpenAI"),
-    ft.dropdown.Option("glm", "GLM"),
-    ft.dropdown.Option("deepseek", "DeepSeek"),
-]
+BUILTIN_PROVIDERS = ["anthropic", "openai", "glm", "deepseek"]
 
 
 def show_config_dialog(page: ft.Page, on_save=None):
@@ -48,9 +43,17 @@ def show_config_dialog(page: ft.Page, on_save=None):
         "deepseek": "deepseek-chat",
     }
 
+    # Build provider options from builtins + any providers found in config
+    all_providers = set(BUILTIN_PROVIDERS)
+    for key in ["api_keys", "base_urls", "models", "provider_types"]:
+        all_providers.update(config.get(key, {}).keys())
+    provider_options = [
+        ft.dropdown.Option(p, p.title()) for p in sorted(all_providers)
+    ]
+
     provider_dd = ft.Dropdown(
-        value=provider,
-        options=PROVIDER_OPTIONS,
+        value=provider if provider in all_providers else sorted(all_providers)[0],
+        options=provider_options,
         text_style=ft.TextStyle(size=14),
         border_color="#E2E6EC",
     )
@@ -157,6 +160,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         if name:
             if name not in [o.key for o in provider_dd.options]:
                 provider_dd.options.append(ft.dropdown.Option(name, name.title()))
+                all_providers.add(name)
             config.setdefault("provider_types", {})[name] = new_provider_type_dd.value
             provider_dd.value = name
             on_provider_select(None)
