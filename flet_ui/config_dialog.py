@@ -231,7 +231,6 @@ def show_config_dialog(page: ft.Page, on_save=None):
         updated = AgentConfig.from_yaml()
         if on_save:
             on_save(updated)
-        page.pop_dialog()
 
     def delete_provider(e):
         name = provider_dd.value
