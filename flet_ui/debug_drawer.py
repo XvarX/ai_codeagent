@@ -9,11 +9,12 @@ class DebugDrawer(ft.Container):
     MIN_WIDTH = 200
     MAX_WIDTH = 600
 
-    def __init__(self, on_compact=None, on_clear=None, on_event_click=None):
+    def __init__(self, on_compact=None, on_clear=None, on_event_click=None, on_toggle=None):
         super().__init__()
         self._on_compact = on_compact
         self._on_clear = on_clear
         self._on_event_click = on_event_click
+        self._on_toggle_cb = on_toggle
         self._is_open = False
         self._expanded_width = 280
 
@@ -37,12 +38,6 @@ class DebugDrawer(ft.Container):
                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.Padding.symmetric(vertical=14),
             on_click=self._toggle,
-        )
-
-        # Drag handle (shown when expanded, on left edge)
-        self._drag_handle = ft.GestureDetector(
-            content=ft.Container(width=4, bgcolor="#00000000"),
-            on_horizontal_drag_update=self._on_drag_resize,
         )
 
         # Expanded view — built lazily
@@ -102,14 +97,6 @@ class DebugDrawer(ft.Container):
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=0)
 
-    def _on_drag_resize(self, e: ft.DragUpdateEvent):
-        new_w = self._expanded_width - e.delta_x
-        new_w = max(self.MIN_WIDTH, min(self.MAX_WIDTH, new_w))
-        self._expanded_width = new_w
-        self.width = new_w
-        self.animate = None  # disable animation during drag
-        self.update()
-
     def _toggle(self, e=None):
         if self._is_open:
             self.width = 36
@@ -121,14 +108,12 @@ class DebugDrawer(ft.Container):
             self._is_open = True
             if self._expanded_view is None:
                 self._expanded_view = self._build_expanded()
-            self.content = ft.Row([
-                self._drag_handle,
-                ft.Container(
-                    content=self._expanded_view,
-                    padding=ft.Padding.all(12),
-                    expand=True,
-                ),
-            ], spacing=0)
+            self.content = ft.Container(
+                content=self._expanded_view,
+                padding=ft.Padding.all(12),
+            )
+        if self._on_toggle_cb:
+            self._on_toggle_cb(self._is_open)
         self.update()
 
     def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> None:
@@ -141,9 +126,7 @@ class DebugDrawer(ft.Container):
 
         entry = ft.Container(
             content=ft.Column([
-                ft.Row([
-                    ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
-                ]),
+                ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
                 ft.Text(message, size=9, color="#475569", selectable=True,
                         max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=1),

@@ -60,6 +60,7 @@ class FletApp:
             on_compact=self._manual_compact,
             on_clear=self._clear_history,
             on_event_click=self._on_debug_event_click,
+            on_toggle=self._on_drawer_toggle,
         )
         self.input_bar = InputBar(on_send=self._on_send)
 
@@ -129,8 +130,25 @@ class FletApp:
             bgcolor="#FAFBFC",
         )
 
+        def _on_drag(e: ft.DragUpdateEvent):
+            if self.debug_drawer._is_open:
+                new_w = self.debug_drawer._expanded_width - e.delta_x
+                new_w = max(200, min(600, new_w))
+                self.debug_drawer._expanded_width = new_w
+                self.debug_drawer.width = new_w
+                self.debug_drawer.update()
+
+        self._resize_handle = ft.GestureDetector(
+            content=ft.Container(
+                width=6, bgcolor="#E8EAF0",
+                border_radius=3,
+                visible=False,
+            ),
+            on_horizontal_drag_update=_on_drag,
+        )
+
         main_row = ft.Row(
-            [self.chat_view, self.debug_drawer],
+            [self.chat_view, self._resize_handle, self.debug_drawer],
             spacing=0,
             expand=True,
         )
@@ -325,6 +343,11 @@ class FletApp:
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
+
+    def _on_drawer_toggle(self, is_open: bool):
+        if hasattr(self, '_resize_handle'):
+            self._resize_handle.content.visible = is_open
+            self._resize_handle.content.update()
 
     def _on_debug_event_click(self, event_data: dict):
         """Open detail dialog when a debug event entry is clicked."""
