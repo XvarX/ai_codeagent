@@ -146,9 +146,11 @@ def show_config_dialog(page: ft.Page, on_save=None):
     def show_add_provider(e):
         new_provider_field.visible = not new_provider_field.visible
         new_provider_type_dd.visible = new_provider_field.visible
+        add_provider_row.visible = new_provider_field.visible
         new_provider_field.value = ""
         new_provider_field.update()
         new_provider_type_dd.update()
+        add_provider_row.update()
 
     def add_provider(e):
         name = new_provider_field.value.strip().lower()
@@ -160,9 +162,11 @@ def show_config_dialog(page: ft.Page, on_save=None):
             on_provider_select(None)
             new_provider_field.visible = False
             new_provider_type_dd.visible = False
+            add_provider_row.visible = False
             new_provider_field.value = ""
             new_provider_field.update()
             new_provider_type_dd.update()
+            add_provider_row.update()
             provider_dd.update()
         page.update()
 
