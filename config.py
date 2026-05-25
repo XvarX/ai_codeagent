@@ -49,6 +49,24 @@ class AgentConfig:
             example = Path("config.example.yaml")
             if example.exists():
                 config_path = example
+            else:
+                # Auto-generate config with defaults
+                cfg = {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4-6-20250514",
+                    "max_turns": 50,
+                    "max_messages": 200,
+                    "verbose": False,
+                    "api_keys": {},
+                    "base_urls": {},
+                    "models": {},
+                    "context_windows": {},
+                    "compact_thresholds": {},
+                    "reserved_outputs": {},
+                }
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(config_path, "w", encoding="utf-8") as f:
+                    yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
@@ -78,6 +96,31 @@ class AgentConfig:
         if not base_url:
             base_url = cfg.get("base_urls", {}).get(provider, "")
 
+        # Per-provider defaults for context settings
+        DEFAULT_CONTEXTS = {
+            "anthropic": 200000, "openai": 128000,
+            "glm": 128000, "deepseek": 64000,
+        }
+
+        context_window = int(
+            os.environ.get("AGENT_CONTEXT_WINDOW")
+            or cfg.get("context_window")
+            or cfg.get("context_windows", {}).get(provider)
+            or DEFAULT_CONTEXTS.get(provider, 128000)
+        )
+        compact_threshold = float(
+            os.environ.get("AGENT_COMPACT_THRESHOLD")
+            or cfg.get("compact_threshold")
+            or cfg.get("compact_thresholds", {}).get(provider)
+            or 0.85
+        )
+        reserved_output = int(
+            os.environ.get("AGENT_RESERVED_OUTPUT")
+            or cfg.get("reserved_output")
+            or cfg.get("reserved_outputs", {}).get(provider)
+            or 8000
+        )
+
         return cls(
             provider=provider,
             model=os.environ.get("AGENT_MODEL") or cfg.get("model"),
@@ -90,15 +133,9 @@ class AgentConfig:
                 os.environ.get("AGENT_VERBOSE")
                 or cfg.get("verbose", False)
             ),
-            context_window=int(
-                os.environ.get("AGENT_CONTEXT_WINDOW") or cfg.get("context_window", 128000)
-            ),
-            compact_threshold=float(
-                os.environ.get("AGENT_COMPACT_THRESHOLD") or cfg.get("compact_threshold", 0.85)
-            ),
-            reserved_output=int(
-                os.environ.get("AGENT_RESERVED_OUTPUT") or cfg.get("reserved_output", 8000)
-            ),
+            context_window=context_window,
+            compact_threshold=compact_threshold,
+            reserved_output=reserved_output,
         )
 
     # Keep from_env for backwards compat

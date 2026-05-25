@@ -27,9 +27,26 @@ def show_config_dialog(page: ft.Page, on_save=None):
     api_key = config.get("api_key") or config.get("api_keys", {}).get(provider, "")
     model = config.get("models", {}).get(provider, "") or config.get("model", "")
     base_url = config.get("base_url") or config.get("base_urls", {}).get(provider, "")
-    context_window = str(config.get("context_window", 128000))
-    compact_threshold = str(config.get("compact_threshold", 0.85))
-    reserved_output = str(config.get("reserved_output", 8000))
+    context_window = str(
+        config.get("context_window")
+        or config.get("context_windows", {}).get(provider, 128000)
+    )
+    compact_threshold = str(
+        config.get("compact_threshold")
+        or config.get("compact_thresholds", {}).get(provider, 0.85)
+    )
+    reserved_output = str(
+        config.get("reserved_output")
+        or config.get("reserved_outputs", {}).get(provider, 8000)
+    )
+
+    DEFAULT_CONTEXTS = {"anthropic": 200000, "openai": 128000, "glm": 128000, "deepseek": 64000}
+    DEFAULT_MODELS = {
+        "anthropic": "claude-sonnet-4-6-20250514",
+        "openai": "gpt-4o",
+        "glm": "glm-5.1",
+        "deepseek": "deepseek-chat",
+    }
 
     provider_dd = ft.Dropdown(
         value=provider,
@@ -87,21 +104,60 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     status_text = ft.Text("", size=10, color="#EF4444")
 
-    DEFAULT_MODELS = {
-        "anthropic": "claude-sonnet-4-6-20250514",
-        "openai": "gpt-4o",
-        "glm": "glm-5.1",
-        "deepseek": "deepseek-chat",
-    }
-
     def on_provider_select(e):
         new_provider = provider_dd.value
         api_key_field.value = config.get("api_keys", {}).get(new_provider, "")
         base_url_field.value = config.get("base_urls", {}).get(new_provider, "")
         model_field.value = config.get("models", {}).get(new_provider, "") or DEFAULT_MODELS.get(new_provider, "")
+        context_window_field.value = str(
+            config.get("context_window")
+            or config.get("context_windows", {}).get(new_provider)
+            or DEFAULT_CONTEXTS.get(new_provider, 128000)
+        )
+        compact_threshold_field.value = str(
+            config.get("compact_threshold")
+            or config.get("compact_thresholds", {}).get(new_provider, 0.85)
+        )
+        reserved_output_field.value = str(
+            config.get("reserved_output")
+            or config.get("reserved_outputs", {}).get(new_provider, 8000)
+        )
         page.update()
 
     provider_dd.on_select = on_provider_select
+
+    new_provider_field = ft.TextField(
+        hint_text="New provider name...",
+        hint_style=ft.TextStyle(size=11, color="#94A3B8"),
+        text_style=ft.TextStyle(size=11),
+        border=ft.InputBorder.UNDERLINE,
+        visible=False,
+    )
+
+    def show_add_provider(e):
+        new_provider_field.visible = not new_provider_field.visible
+        new_provider_field.value = ""
+        new_provider_field.update()
+
+    def add_provider(e):
+        name = new_provider_field.value.strip().lower()
+        if name:
+            if name not in [o.key for o in provider_dd.options]:
+                provider_dd.options.append(ft.dropdown.Option(name, name.title()))
+            provider_dd.value = name
+            on_provider_select(None)
+            new_provider_field.visible = False
+            new_provider_field.value = ""
+            new_provider_field.update()
+            provider_dd.update()
+        page.update()
+
+    new_provider_field.on_submit = add_provider
+
+    add_provider_btn = ft.TextButton(
+        content=ft.Text("+ Add Provider", size=10, color="#6366F1"),
+        on_click=show_add_provider,
+    )
 
     def save_click(e):
         # Merge into existing config to preserve nested structure
@@ -110,9 +166,9 @@ def show_config_dialog(page: ft.Page, on_save=None):
         config.setdefault("models", {})[provider_dd.value] = model_field.value or None
         config.setdefault("api_keys", {})[provider_dd.value] = api_key_field.value
         config.setdefault("base_urls", {})[provider_dd.value] = base_url_field.value
-        config["context_window"] = int(context_window_field.value or 128000)
-        config["compact_threshold"] = float(compact_threshold_field.value or 0.85)
-        config["reserved_output"] = int(reserved_output_field.value or 8000)
+        config.setdefault("context_windows", {})[provider_dd.value] = int(context_window_field.value or 128000)
+        config.setdefault("compact_thresholds", {})[provider_dd.value] = float(compact_threshold_field.value or 0.85)
+        config.setdefault("reserved_outputs", {})[provider_dd.value] = int(reserved_output_field.value or 8000)
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
@@ -130,6 +186,8 @@ def show_config_dialog(page: ft.Page, on_save=None):
         content=ft.Column([
             ft.Text("Provider", size=11, color="#475569"),
             provider_dd,
+            add_provider_btn,
+            new_provider_field,
             ft.Container(height=12),
             api_key_field,
             ft.Container(height=12),
