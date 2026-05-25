@@ -224,6 +224,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             new_provider_type_dd.visible = False
             add_provider_row.visible = False
             config_fields.visible = True
+            new_provider_field.value = ""  # clear so second save goes to normal path
             new_provider_field.update()
             new_provider_type_dd.update()
             add_provider_row.update()
