@@ -176,8 +176,6 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     new_provider_field.on_submit = add_provider
 
-    new_provider_field.on_submit = add_provider
-
     add_provider_row = ft.Row([
         new_provider_field,
         new_provider_type_dd,
@@ -189,6 +187,15 @@ def show_config_dialog(page: ft.Page, on_save=None):
     )
 
     def save_click(e):
+        # Auto-add pending new provider before save
+        pending = new_provider_field.value.strip().lower()
+        if pending and pending not in [o.key for o in provider_dd.options]:
+            provider_dd.options.append(ft.dropdown.Option(pending, pending.title()))
+            config.setdefault("provider_types", {})[pending] = new_provider_type_dd.value
+        # If a new provider was typed (even if already added), make it current
+        if pending:
+            config.setdefault("provider_types", {})[pending] = new_provider_type_dd.value
+
         # Merge into existing config to preserve nested structure
         config["provider"] = provider_dd.value
         config["model"] = model_field.value or None
@@ -198,6 +205,10 @@ def show_config_dialog(page: ft.Page, on_save=None):
         config.setdefault("context_windows", {})[provider_dd.value] = int(context_window_field.value or 128000)
         config.setdefault("compact_thresholds", {})[provider_dd.value] = float(compact_threshold_field.value or 0.85)
         config.setdefault("reserved_outputs", {})[provider_dd.value] = int(reserved_output_field.value or 8000)
+        # Hide add row if still visible
+        new_provider_field.visible = False
+        new_provider_type_dd.visible = False
+        add_provider_row.visible = False
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
