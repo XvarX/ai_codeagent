@@ -213,25 +213,47 @@ def show_config_dialog(page: ft.Page, on_save=None):
         on_click=show_add_provider,
     )
 
-    def delete_provider(e):
-        name = provider_dd.value
-        if name in BUILTIN_PROVIDERS:
-            status_text.value = "Cannot delete built-in provider"
-            status_text.update()
-            return
+    def do_delete_provider(name):
         # Remove from all config sections
         for section in ["api_keys", "base_urls", "models", "provider_types",
                         "context_windows", "compact_thresholds", "reserved_outputs"]:
             config.get(section, {}).pop(name, None)
         # Remove from dropdown
         provider_dd.options = [o for o in provider_dd.options if o.key != name]
-        # Switch to first available
         if provider_dd.options:
             provider_dd.value = provider_dd.options[0].key
             on_provider_select(None)
         provider_dd.update()
-        status_text.value = f"Deleted {name}. Click Save to confirm."
-        status_text.update()
+        # Write immediately to config
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+        from config import AgentConfig
+        updated = AgentConfig.from_yaml()
+        if on_save:
+            on_save(updated)
+        page.pop_dialog()
+
+    def delete_provider(e):
+        name = provider_dd.value
+        if name in BUILTIN_PROVIDERS:
+            return
+
+        def on_confirm(ev):
+            page.pop_dialog()
+            do_delete_provider(name)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("确认删除", size=14, weight=ft.FontWeight.W_600),
+            content=ft.Text(f"确定要删除 Provider \"{name}\" 及其所有配置吗？"),
+            actions=[
+                ft.TextButton(content=ft.Text("取消", size=13, color="#64748B"),
+                             on_click=lambda e: page.pop_dialog()),
+                ft.TextButton(content=ft.Text("删除", size=13, color="#EF4444"),
+                             on_click=on_confirm),
+            ],
+            shape=ft.RoundedRectangleBorder(radius=10),
+        )
+        page.show_dialog(dlg)
 
     delete_btn = ft.TextButton(
         content=ft.Text("Delete Provider", size=12, color="#EF4444"),
