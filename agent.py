@@ -74,10 +74,6 @@ class Agent:
 
             # ── Compaction Pipeline (mirrors query.ts) ──────────
 
-            # History snip — keep last N messages
-            if len(self.messages) > self.max_messages:
-                self.messages = self.messages[-self.max_messages:]
-
             # Micro-compact — trim old tool results
             if turn_count > 1:
                 from compact.microCompact import micro_compact
@@ -118,6 +114,17 @@ class Agent:
             self.messages = apply_tool_result_budget(
                 self.messages, self._replacement_state, self.cwd)
 
+            # Snip: drop oldest API-round groups until within context window
+            from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+            limit = self.context_window - self.reserved_output
+            groups = group_by_api_round(self.messages)
+            while len(groups) > 1:
+                total = estimate_tokens_with_usage(self.messages)
+                if total <= limit:
+                    break
+                groups.pop(0)
+                self.messages = [m for g in groups for m in g]
+
             # 1. Call LLM — get assistant response + tool_use blocks
             tools_schema = self.registry.get_schemas()
             system_prompt = build_system_prompt(
@@ -154,7 +161,7 @@ class Agent:
                             system=system_prompt,
                         )
                         assistant_msg.id = raw_response.get("id")
-                assistant_msg.usage = raw_response.get("usage", {})
+                        assistant_msg.usage = raw_response.get("usage", {})
                     except Exception as e2:
                         error_msg = Message(
                             role="assistant",
@@ -255,9 +262,6 @@ class Agent:
             turn_count += 1
 
             # ── Compaction Pipeline (mirrors run()) ──────────
-            if len(self.messages) > self.max_messages:
-                self.messages = self.messages[-self.max_messages:]
-
             if turn_count > 1:
                 from compact.microCompact import micro_compact
                 micro_compact(self.messages)
@@ -294,6 +298,17 @@ class Agent:
             # Layer 2: Per-message tool result budget before LLM call
             self.messages = apply_tool_result_budget(
                 self.messages, self._replacement_state, self.cwd)
+
+            # Snip: drop oldest API-round groups until within context window
+            from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+            limit = self.context_window - self.reserved_output
+            groups = group_by_api_round(self.messages)
+            while len(groups) > 1:
+                total = estimate_tokens_with_usage(self.messages)
+                if total <= limit:
+                    break
+                groups.pop(0)
+                self.messages = [m for g in groups for m in g]
 
             tools_schema = self.registry.get_schemas()
             system_prompt = build_system_prompt(
