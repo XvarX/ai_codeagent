@@ -118,12 +118,19 @@ class Agent:
             from compact.grouping import estimate_tokens_with_usage, group_by_api_round
             limit = self.context_window - self.reserved_output
             groups = group_by_api_round(self.messages)
+            orig_count = len(groups)
+            pre_tokens = estimate_tokens_with_usage(self.messages)
             while len(groups) > 1:
                 total = estimate_tokens_with_usage(self.messages)
                 if total <= limit:
                     break
                 groups.pop(0)
                 self.messages = [m for g in groups for m in g]
+            removed_groups = orig_count - len(groups)
+            if removed_groups > 0 and self.on_compact:
+                post_tokens = estimate_tokens_with_usage(self.messages)
+                await self.on_compact(pre_tokens, post_tokens,
+                    f"snip {removed_groups} groups")
 
             # 1. Call LLM — get assistant response + tool_use blocks
             tools_schema = self.registry.get_schemas()
@@ -252,7 +259,7 @@ class Agent:
         """Streaming version of run(). Yields events instead of returning text."""
         from events import (
             ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
-            ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent,
+            ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
         )
 
         self.messages.append(Message(role="user", content=user_message))
@@ -303,12 +310,23 @@ class Agent:
             from compact.grouping import estimate_tokens_with_usage, group_by_api_round
             limit = self.context_window - self.reserved_output
             groups = group_by_api_round(self.messages)
+            orig_count = len(groups)
+            pre_tokens = estimate_tokens_with_usage(self.messages)
             while len(groups) > 1:
                 total = estimate_tokens_with_usage(self.messages)
                 if total <= limit:
                     break
                 groups.pop(0)
                 self.messages = [m for g in groups for m in g]
+            removed_groups = orig_count - len(groups)
+            if removed_groups > 0:
+                post_tokens = estimate_tokens_with_usage(self.messages)
+                yield SnipEvent(
+                    groups_removed=removed_groups,
+                    messages_removed=0,  # rough, not counting
+                    tokens_before=pre_tokens,
+                    tokens_after=post_tokens,
+                )
 
             tools_schema = self.registry.get_schemas()
             system_prompt = build_system_prompt(

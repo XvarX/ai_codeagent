@@ -44,6 +44,9 @@ class _FletEventHandler(EventHandler):
     async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
         self.app._on_compact(pre_tokens, post_tokens, trigger)
 
+    async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
+        self.app._on_snip(groups_removed, tokens_before, tokens_after)
+
 
 class FletApp:
     """Main Flet application controller."""
@@ -478,6 +481,14 @@ class FletApp:
         self.debug_drawer.add_event("[Error]", message, "#EF4444")
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
+
+    def _on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
+        self.debug_drawer.add_event(
+            "[Remove]",
+            f"Snip removed {groups_removed} groups\n"
+            f"tokens: ~{tokens_before} → ~{tokens_after}",
+            "#94A3B8",
+        )
 
     def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
         self.chat_view.add_tool_label(

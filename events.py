@@ -57,3 +57,12 @@ class CompactEvent:
     pre_tokens: int
     post_tokens: int
     trigger: str = ""
+
+
+@dataclass
+class SnipEvent:
+    """Snip 截断 —— 删除最老的 API-round 组以保持在窗口上限内"""
+    groups_removed: int
+    messages_removed: int
+    tokens_before: int
+    tokens_after: int

@@ -15,7 +15,7 @@ from providers.openai_compat import OpenAICompatProvider
 from agent import Agent
 from events import (
     ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
-    ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent,
+    ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
 )
 
 
@@ -68,6 +68,7 @@ class EventHandler:
     async def on_done(self, final_text: str): pass
     async def on_error(self, message: str): pass
     async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str): pass
+    async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int): pass
 
 
 class AgentController:
@@ -122,6 +123,9 @@ class AgentController:
                 elif isinstance(event, CompactEvent):
                     await self.handler.on_compact(
                         event.pre_tokens, event.post_tokens, event.trigger)
+                elif isinstance(event, SnipEvent):
+                    await self.handler.on_snip(
+                        event.groups_removed, event.tokens_before, event.tokens_after)
         except asyncio.CancelledError:
             pass
         except Exception as e:
