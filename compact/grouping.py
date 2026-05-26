@@ -116,7 +116,7 @@ def estimate_tokens_with_usage(messages: list[Message]) -> int:
             total += len(msg.content or "")
             for block in msg.tool_use_blocks:
                 total += len(str(block.input))
-        return int(total / 2.5)
+        return int(total / 4 * 4 / 3)
 
     # Rough estimation for messages after the baselined assistant
     extra = 0
