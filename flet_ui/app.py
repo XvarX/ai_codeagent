@@ -267,10 +267,18 @@ class FletApp:
             f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
         )
         dur_str = f"{duration_ms:.0f}ms" if duration_ms else ""
+        # Check if result was persisted — show original + compacted sizes
+        import re
+        size_line = f"size: {len(result)} chars"
+        from tools.tool_result_storage import is_content_already_compacted
+        if is_content_already_compacted(result):
+            m = re.search(r'\[(\d+) chars saved', result)
+            if m:
+                size_line = f"size: {len(result)} chars (original: {m.group(1)} chars)"
         self.debug_drawer.add_event(
             f"[Tool] {name} ✓",
             f"{call_detail}\n---\n"
-            f"status: {'ERROR' if is_error else 'OK'}  |  size: {len(result)} chars"
+            f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
             f"{'  |  ' + dur_str if dur_str else ''}\n"
             f"{preview}",
             color,
