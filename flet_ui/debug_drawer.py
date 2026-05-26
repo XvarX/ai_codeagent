@@ -18,6 +18,8 @@ class DebugDrawer(ft.Container):
         self._is_open = False
         self._expanded_width = 280
         self._max_tokens = max_tokens
+        self._round_tag = 0  # current API-round tag for entries
+        self._entry_id = 0   # auto-increment entry ID
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -117,9 +119,12 @@ class DebugDrawer(ft.Container):
             self._on_toggle_cb(self._is_open)
         self.update()
 
-    def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> None:
+    def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> int:
         # Capture event_data in closure to avoid index mismatch
         captured_data = event_data
+        eid = self._entry_id
+        self._entry_id += 1
+        round_tag = self._round_tag
 
         def on_click(e, data=captured_data):
             if data and self._on_event_click:
@@ -140,12 +145,14 @@ class DebugDrawer(ft.Container):
             padding=ft.Padding.only(left=4, right=4, top=1, bottom=1),
             border_radius=4,
             on_click=on_click if self._on_event_click else None,
+            data={"round": round_tag},
         )
         self._event_log.controls.append(entry)
         if len(self._event_log.controls) > 100:  # div+entry pairs
             self._event_log.controls = self._event_log.controls[-100:]
         if self._is_open and self._event_log.page:
             self._event_log.update()
+        return eid
 
     def update_context_usage(self, usage: dict) -> None:
         prompt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
@@ -157,6 +164,19 @@ class DebugDrawer(ft.Container):
         if self._is_open and self._usage_bar.page:
             self._usage_bar.update()
             self._usage_text.update()
+
+    def advance_round(self):
+        """Increment round tag — call when a new API round starts."""
+        self._round_tag += 1
+
+    def mark_entries_gray(self, up_to_round: int):
+        """Gray out all entries with round_tag <= up_to_round."""
+        for ctrl in self._event_log.controls:
+            if isinstance(ctrl, ft.Container) and isinstance(ctrl.data, dict):
+                if ctrl.data.get("round", -1) <= up_to_round:
+                    ctrl.opacity = 0.4
+        if self._is_open and self._event_log.page:
+            self._event_log.update()
 
     def clear(self) -> None:
         self._event_log.controls.clear()

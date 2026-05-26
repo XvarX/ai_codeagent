@@ -489,6 +489,9 @@ class FletApp:
             f"tokens: ~{tokens_before} → ~{tokens_after}",
             "#94A3B8",
         )
+        # Gray out entries from removed rounds (rounds 0..groups_removed-1)
+        if groups_removed > 0:
+            self.debug_drawer.mark_entries_gray(groups_removed - 1)
 
     def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
         self.chat_view.add_tool_label(
@@ -528,6 +531,8 @@ class FletApp:
         if text.strip().lower() == "/compact":
             self._manual_compact()
             return
+
+        self.debug_drawer.advance_round()  # new round — tag all entries this round
 
         if self.controller is None:
             self.chat_view.add_assistant_message(
