@@ -134,6 +134,7 @@ class Agent:
                     tools=tools_schema,
                     system=system_prompt,
                 )
+                assistant_msg.id = raw_response.get("id")
             except Exception as e:
                 err_str = str(e)
                 # Reactive compact on prompt-too-long (413)
@@ -151,6 +152,7 @@ class Agent:
                             tools=tools_schema,
                             system=system_prompt,
                         )
+                        assistant_msg.id = raw_response.get("id")
                     except Exception as e2:
                         error_msg = Message(
                             role="assistant",
@@ -327,6 +329,7 @@ class Agent:
                             self._last_actual_tokens = usage["total_tokens"]
                         elif usage.get("input_tokens"):
                             self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                        _last_response_id = event.raw.get("id")
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
@@ -373,6 +376,7 @@ class Agent:
                                     self._last_actual_tokens = usage["total_tokens"]
                                 elif usage.get("input_tokens"):
                                     self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                                _last_response_id = event.raw.get("id")
                                 yield event
                             elif isinstance(event, ErrorEvent):
                                 self.messages.append(Message(
@@ -388,6 +392,7 @@ class Agent:
                             role="assistant",
                             content=assistant_text,
                             tool_use_blocks=tool_use_blocks,
+                            id=_last_response_id,
                         )
                         self.messages.append(assistant_msg)
                         if not tool_use_blocks:
@@ -448,6 +453,7 @@ class Agent:
                 role="assistant",
                 content=assistant_text,
                 tool_use_blocks=tool_use_blocks,
+                id=_last_response_id,
             )
             self.messages.append(assistant_msg)
 

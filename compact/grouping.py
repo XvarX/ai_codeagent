@@ -11,19 +11,28 @@ from core_types import Message
 def group_by_api_round(messages: list[Message]) -> list[list[Message]]:
     """Split messages into API-round groups.
 
-    A new group starts at each assistant message (not tool_result).
-    This ensures tool_use/tool_result pairs stay with their assistant response.
-    Used for reactive compact and truncation.
+    A new group starts at:
+    - each new assistant message with a different message.id
+    - each new user message (not tool_result)
+
+    This ensures tool_use/tool_result pairs stay with their assistant response
+    and user turns are independently grouped.
     """
     groups: list[list[Message]] = []
     current: list[Message] = []
+    last_asst_id: str | None = None
 
     for msg in messages:
-        if msg.role == "assistant" and current:
+        if msg.role == "assistant" and msg.id and msg.id != last_asst_id and current:
+            groups.append(current)
+            current = [msg]
+        elif msg.role == "user" and not msg.is_tool_result and current:
             groups.append(current)
             current = [msg]
         else:
             current.append(msg)
+        if msg.role == "assistant" and msg.id:
+            last_asst_id = msg.id
 
     if current:
         groups.append(current)

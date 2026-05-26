@@ -21,6 +21,7 @@ class Message:
     tool_use_blocks: list[ToolUseBlock] = field(default_factory=list)
     tool_use_id: str | None = None  # for tool_result messages
     timestamp: float = field(default_factory=time)
+    id: str | None = None  # API response message.id — used for API-round grouping
 
     @property
     def is_tool_result(self) -> bool:

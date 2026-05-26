@@ -173,7 +173,10 @@ class OpenAICompatProvider(BaseProvider):
             final_usage: dict = {}
             all_text: list[str] = []
 
+            stream_id: str = ""
             async for chunk in stream:
+                if not stream_id and hasattr(chunk, "id"):
+                    stream_id = chunk.id or ""
                 if not chunk.choices:
                     if hasattr(chunk, "usage") and chunk.usage:
                         final_usage = chunk.usage.model_dump() if hasattr(chunk.usage, "model_dump") else {}
@@ -212,6 +215,7 @@ class OpenAICompatProvider(BaseProvider):
 
             # Build raw response — include full accumulated text
             raw = {
+                "id": stream_id,
                 "_provider": self.provider_name,
                 "_request": request_payload,
                 "model": self.model,
