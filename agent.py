@@ -135,6 +135,7 @@ class Agent:
                     system=system_prompt,
                 )
                 assistant_msg.id = raw_response.get("id")
+                assistant_msg.usage = raw_response.get("usage", {})
             except Exception as e:
                 err_str = str(e)
                 # Reactive compact on prompt-too-long (413)
@@ -153,6 +154,7 @@ class Agent:
                             system=system_prompt,
                         )
                         assistant_msg.id = raw_response.get("id")
+                assistant_msg.usage = raw_response.get("usage", {})
                     except Exception as e2:
                         error_msg = Message(
                             role="assistant",
@@ -330,6 +332,7 @@ class Agent:
                         elif usage.get("input_tokens"):
                             self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                         _last_response_id = event.raw.get("id")
+                        _last_response_usage = event.raw.get("usage", {})
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
@@ -377,6 +380,7 @@ class Agent:
                                 elif usage.get("input_tokens"):
                                     self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                                 _last_response_id = event.raw.get("id")
+                                _last_response_usage = event.raw.get("usage", {})
                                 yield event
                             elif isinstance(event, ErrorEvent):
                                 self.messages.append(Message(
@@ -393,6 +397,7 @@ class Agent:
                             content=assistant_text,
                             tool_use_blocks=tool_use_blocks,
                             id=_last_response_id,
+                            usage=_last_response_usage,
                         )
                         self.messages.append(assistant_msg)
                         if not tool_use_blocks:

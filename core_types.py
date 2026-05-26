@@ -22,6 +22,7 @@ class Message:
     tool_use_id: str | None = None  # for tool_result messages
     timestamp: float = field(default_factory=time)
     id: str | None = None  # API response message.id — used for API-round grouping
+    usage: dict | None = None  # raw API usage data (input_tokens, output_tokens, etc.)
 
     @property
     def is_tool_result(self) -> bool:
