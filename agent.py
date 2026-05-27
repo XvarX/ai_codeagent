@@ -475,6 +475,7 @@ class Agent:
                                 result=result_text,
                                 is_error=is_error,
                                 duration_ms=duration_ms,
+                                tool_use_id=block.tool_use_id,
                             )
                             self.messages.append(Message(
                                 role="user",
@@ -541,6 +542,7 @@ class Agent:
                     result=result_text,
                     is_error=is_error,
                     duration_ms=duration_ms,
+                    tool_use_id=block.tool_use_id,
                 )
 
                 self.messages.append(Message(

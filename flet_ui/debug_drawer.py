@@ -18,9 +18,8 @@ class DebugDrawer(ft.Container):
         self._is_open = False
         self._expanded_width = 280
         self._max_tokens = max_tokens
-        self._round_tag = 0  # current API-round tag for entries
         self._entry_id = 0   # auto-increment entry ID
-        self._entry_rounds: list[tuple[object, int]] = []  # (control, round_tag)
+        self._entry_records: list[dict] = []  # {control, group_key, group_idx}
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -120,12 +119,11 @@ class DebugDrawer(ft.Container):
             self._on_toggle_cb(self._is_open)
         self.update()
 
-    def add_event(self, prefix: str, message: str, color: str, event_data: dict = None) -> int:
-        # Capture event_data in closure to avoid index mismatch
+    def add_event(self, prefix: str, message: str, color: str, event_data: dict = None,
+                  group_key: str = None) -> int:
         captured_data = event_data
         eid = self._entry_id
         self._entry_id += 1
-        round_tag = self._round_tag
 
         def on_click(e, data=captured_data):
             if data and self._on_event_click:
@@ -137,9 +135,10 @@ class DebugDrawer(ft.Container):
                 ft.Divider(height=1, color="#E8EAF0")
             )
 
+        prefix_text = ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color)
         entry = ft.Container(
             content=ft.Column([
-                ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color),
+                prefix_text,
                 ft.Text(message, size=9, color="#475569",
                         max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=0, tight=True),
@@ -148,10 +147,13 @@ class DebugDrawer(ft.Container):
             on_click=on_click if self._on_event_click else None,
         )
         self._event_log.controls.append(entry)
-        self._entry_rounds.append((entry, round_tag))
-        if len(self._event_log.controls) > 100:  # div+entry pairs
+        self._entry_records.append({
+            "control": entry, "group_key": group_key, "group_idx": None,
+            "prefix": prefix, "prefix_text": prefix_text,
+        })
+        if len(self._event_log.controls) > 100:
             self._event_log.controls = self._event_log.controls[-100:]
-            self._entry_rounds = self._entry_rounds[-100:]
+            self._entry_records = self._entry_records[-100:]
         if self._is_open and self._event_log.page:
             self._event_log.update()
         return eid
@@ -167,22 +169,118 @@ class DebugDrawer(ft.Container):
             self._usage_bar.update()
             self._usage_text.update()
 
-    def advance_round(self):
-        """Increment round tag — call when a new API round starts."""
-        self._round_tag += 1
+    def sync_groups(self, messages: list):
+        """Walk messages via group_by_api_round, backfill group_idx on entries.
 
-    def mark_entries_gray(self, up_to_round: int):
-        """Gray out all entries with round_tag <= up_to_round."""
-        for ctrl, tag in self._entry_rounds:
-            if tag <= up_to_round:
-                ctrl.opacity = 0.4
-                if ctrl.page:
-                    ctrl.update()
-        if self._is_open and self._event_log.page:
-            self._event_log.update()
+        Group IDs are persistent: surviving entries keep their original
+        number after snip; new groups get the next available ID.
+        """
+        from compact.grouping import group_by_api_round
+
+        groups = group_by_api_round(messages)
+
+        # Build lookup: message identity → renumbered group index
+        asst_id_to_gi: dict[str, int] = {}
+        tool_id_to_gi: dict[str, int] = {}
+        user_msg_groups: list[int] = []
+
+        for gi, group in enumerate(groups):
+            for msg in group:
+                if msg.role == "assistant" and msg.id:
+                    asst_id_to_gi[msg.id] = gi
+                elif msg.role == "user" and msg.tool_use_id:
+                    tool_id_to_gi[msg.tool_use_id] = gi
+                elif msg.role == "user" and not msg.is_tool_result and not msg.tool_use_id:
+                    user_msg_groups.append(gi)
+
+        # Build persistent group ID map: renumbered gi → persistent gid
+        persistent: dict[int, int] = {}
+        for rec in self._entry_records:
+            gid = rec.get("group_idx")
+            if gid is None or gid < 0 or rec["control"].opacity < 1.0:
+                continue
+            key = rec.get("group_key") or ""
+            gi = None
+            if key.startswith("asst:"):
+                gi = asst_id_to_gi.get(key[5:])
+            elif key.startswith("tool:"):
+                gi = tool_id_to_gi.get(key[5:])
+            if gi is not None:
+                persistent[gi] = gid
+
+        max_persistent = max(
+            (rec["group_idx"] for rec in self._entry_records
+             if rec["group_idx"] is not None and rec["group_idx"] >= 0
+             and rec["control"].opacity >= 1.0),
+            default=-1)
+        next_gid = max_persistent + 1
+
+        # Count already-assigned (non-grayed) "user" entries to skip
+        user_idx = sum(1 for rec in self._entry_records
+                      if rec.get("group_key") == "user"
+                      and rec["group_idx"] is not None
+                      and rec["control"].opacity >= 1.0)
+
+        updated = False
+        for rec in self._entry_records:
+            key = rec.get("group_key") or ""
+            if not key or rec["group_idx"] is not None:
+                continue
+
+            gi = None
+            if key == "user":
+                if user_idx < len(user_msg_groups):
+                    gi = user_msg_groups[user_idx]
+                    user_idx += 1
+            elif key.startswith("asst:"):
+                gi = asst_id_to_gi.get(key[5:])
+            elif key.startswith("tool:"):
+                gi = tool_id_to_gi.get(key[5:])
+
+            if gi is not None:
+                gid = persistent.get(gi, next_gid)
+                rec["group_idx"] = gid
+                if gid == next_gid:
+                    persistent[gi] = gid
+                    next_gid += 1
+                pfx = rec.get("prefix", "")
+                rec["prefix_text"].value = f"{pfx} · G{gid}"
+                try:
+                    rec["prefix_text"].update()
+                except RuntimeError:
+                    pass
+                updated = True
+
+        if updated and self._is_open:
+            try:
+                if self._event_log.page:
+                    self._event_log.update()
+            except RuntimeError:
+                pass
+
+    def mark_groups_gray(self, max_group: int):
+        """Gray out entries with group_idx <= max_group (inclusive)."""
+        for rec in self._entry_records:
+            gi = rec.get("group_idx")
+            if gi is not None and gi <= max_group:
+                rec["control"].opacity = 0.4
+                cur = rec["prefix_text"].value or ""
+                if not cur.startswith("[Remove]"):
+                    rec["prefix_text"].value = f"[Remove] {cur}"
+                try:
+                    if rec["control"].page:
+                        rec["control"].update()
+                        rec["prefix_text"].update()
+                except RuntimeError:
+                    pass
+        try:
+            if self._is_open and self._event_log.page:
+                self._event_log.update()
+        except RuntimeError:
+            pass
 
     def clear(self) -> None:
-        self._entry_rounds.clear()
+        self._entry_records.clear()
         self._event_log.controls.clear()
         if self._is_open and self._event_log.page:
             self._event_log.update()

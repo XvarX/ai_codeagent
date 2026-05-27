@@ -27,10 +27,10 @@ class _FletEventHandler(EventHandler):
         self.app._on_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
-        self.app._on_tool_use(name, input_dict)
+        self.app._on_tool_use(name, input_dict, tool_use_id)
 
-    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0):
-        self.app._on_tool_result(name, result, is_error, duration_ms)
+    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
+        self.app._on_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
     async def on_response_done(self, raw: dict):
         self.app._on_response_done(raw)
@@ -195,6 +195,8 @@ class FletApp:
             )
 
     def _on_thinking(self):
+        if self.controller:
+            self.debug_drawer.sync_groups(self.controller.agent.messages)
         self.chat_view.show_thinking()
 
     def _on_text_delta(self, token: str, reasoning: bool = False):
@@ -248,7 +250,7 @@ class FletApp:
             )
         self.page.update()
 
-    def _on_tool_use(self, name: str, input_dict: dict):
+    def _on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         preview = ", ".join(
             f"{k}={str(v)[:40]!r}" for k, v in input_dict.items()
         )
@@ -256,16 +258,19 @@ class FletApp:
         if not hasattr(self, '_pending_tool_calls'):
             self._pending_tool_calls = []
         self._pending_tool_calls.append({
-            "name": name, "input_dict": input_dict,
+            "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
         })
 
-    def _on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0):
+    def _on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         color = "#10B981" if not is_error else "#EF4444"
         preview = result[:500].replace("\n", " ")
         # Merge with pending tool call if exists
         pending = getattr(self, '_pending_tool_calls', None) or []
         tc = pending.pop(0) if pending else None
         input_dict = tc["input_dict"] if tc else {}
+        # Use tool_use_id from event if not already from pending dict
+        if not tool_use_id and tc:
+            tool_use_id = tc.get("tool_use_id", "")
         call_detail = "\n".join(
             f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
         )
@@ -306,6 +311,7 @@ class FletApp:
                      "duration_ms": duration_ms},
                     ensure_ascii=False, indent=2),
             },
+            group_key=f"tool:{tool_use_id}" if tool_use_id else None,
         )
 
     def _on_response_done(self, raw: dict):
@@ -372,10 +378,13 @@ class FletApp:
         self.debug_drawer.add_event(
             "[Response]", "\n".join(resp_lines), "#10B981",
             event_data=response_data,
+            group_key=f"asst:{raw.get('id', '')}" if raw.get("id") else None,
         )
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
+        if self.controller:
+            self.debug_drawer.sync_groups(self.controller.agent.messages)
 
     def _on_drawer_toggle(self, is_open: bool):
         if hasattr(self, '_resize_handle'):
@@ -484,14 +493,13 @@ class FletApp:
 
     def _on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
         self.debug_drawer.add_event(
-            "[Remove]",
+            "[SnipCompact]",
             f"Snip removed {groups_removed} groups\n"
             f"tokens: ~{tokens_before} → ~{tokens_after}",
             "#94A3B8",
         )
-        # Gray out entries from removed rounds (rounds 0..groups_removed-1)
         if groups_removed > 0:
-            self.debug_drawer.mark_entries_gray(self.debug_drawer._round_tag - 1)
+            self.debug_drawer.mark_groups_gray(groups_removed - 1)
 
     def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
         self.chat_view.add_tool_label(
@@ -531,8 +539,6 @@ class FletApp:
         if text.strip().lower() == "/compact":
             self._manual_compact()
             return
-
-        self.debug_drawer.advance_round()  # new user round
 
         # /test commands
         if text.strip().lower().startswith("/test"):
@@ -597,6 +603,7 @@ class FletApp:
         self.debug_drawer.add_event(
             "[Request]", "\n".join(msg_lines), "#569cd6",
             event_data=request_data,
+            group_key="user",
         )
         self.page.update()
 
@@ -630,11 +637,11 @@ class FletApp:
             groups = group_by_api_round(agent.messages)
             pre_tok, post_tok, _ = agent.snip_keep_last(1)
             self.debug_drawer.add_event(
-                "[Remove]", f"Direct snip: removed {len(groups) - 1} groups",
+                "[SnipCompact]", f"Direct snip: removed {len(groups) - 1} groups",
                 "#94A3B8",
             )
             if len(groups) > 1:
-                self.debug_drawer.mark_entries_gray(self.debug_drawer._round_tag - 1)
+                self.debug_drawer.mark_groups_gray(len(groups) - 2)
             self.chat_view.add_assistant_message(
                 f"**Snip done**: {len(groups)} → 1 group, {len(agent.messages)} msgs\n"
                 f"tokens: ~{pre_tok} → ~{post_tok}")
