@@ -120,7 +120,7 @@ class DebugDrawer(ft.Container):
         self.update()
 
     def add_event(self, prefix: str, message: str, color: str, event_data: dict = None,
-                  group_key: str = None) -> int:
+                  group_key: str = None, group_idx: int = None) -> int:
         captured_data = event_data
         eid = self._entry_id
         self._entry_id += 1
@@ -148,9 +148,11 @@ class DebugDrawer(ft.Container):
         )
         self._event_log.controls.append(entry)
         self._entry_records.append({
-            "control": entry, "group_key": group_key, "group_idx": None,
+            "control": entry, "group_key": group_key, "group_idx": group_idx,
             "prefix": prefix, "prefix_text": prefix_text,
         })
+        if group_idx is not None:
+            prefix_text.value = f"{prefix} · G{group_idx}"
         if len(self._event_log.controls) > 100:
             self._event_log.controls = self._event_log.controls[-100:]
             self._entry_records = self._entry_records[-100:]

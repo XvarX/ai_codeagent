@@ -75,6 +75,7 @@ class FletApp:
 
         self._current_assistant_bubble: ft.Container | None = None
         self._current_md_text: str = ""
+        self._has_pending_tool_results = False
         self._log_path = self._init_log()
 
         self._build_ui()
@@ -197,6 +198,15 @@ class FletApp:
     def _on_thinking(self):
         if self.controller:
             self.debug_drawer.sync_groups(self.controller.agent.messages)
+        if self._has_pending_tool_results:
+            self._has_pending_tool_results = False
+            recs = self.debug_drawer._entry_records
+            send_gid = recs[-1].get("group_idx") if recs else None
+            self.debug_drawer.add_event(
+                "[Send Tool Result]", "→ LLM  |  回传工具结果",
+                "#8B5CF6",
+                group_idx=send_gid,
+            )
         self.chat_view.show_thinking()
 
     def _on_text_delta(self, token: str, reasoning: bool = False):
@@ -313,6 +323,7 @@ class FletApp:
             },
             group_key=f"tool:{tool_use_id}" if tool_use_id else None,
         )
+        self._has_pending_tool_results = True
 
     def _on_response_done(self, raw: dict):
         # Save text before clearing
@@ -536,6 +547,7 @@ class FletApp:
         return usage
 
     def _on_send(self, text: str):
+        self._has_pending_tool_results = False
         if text.strip().lower() == "/compact":
             self._manual_compact()
             return
