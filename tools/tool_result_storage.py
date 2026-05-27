@@ -20,6 +20,36 @@ MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200_000
 PREVIEW_SIZE_CHARS = 500
 TOOL_RESULTS_DIR = ".myagent/tool_results"
 
+# Test overrides — set to force persistence for testing
+_test_force_single_truncation: bool = False
+_test_force_total_budget: bool = False
+
+
+def set_test_single_truncation(on: bool):
+    global _test_force_single_truncation
+    _test_force_single_truncation = on
+
+
+def set_test_total_budget(on: bool):
+    global _test_force_total_budget
+    _test_force_total_budget = on
+
+
+def get_effective_single_threshold(tool_max_result_chars: int | None) -> int | None:
+    """Resolve effective per-tool threshold, respecting test override."""
+    if tool_max_result_chars is None:
+        return None  # Read: never persist
+    if _test_force_single_truncation:
+        return 0  # Force persistence immediately
+    return min(tool_max_result_chars or DEFAULT_MAX_RESULT_CHARS, DEFAULT_MAX_RESULT_CHARS)
+
+
+def get_effective_total_budget_limit() -> int:
+    """Resolve effective per-message budget, respecting test override."""
+    if _test_force_total_budget:
+        return 0  # Force budget to apply immediately
+    return MAX_TOOL_RESULTS_PER_MESSAGE_CHARS
+
 
 def _get_tool_results_dir(cwd: Path) -> Path:
     d = cwd / TOOL_RESULTS_DIR
@@ -66,7 +96,7 @@ def process_tool_result_block(
     if max_result_chars is None:
         return result_text  # FileRead: never persist
 
-    threshold = min(max_result_chars, DEFAULT_MAX_RESULT_CHARS)
+    threshold = get_effective_single_threshold(max_result_chars)
 
     if len(result_text) <= threshold:
         return result_text
@@ -146,8 +176,10 @@ def apply_tool_result_budget(
     messages: list[Message],
     state: ContentReplacementState,
     cwd: Path,
-    limit: int = MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
+    limit: int | None = None,
 ) -> list[Message]:
+    if limit is None:
+        limit = get_effective_total_budget_limit()
     """Enforce per-message budget on tool result aggregate size.
 
     For each user message with fresh tool_results exceeding the limit,

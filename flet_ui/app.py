@@ -532,6 +532,11 @@ class FletApp:
             self._manual_compact()
             return
 
+        # /test commands
+        if text.strip().lower().startswith("/test"):
+            self._handle_test_command(text.strip())
+            return
+
         self.debug_drawer.advance_round()  # new round — tag all entries this round
 
         if self.controller is None:
@@ -601,6 +606,53 @@ class FletApp:
             f.write("*" * 60 + "\n\n")
 
         self.page.run_task(self.controller.send_message, text)
+
+    def _handle_test_command(self, cmd: str):
+        """Handle /test debug commands."""
+        from tools.tool_result_storage import set_test_single_truncation, set_test_total_budget
+        from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+
+        parts = cmd.split()
+        if len(parts) < 2:
+            self.chat_view.add_assistant_message("**/test** commands:\n"
+                "- `/test directsnip` — snip to last group\n"
+                "- `/test setsingletrshort 1|0` — force per-tool persistence\n"
+                "- `/test settotaltrshort 1|0` — force per-message budget")
+            return
+
+        sub = parts[1].lower()
+
+        if sub == "directsnip":
+            if not self.controller:
+                self.chat_view.add_assistant_message("Controller not initialized")
+                return
+            agent = self.controller.agent
+            groups = group_by_api_round(agent.messages)
+            pre = len(agent.messages)
+            pre_tok = estimate_tokens_with_usage(agent.messages)
+            if len(groups) > 1:
+                last = groups[-1]
+                first_user = next((i for i, m in enumerate(last) if m.role == "user" and not m.is_tool_result), 0)
+                agent.messages = last[first_user:]
+            post_tok = estimate_tokens_with_usage(agent.messages)
+            self.chat_view.add_assistant_message(
+                f"**Snip done**: {pre} → {len(agent.messages)} messages\n"
+                f"tokens: ~{pre_tok} → ~{post_tok}")
+
+        elif sub == "setsingletrshort":
+            val = int(parts[2]) if len(parts) > 2 else 0
+            set_test_single_truncation(bool(val))
+            self.chat_view.add_assistant_message(
+                f"**Per-tool persistence**: {'FORCED (threshold=0)' if val else 'restored ({50_000} chars)'}")
+
+        elif sub == "settotaltrshort":
+            val = int(parts[2]) if len(parts) > 2 else 0
+            set_test_total_budget(bool(val))
+            self.chat_view.add_assistant_message(
+                f"**Per-message budget**: {'FORCED (limit=0)' if val else 'restored ({200_000} chars)'}")
+
+        else:
+            self.chat_view.add_assistant_message(f"Unknown test command: {sub}")
 
     def _clear_history(self):
         if self.controller:
