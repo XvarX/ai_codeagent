@@ -64,6 +64,21 @@ class Agent:
         self._last_actual_tokens = 0
         self._replacement_state = ContentReplacementState()
 
+    def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
+        """Snip: keep only the last keep_groups API-rounds. Returns (before, after, removed)."""
+        from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+        groups = group_by_api_round(self.messages)
+        pre = len(self.messages)
+        pre_tok = estimate_tokens_with_usage(self.messages)
+        if len(groups) > keep_groups:
+            kept = groups[-keep_groups:]
+            # Ensure first message of kept groups is a non-tool-result user message
+            first_group = kept[0]
+            first_user = next((i for i, m in enumerate(first_group) if m.role == "user" and not m.is_tool_result), 0)
+            self.messages = first_group[first_user:] + [m for g in kept[1:] for m in g]
+        post_tok = estimate_tokens_with_usage(self.messages)
+        return pre_tok, post_tok, pre - len(self.messages)
+
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
         self.messages.append(Message(role="user", content=user_message))

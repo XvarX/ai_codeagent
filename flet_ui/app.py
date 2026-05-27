@@ -628,25 +628,15 @@ class FletApp:
                 return
             agent = self.controller.agent
             groups = group_by_api_round(agent.messages)
-            pre = len(agent.messages)
-            pre_tok = estimate_tokens_with_usage(agent.messages)
-            removed = 0
-            if len(groups) > 1:
-                removed = len(groups) - 1
-                last = groups[-1]
-                first_user = next((i for i, m in enumerate(last) if m.role == "user" and not m.is_tool_result), 0)
-                agent.messages = last[first_user:]
-            post_tok = estimate_tokens_with_usage(agent.messages)
-            # Gray out debug entries for removed rounds
+            pre_tok, post_tok, _ = agent.snip_keep_last(1)
             self.debug_drawer.add_event(
-                "[Remove]", f"Snip removed {removed} groups",
+                "[Remove]", f"Direct snip: removed {len(groups) - 1} groups",
                 "#94A3B8",
             )
-            if removed > 0:
-                # Gray all entries from rounds 0..(current-1) — only latest round survives
+            if len(groups) > 1:
                 self.debug_drawer.mark_entries_gray(self.debug_drawer._round_tag - 1)
             self.chat_view.add_assistant_message(
-                f"**Snip done**: {pre} → {len(agent.messages)} messages\n"
+                f"**Snip done**: {len(groups)} → 1 group, {len(agent.messages)} msgs\n"
                 f"tokens: ~{pre_tok} → ~{post_tok}")
 
         elif sub == "setsingletrshort":
