@@ -534,8 +534,6 @@ class FletApp:
 
         self.debug_drawer.advance_round()  # new user round
 
-        self.debug_drawer.advance_round()  # new user round
-
         # /test commands
         if text.strip().lower().startswith("/test"):
             self._handle_test_command(text.strip())
