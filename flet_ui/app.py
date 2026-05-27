@@ -491,7 +491,7 @@ class FletApp:
         )
         # Gray out entries from removed rounds (rounds 0..groups_removed-1)
         if groups_removed > 0:
-            self.debug_drawer.mark_entries_gray(groups_removed * 3)
+            self.debug_drawer.mark_entries_gray(self.debug_drawer._round_tag - 1)
 
     def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
         self.chat_view.add_tool_label(
@@ -531,6 +531,8 @@ class FletApp:
         if text.strip().lower() == "/compact":
             self._manual_compact()
             return
+
+        self.debug_drawer.advance_round()  # new user round
 
         self.debug_drawer.advance_round()  # new user round
 
@@ -634,8 +636,7 @@ class FletApp:
                 "#94A3B8",
             )
             if len(groups) > 1:
-                # Gray out entries from removed groups (~2 per group)
-                self.debug_drawer.mark_entries_gray((len(groups) - 1) * 3)
+                self.debug_drawer.mark_entries_gray(self.debug_drawer._round_tag - 1)
             self.chat_view.add_assistant_message(
                 f"**Snip done**: {len(groups)} → 1 group, {len(agent.messages)} msgs\n"
                 f"tokens: ~{pre_tok} → ~{post_tok}")
