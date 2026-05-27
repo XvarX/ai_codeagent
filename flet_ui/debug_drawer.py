@@ -20,6 +20,7 @@ class DebugDrawer(ft.Container):
         self._max_tokens = max_tokens
         self._round_tag = 0  # current API-round tag for entries
         self._entry_id = 0   # auto-increment entry ID
+        self._entry_rounds: list[tuple[object, int]] = []  # (control, round_tag)
 
         self.width = 36
         self.bgcolor = "#FAFBFC"
@@ -145,11 +146,12 @@ class DebugDrawer(ft.Container):
             padding=ft.Padding.only(left=4, right=4, top=1, bottom=1),
             border_radius=4,
             on_click=on_click if self._on_event_click else None,
-            data={"round": round_tag},
         )
         self._event_log.controls.append(entry)
+        self._entry_rounds.append((entry, round_tag))
         if len(self._event_log.controls) > 100:  # div+entry pairs
             self._event_log.controls = self._event_log.controls[-100:]
+            self._entry_rounds = self._entry_rounds[-100:]
         if self._is_open and self._event_log.page:
             self._event_log.update()
         return eid
@@ -171,14 +173,14 @@ class DebugDrawer(ft.Container):
 
     def mark_entries_gray(self, up_to_round: int):
         """Gray out all entries with round_tag <= up_to_round."""
-        for ctrl in self._event_log.controls:
-            if isinstance(ctrl, ft.Container) and isinstance(ctrl.data, dict):
-                if ctrl.data.get("round", -1) <= up_to_round:
-                    ctrl.opacity = 0.4
+        for ctrl, tag in self._entry_rounds:
+            if tag <= up_to_round:
+                ctrl.opacity = 0.4
         if self._is_open and self._event_log.page:
             self._event_log.update()
 
     def clear(self) -> None:
+        self._entry_rounds.clear()
         self._event_log.controls.clear()
         if self._is_open and self._event_log.page:
             self._event_log.update()
