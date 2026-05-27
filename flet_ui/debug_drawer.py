@@ -176,6 +176,8 @@ class DebugDrawer(ft.Container):
         for ctrl, tag in self._entry_rounds:
             if tag <= up_to_round:
                 ctrl.opacity = 0.4
+                if ctrl.page:
+                    ctrl.update()
         if self._is_open and self._event_log.page:
             self._event_log.update()
 
