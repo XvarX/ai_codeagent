@@ -171,11 +171,10 @@ class DebugDrawer(ft.Container):
         """Increment round tag — call when a new API round starts."""
         self._round_tag += 1
 
-    def mark_entries_gray(self, up_to_round: int):
-        """Gray out all entries with round_tag <= up_to_round."""
-        for ctrl, tag in self._entry_rounds:
-            if tag <= up_to_round:
-                ctrl.opacity = 0.4
+    def mark_entries_gray(self, count: int):
+        """Gray out the oldest `count` entries."""
+        for ctrl, _ in self._entry_rounds[:count]:
+            ctrl.opacity = 0.4
         if self._is_open and self._event_log.page:
             self._event_log.update()
 
