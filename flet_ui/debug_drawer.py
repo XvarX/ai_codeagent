@@ -282,7 +282,16 @@ class DebugDrawer(ft.Container):
             pass
 
     def clear(self) -> None:
-        self._entry_records.clear()
-        self._event_log.controls.clear()
+        # Keep system entries (prefix "System")
+        keep_idx = [i for i, rec in enumerate(self._entry_records)
+                    if rec.get("prefix") == "System"]
+        new_records = [self._entry_records[i] for i in keep_idx]
+        new_controls = []
+        for i, rec in enumerate(new_records):
+            if i > 0:
+                new_controls.append(ft.Divider(height=1, color="#E8EAF0"))
+            new_controls.append(rec["control"])
+        self._entry_records = new_records
+        self._event_log.controls = new_controls
         if self._is_open and self._event_log.page:
             self._event_log.update()

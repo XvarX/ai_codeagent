@@ -150,7 +150,6 @@ class AgentController:
         self.config = new_config
         self.provider = _build_provider(new_config)
         self.agent.provider = self.provider
-        self.agent.messages.clear()
 
     def estimate_usage(self) -> dict:
         return {

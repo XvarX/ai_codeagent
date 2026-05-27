@@ -111,3 +111,7 @@ class ChatView(ft.ListView):
     def clear(self) -> None:
         self._thinking_row = None
         self.controls.clear()
+        try:
+            self.update()
+        except RuntimeError:
+            pass

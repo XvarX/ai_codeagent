@@ -386,8 +386,10 @@ class FletApp:
             "formatted": "\n".join(resp_lines),
             "text": final_text,
         }
+        prefix = "[Final Response]" if not tool_blocks else "[Response]"
+        color = "#059669" if not tool_blocks else "#10B981"
         self.debug_drawer.add_event(
-            "[Response]", "\n".join(resp_lines), "#10B981",
+            prefix, "\n".join(resp_lines), color,
             event_data=response_data,
             group_key=f"asst:{raw.get('id', '')}" if raw.get("id") else None,
         )
@@ -691,8 +693,6 @@ class FletApp:
                 self._init_error = None
             except Exception as e:
                 self._init_error = str(e)
-        self.chat_view.clear()
-        self.debug_drawer.clear()
         if self.controller:
             self.debug_drawer.add_event(
                 "System",
