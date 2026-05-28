@@ -61,7 +61,7 @@ class DebugDrawer(ft.Container):
                           on_click=self._toggle),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-        compact_btn = ft.TextButton(
+        self._compact_btn = ft.TextButton(
             content=ft.Text("Compact", size=10, color="#64748B"),
             style=ft.ButtonStyle(
                 padding=ft.Padding.symmetric(horizontal=10, vertical=4),
@@ -96,9 +96,17 @@ class DebugDrawer(ft.Container):
                 border=ft.Border.all(1, "#EEF0F4"),
             ),
             ft.Container(height=8),
-            ft.Row([compact_btn, clear_btn],
+            ft.Row([self._compact_btn, clear_btn],
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=0)
+
+    def set_compacting(self, busy: bool):
+        self._compact_btn.disabled = busy
+        self._compact_btn.content.color = "#A5B4FC" if busy else "#64748B"
+        try:
+            self._compact_btn.update()
+        except RuntimeError:
+            pass
 
     def _toggle(self, e=None):
         if self._is_open:
@@ -184,6 +192,7 @@ class DebugDrawer(ft.Container):
         # Build lookup: message identity → renumbered group index
         asst_id_to_gi: dict[str, int] = {}
         tool_id_to_gi: dict[str, int] = {}
+        compact_groups: list[int] = []
         user_msg_groups: list[int] = []
 
         for gi, group in enumerate(groups):
@@ -193,7 +202,11 @@ class DebugDrawer(ft.Container):
                 elif msg.role == "user" and msg.tool_use_id:
                     tool_id_to_gi[msg.tool_use_id] = gi
                 elif msg.role == "user" and not msg.is_tool_result and not msg.tool_use_id:
-                    user_msg_groups.append(gi)
+                    content = msg.content or ""
+                    if content.startswith("[Context compressed"):
+                        compact_groups.append(gi)
+                    else:
+                        user_msg_groups.append(gi)
 
         # Build persistent group ID map: renumbered gi → persistent gid
         persistent: dict[int, int] = {}
@@ -207,6 +220,8 @@ class DebugDrawer(ft.Container):
                 gi = asst_id_to_gi.get(key[5:])
             elif key.startswith("tool:"):
                 gi = tool_id_to_gi.get(key[5:])
+            elif key == "compact":
+                gi = None  # compact entries don't pre-populate persistent
             if gi is not None:
                 persistent[gi] = gid
 
@@ -218,6 +233,10 @@ class DebugDrawer(ft.Container):
         next_gid = max_persistent + 1
 
         # Count already-assigned (non-grayed) "user" entries to skip
+        compact_idx = sum(1 for rec in self._entry_records
+                         if rec.get("group_key") == "compact"
+                         and rec["group_idx"] is not None
+                         and rec["control"].opacity >= 1.0)
         user_idx = sum(1 for rec in self._entry_records
                       if rec.get("group_key") == "user"
                       and rec["group_idx"] is not None
@@ -234,6 +253,10 @@ class DebugDrawer(ft.Container):
                 if user_idx < len(user_msg_groups):
                     gi = user_msg_groups[user_idx]
                     user_idx += 1
+            elif key == "compact":
+                if compact_idx < len(compact_groups):
+                    gi = compact_groups[compact_idx]
+                    compact_idx += 1
             elif key.startswith("asst:"):
                 gi = asst_id_to_gi.get(key[5:])
             elif key.startswith("tool:"):
@@ -260,15 +283,15 @@ class DebugDrawer(ft.Container):
             except RuntimeError:
                 pass
 
-    def mark_groups_gray(self, max_group: int):
-        """Gray out entries with group_idx <= max_group (inclusive)."""
+    def mark_groups_gray(self, max_group: int, tag: str = "[Remove]"):
+        """Gray out entries with group_idx <= max_group (inclusive), prepending tag."""
         for rec in self._entry_records:
             gi = rec.get("group_idx")
             if gi is not None and gi <= max_group:
                 rec["control"].opacity = 0.4
                 cur = rec["prefix_text"].value or ""
-                if not cur.startswith("[Remove]"):
-                    rec["prefix_text"].value = f"[Remove] {cur}"
+                if not cur.startswith(tag):
+                    rec["prefix_text"].value = f"{tag} {cur}"
                 try:
                     if rec["control"].page:
                         rec["control"].update()
@@ -278,6 +301,80 @@ class DebugDrawer(ft.Container):
         try:
             if self._is_open and self._event_log.page:
                 self._event_log.update()
+        except RuntimeError:
+            pass
+
+    def detect_compacted(self, messages: list):
+        """Gray entries whose messages were removed by compaction."""
+        from compact.grouping import group_by_api_round
+
+        groups = group_by_api_round(messages)
+        asst_ids = set()
+        tool_ids = set()
+        for _gi, g in enumerate(groups):
+            for msg in g:
+                if msg.role == "assistant" and msg.id:
+                    asst_ids.add(msg.id)
+                elif msg.role == "user" and msg.tool_use_id:
+                    tool_ids.add(msg.tool_use_id)
+
+        # Phase 1: gray asst/tool entries whose IDs are gone
+        for rec in self._entry_records:
+            if rec["control"].opacity < 1.0 or rec["group_idx"] is None:
+                continue
+            key = rec.get("group_key") or ""
+            removed = False
+            if key.startswith("asst:"):
+                removed = key[5:] not in asst_ids
+            elif key.startswith("tool:"):
+                removed = key[5:] not in tool_ids
+            if removed:
+                self._gray_with_tag(rec, "[Compacted]")
+
+        # Phase 2: cascade to user entries — gray if next non-compact entry is grayed
+        records = self._entry_records
+        for i, rec in enumerate(records):
+            if rec.get("group_key") != "user" or rec["control"].opacity < 1.0:
+                continue
+            cascade = False
+            for j in range(i + 1, len(records)):
+                nk = records[j].get("group_key") or ""
+                if nk in (None, "", "compact"):
+                    continue  # skip meta/compact entries
+                if records[j]["control"].opacity < 1.0:
+                    cascade = True
+                break
+            if cascade:
+                self._gray_with_tag(rec, "[Compacted]")
+
+        # Phase 3: cascade to meta entries (e.g. [Send Tool Result])
+        # that follow a now-grayed entry in sequence
+        for i in range(1, len(self._entry_records)):
+            rec = self._entry_records[i]
+            if (rec.get("group_key") or "") != "":
+                continue  # not a meta entry
+            if rec["control"].opacity < 1.0:
+                continue  # already grayed
+            prev = self._entry_records[i - 1]
+            if prev["control"].opacity < 1.0:
+                self._gray_with_tag(rec, "[Compacted]")
+
+        try:
+            if self._is_open and self._event_log.page:
+                self._event_log.update()
+        except RuntimeError:
+            pass
+
+    def _gray_with_tag(self, rec: dict, tag: str):
+        """Gray a single entry and prepend tag to its prefix."""
+        rec["control"].opacity = 0.4
+        cur = rec["prefix_text"].value or ""
+        if tag not in cur:
+            rec["prefix_text"].value = f"{tag} {cur}"
+        try:
+            rec["prefix_text"].update()
+            if rec["control"].page:
+                rec["control"].update()
         except RuntimeError:
             pass
 

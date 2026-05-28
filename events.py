@@ -53,11 +53,19 @@ class ErrorEvent:
 
 
 @dataclass
+class CompactCallEvent:
+    """准备发起压缩请求"""
+    old_msg_count: int
+    pre_tokens: int
+
+
+@dataclass
 class CompactEvent:
     """上下文压缩完成"""
     pre_tokens: int
     post_tokens: int
     trigger: str = ""
+    summary: str = ""
 
 
 @dataclass

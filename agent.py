@@ -105,7 +105,9 @@ class Agent:
                 reserved_output=self.reserved_output,
             ):
                 from compact.compact import compact_conversation
+                from events import CompactCallEvent
                 pre_tokens = self.est_tokens()
+                pre_count = len(self.messages)
                 try:
                     result = await compact_conversation(
                         self.provider, self.messages,
@@ -298,7 +300,13 @@ class Agent:
                 reserved_output=self.reserved_output,
             ):
                 from compact.compact import compact_conversation
+                from events import CompactCallEvent
                 pre_tokens = self.est_tokens()
+                pre_count = len(self.messages)
+                yield CompactCallEvent(
+                    old_msg_count=pre_count,
+                    pre_tokens=pre_tokens,
+                )
                 try:
                     result = await compact_conversation(
                         self.provider, self.messages,
@@ -313,9 +321,14 @@ class Agent:
                         pre_tokens=pre_tokens,
                         post_tokens=result.post_tokens,
                         trigger=f"auto (#{self._compact_count})",
+                        summary=result.summary_text,
                     )
                 except Exception:
-                    pass
+                    yield CompactEvent(
+                        pre_tokens=pre_tokens,
+                        post_tokens=pre_tokens,
+                        trigger=f"auto (#{self._compact_count}) — failed",
+                    )
 
             # Layer 2: Per-message tool result budget before LLM call
             self.messages = apply_tool_result_budget(

@@ -15,7 +15,7 @@ from providers.openai_compat import OpenAICompatProvider
 from agent import Agent
 from events import (
     ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
-    ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
+    ResponseDoneEvent, DoneEvent, ErrorEvent, CompactCallEvent, CompactEvent, SnipEvent,
 )
 
 
@@ -67,7 +67,8 @@ class EventHandler:
     async def on_response_done(self, raw: dict): pass
     async def on_done(self, final_text: str): pass
     async def on_error(self, message: str): pass
-    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str): pass
+    async def on_compact_call(self, old_msg_count: int, pre_tokens: int): pass
+    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""): pass
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int): pass
 
 
@@ -121,9 +122,12 @@ class AgentController:
                     await self.handler.on_done(event.final_text)
                 elif isinstance(event, ErrorEvent):
                     await self.handler.on_error(event.message)
+                elif isinstance(event, CompactCallEvent):
+                    await self.handler.on_compact_call(
+                        event.old_msg_count, event.pre_tokens)
                 elif isinstance(event, CompactEvent):
                     await self.handler.on_compact(
-                        event.pre_tokens, event.post_tokens, event.trigger)
+                        event.pre_tokens, event.post_tokens, event.trigger, event.summary)
                 elif isinstance(event, SnipEvent):
                     await self.handler.on_snip(
                         event.groups_removed, event.tokens_before, event.tokens_after)

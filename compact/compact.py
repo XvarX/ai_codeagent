@@ -22,11 +22,13 @@ class CompactionResult:
         messages_to_keep: list[Message],
         pre_tokens: int,
         post_tokens: int,
+        summary_text: str = "",
     ):
         self.summary_messages = summary_messages  # boundary marker + summary
         self.messages_to_keep = messages_to_keep  # recent messages kept verbatim
         self.pre_tokens = pre_tokens
         self.post_tokens = post_tokens
+        self.summary_text = summary_text
 
 
 # Max output tokens for the compaction LLM call
@@ -130,6 +132,7 @@ async def compact_conversation(
         messages_to_keep=recent_messages,
         pre_tokens=pre_tokens,
         post_tokens=post_tokens,
+        summary_text=summary_text,
     )
 
 

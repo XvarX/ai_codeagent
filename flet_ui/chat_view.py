@@ -14,6 +14,12 @@ class ChatView(ft.ListView):
         self.auto_scroll = True
         self._thinking_row: ft.Row | None = None
 
+    def _try_update(self):
+        try:
+            self.update()
+        except RuntimeError:
+            pass
+
     def add_user_message(self, text: str) -> None:
         bubble = ft.Container(
             content=ft.Text(text, size=13, color="#1E1B3A", selectable=True),
@@ -27,6 +33,7 @@ class ChatView(ft.ListView):
         )
         row = ft.Row([bubble], alignment=ft.MainAxisAlignment.END)
         self.controls.append(row)
+        self._try_update()
 
     def add_assistant_message(self, markdown_text: str) -> None:
         avatar = ft.Container(
@@ -66,6 +73,7 @@ class ChatView(ft.ListView):
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
         self.controls.append(row)
+        self._try_update()
 
     def add_tool_label(self, name: str, preview: str) -> None:
         label = ft.Container(
@@ -80,6 +88,7 @@ class ChatView(ft.ListView):
         )
         row = ft.Row([label], alignment=ft.MainAxisAlignment.START)
         self.controls.append(row)
+        self._try_update()
 
     def show_thinking(self) -> None:
         if self._thinking_row is not None:
@@ -101,6 +110,7 @@ class ChatView(ft.ListView):
             alignment=ft.MainAxisAlignment.START,
         )
         self.controls.append(self._thinking_row)
+        self._try_update()
 
     def hide_thinking(self) -> None:
         if self._thinking_row is not None:
@@ -111,7 +121,4 @@ class ChatView(ft.ListView):
     def clear(self) -> None:
         self._thinking_row = None
         self.controls.clear()
-        try:
-            self.update()
-        except RuntimeError:
-            pass
+        self._try_update()

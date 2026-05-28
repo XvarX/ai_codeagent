@@ -41,8 +41,11 @@ class _FletEventHandler(EventHandler):
     async def on_error(self, message: str):
         self.app._on_error(message)
 
-    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
-        self.app._on_compact(pre_tokens, post_tokens, trigger)
+    async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
+        self.app._on_compact_call(old_msg_count, pre_tokens)
+
+    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
+        self.app._on_compact(pre_tokens, post_tokens, trigger, summary)
 
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
         self.app._on_snip(groups_removed, tokens_before, tokens_after)
@@ -76,6 +79,9 @@ class FletApp:
         self._current_assistant_bubble: ft.Container | None = None
         self._current_md_text: str = ""
         self._has_pending_tool_results = False
+        self._pending_compact = False
+        self._in_round = False
+        self._compacting = False
         self._log_path = self._init_log()
 
         self._build_ui()
@@ -198,6 +204,18 @@ class FletApp:
     def _on_thinking(self):
         if self.controller:
             self.debug_drawer.sync_groups(self.controller.agent.messages)
+        if self._pending_compact:
+            self._pending_compact = False
+            # Backfill [Compact Call] with [Compact]'s group_idx
+            for rec in self.debug_drawer._entry_records:
+                if rec.get("prefix") == "[Compact]" and rec["group_idx"] is not None:
+                    for prev in self.debug_drawer._entry_records:
+                        if prev.get("prefix") == "[Compact Call]" and prev["group_idx"] is None:
+                            prev["group_idx"] = rec["group_idx"]
+                            prev["prefix_text"].value = f"[Compact Call] · G{rec['group_idx']}"
+                            break
+                    break
+            self.debug_drawer.detect_compacted(self.controller.agent.messages)
         if self._has_pending_tool_results:
             self._has_pending_tool_results = False
             recs = self.debug_drawer._entry_records
@@ -345,7 +363,7 @@ class FletApp:
 
         req = raw.get("_request", {})
         resp = {k: v for k, v in raw.items()
-                if k not in ("_request", "_tool_use_blocks")}
+                if k not in ("_request",)}
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("=" * 40 + " TURN " + "=" * 40 + "\n")
             f.write("── API Request ──\n")
@@ -359,7 +377,8 @@ class FletApp:
         prompt_tokens = norm_usage.get("prompt_tokens", "?")
         completion_tokens = norm_usage.get("completion_tokens", "?")
         total_tokens = norm_usage.get("total_tokens", "?")
-        cache_read = norm_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+        pt_details = norm_usage.get("prompt_tokens_details") or {}
+        cache_read = pt_details.get("cached_tokens", 0) if isinstance(pt_details, dict) else 0
 
         # Inject full request into the corresponding Request entry's event_data
         if hasattr(self, '_pending_request_data') and self._pending_request_data:
@@ -378,7 +397,7 @@ class FletApp:
             resp_lines.append(f"Text: {text_preview}")
         # Store full response data for detail dialog (strip _request, only keep response part)
         resp_only = {k: v for k, v in raw.items()
-                     if k not in ("_request", "_tool_use_blocks")}
+                     if k not in ("_request",)}
         response_data = {
             "type": "Response",
             "model": model,
@@ -396,6 +415,7 @@ class FletApp:
     def _on_done(self, final_text: str):
         self.chat_view.hide_thinking()
         self.input_bar.set_busy(False)
+        self._in_round = False
         if self.controller:
             self.debug_drawer.sync_groups(self.controller.agent.messages)
 
@@ -514,14 +534,38 @@ class FletApp:
         if groups_removed > 0:
             self.debug_drawer.mark_groups_gray(groups_removed - 1)
 
-    def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str):
+    def _on_compact_call(self, old_msg_count: int, pre_tokens: int):
+        self._compacting = True
+        self.debug_drawer.set_compacting(True)
+        self.input_bar.set_compacting(True)
+        self.debug_drawer.add_event(
+            "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
+            "#F59E0B",
+        )
+
+    def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
+        self._compacting = False
+        self.debug_drawer.set_compacting(False)
+        self.input_bar.set_compacting(False)
         self.chat_view.add_tool_label(
             "Compact", f"~{pre_tokens} -> ~{post_tokens} tokens ({trigger})",
         )
+        info = f"Trigger: {trigger}\nTokens: ~{pre_tokens} -> ~{post_tokens}"
+        if summary:
+            info += f"\n---\n{summary[:800]}"
+        self._pending_compact = True
         self.debug_drawer.add_event(
-            "[Compact]",
-            f"Trigger: {trigger}\nTokens: ~{pre_tokens} -> ~{post_tokens}",
+            "[Compact]", info,
             "#F59E0B",
+            event_data={
+                "type": "Compact",
+                "formatted": info,
+                "raw_json": json.dumps(
+                    {"trigger": trigger, "pre_tokens": pre_tokens,
+                     "post_tokens": post_tokens, "summary": summary[:2000] if summary else ""},
+                    ensure_ascii=False, indent=2),
+            },
+            group_key="compact",
         )
         self.debug_drawer.update_context_usage(
             {"prompt_tokens": post_tokens, "total_tokens": post_tokens},
@@ -550,6 +594,10 @@ class FletApp:
 
     def _on_send(self, text: str):
         self._has_pending_tool_results = False
+        if self._compacting:
+            self.chat_view.add_assistant_message("**压缩中，请稍候...**")
+            return
+        self._in_round = True
         if text.strip().lower() == "/compact":
             self._manual_compact()
             return
@@ -707,6 +755,12 @@ class FletApp:
             )
 
     def _manual_compact(self):
+        if self._compacting:
+            self.chat_view.add_assistant_message("**正在压缩中，请稍候...**")
+            return
+        if self._in_round:
+            self.chat_view.add_assistant_message("**本轮对话尚未结束，请等待 Final Response 后再压缩**")
+            return
         if self.controller:
             self.page.run_task(self._do_compact)
 
@@ -715,6 +769,8 @@ class FletApp:
         from compact.grouping import estimate_tokens
 
         pre = estimate_tokens(self.controller.agent.messages)
+        await self.handler.on_compact_call(
+            len(self.controller.agent.messages), pre)
         try:
             result = await compact_conversation(
                 self.controller.agent.provider,
@@ -732,7 +788,21 @@ class FletApp:
                 await self.handler.on_compact(
                     pre, result.post_tokens,
                     f"manual (#{self.controller.agent._compact_count})",
+                    summary=result.summary_text,
                 )
+                # Sync and gray immediately for manual compact
+                self.debug_drawer.sync_groups(self.controller.agent.messages)
+                # Backfill [Compact Call] with same group as [Compact]
+                for rec in self.debug_drawer._entry_records:
+                    if rec.get("prefix") == "[Compact]" and rec["group_idx"] is not None:
+                        for prev in self.debug_drawer._entry_records:
+                            if prev.get("prefix") == "[Compact Call]" and prev["group_idx"] is None:
+                                prev["group_idx"] = rec["group_idx"]
+                                prev["prefix_text"].value = f"[Compact Call] · G{rec['group_idx']}"
+                                break
+                        break
+                self.debug_drawer.detect_compacted(self.controller.agent.messages)
+                self._pending_compact = False  # handled inline
             else:
                 await self.handler.on_compact(pre, pre, "skipped (not enough messages)")
         except Exception as e:

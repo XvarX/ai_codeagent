@@ -78,3 +78,15 @@ class InputBar(ft.Container):
         self._send_button.bgcolor = "#A5B4FC" if busy else "#6366F1"
         if self._send_button.page:
             self._send_button.update()
+
+    def set_compacting(self, busy: bool):
+        self._send_button.disabled = busy
+        self._send_button.bgcolor = "#A5B4FC" if busy else "#6366F1"
+        self._text_field.disabled = busy
+        self._text_field.hint_text = "Compacting..." if busy else "输入消息... (Ctrl+Enter 发送)"
+        try:
+            if self._send_button.page:
+                self._send_button.update()
+                self._text_field.update()
+        except RuntimeError:
+            pass
