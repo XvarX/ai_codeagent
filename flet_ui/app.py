@@ -8,7 +8,7 @@ import flet as ft
 
 from config import AgentConfig
 from controller import AgentController, EventHandler
-from flet_ui.chat_view import ChatView
+from flet_ui.chat_view import ChatView, flatten_headings
 from flet_ui.input_bar import InputBar
 from flet_ui.debug_drawer import DebugDrawer
 from flet_ui.config_dialog import show_config_dialog
@@ -250,7 +250,7 @@ class FletApp:
             )
             self._current_assistant_bubble = ft.Container(
                 content=ft.Markdown(
-                    self._current_md_text,
+                    flatten_headings(self._current_md_text),
                     selectable=True,
                     extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                     code_theme="atom-one-light",
@@ -271,7 +271,7 @@ class FletApp:
             self.chat_view.controls.append(row)
         else:
             self._current_assistant_bubble.content = ft.Markdown(
-                self._current_md_text,
+                flatten_headings(self._current_md_text),
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
@@ -348,7 +348,7 @@ class FletApp:
         final_text = self._current_md_text
         if self._current_assistant_bubble is not None:
             self._current_assistant_bubble.content = ft.Markdown(
-                final_text,
+                flatten_headings(final_text),
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",

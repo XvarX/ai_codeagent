@@ -1,6 +1,27 @@
 """Chat bubble list with Markdown rendering."""
 
+import re
 import flet as ft
+
+
+def flatten_headings(text: str) -> str:
+    """Convert # headings to bold text, preserving fenced code blocks."""
+    lines = text.split("\n")
+    result = []
+    in_fence = False
+    for line in lines:
+        if line.startswith("```"):
+            in_fence = not in_fence
+            result.append(line)
+        elif not in_fence:
+            m = re.match(r"^(#{1,6})\s+(.+)", line)
+            if m:
+                result.append(f"**{m.group(2)}**")
+            else:
+                result.append(line)
+        else:
+            result.append(line)
+    return "\n".join(result)
 
 
 class ChatView(ft.ListView):
@@ -53,7 +74,7 @@ class ChatView(ft.ListView):
         )
         bubble = ft.Container(
             content=ft.Markdown(
-                markdown_text,
+                flatten_headings(markdown_text),
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
