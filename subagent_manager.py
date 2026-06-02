@@ -86,16 +86,16 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
 class _SubagentHandler(EventHandler):
     """EventHandler that captures subagent events and optionally forwards to app pipeline.
 
-    Always stores events in SubagentState.debug_events for replay on switch.
-    When wired (on_activate set), forwards events to the app's _on_* methods
-    so the chat view and debug drawer update identically to the master agent.
+    When forwarding IS wired (active agent): events go through app._on_* methods
+    which write to debug drawer and chat view identically to master.
+    When forwarding is NOT wired (inactive): events are stored in debug_events
+    for replay when the user switches to this agent.
     """
 
     def __init__(self, manager: "SubagentManager", agent_id: str):
         super().__init__()
         self.manager = manager
         self.agent_id = agent_id
-        # Callbacks set by app when this agent is the active one
         self._fwd_thinking: callable | None = None
         self._fwd_text_delta: callable | None = None
         self._fwd_tool_use: callable | None = None
@@ -104,9 +104,15 @@ class _SubagentHandler(EventHandler):
         self._fwd_done: callable | None = None
         self._fwd_error: callable | None = None
 
+    @property
+    def _is_forwarding(self):
+        return self._fwd_tool_use is not None
+
     def _record(self, prefix: str, message: str, color: str = "#94A3B8",
                 event_data: dict | None = None):
-        """Always store event for replay when switching back to this agent."""
+        """Store event for later replay (only when NOT forwarding to app)."""
+        if self._is_forwarding:
+            return  # app._on_* methods already write to debug drawer
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.debug_events.append({
