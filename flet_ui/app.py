@@ -954,16 +954,23 @@ class FletApp:
 
         # ── Load target agent's debug state ──
         target_snapshot = self._debug_snapshots.get(agent_id)
+        if not hasattr(self, '_replay_idx'):
+            self._replay_idx = {}
+        last_idx = self._replay_idx.get(agent_id, 0)
+
         if target_snapshot is not None:
             self.debug_drawer.load_snapshot(target_snapshot)
         else:
             self.debug_drawer.load_snapshot(None)
-            if state.debug_events:
-                for evt in state.debug_events:
-                    self.debug_drawer.add_event(
-                        evt["prefix"], evt["message"], evt["color"],
-                        evt.get("event_data"),
-                        group_key=evt.get("group_key"))
+
+        # Replay new debug_events added since last view
+        if state.debug_events:
+            for evt in state.debug_events[last_idx:]:
+                self.debug_drawer.add_event(
+                    evt["prefix"], evt["message"], evt["color"],
+                    evt.get("event_data"),
+                    group_key=evt.get("group_key"))
+            self._replay_idx[agent_id] = len(state.debug_events)
 
         # ── Rebuild chat view ──
         self.chat_view.clear()
