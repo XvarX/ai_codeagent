@@ -156,6 +156,8 @@ class SubagentManager:
 
     async def _inbox_poller(self):
         """Poll inboxes every 1s, deliver messages when agent is idle."""
+        import sys
+        print("[InboxPoller] started", file=sys.stderr, flush=True)
         while True:
             await asyncio.sleep(1)
             for agent_id, state in list(self.agents.items()):
@@ -164,7 +166,6 @@ class SubagentManager:
                         continue
                     if state.controller.agent._loop_running:
                         continue
-                    # Drain pending messages
                     pending = []
                     while not state.inbox.empty():
                         try:
@@ -175,7 +176,7 @@ class SubagentManager:
                             break
                     if not pending:
                         continue
-                    # Format and deliver
+                    print(f"[InboxPoller] {len(pending)} msg(s) → {agent_id}", file=sys.stderr, flush=True)
                     formatted = "\n\n".join(
                         f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
                         for p in pending
@@ -185,7 +186,7 @@ class SubagentManager:
                     )
                 except Exception:
                     import traceback
-                    traceback.print_exc()
+                    print(f"[InboxPoller] error: {traceback.format_exc()}", file=sys.stderr, flush=True)
 
     def _create_master(self):
         """Create the master agent controller."""
@@ -211,6 +212,16 @@ class SubagentManager:
         import time
         agent_id = f"{definition.name.lower()}-{int(time.time() * 1000)}"
 
+        # Create state first so we can wire inbox
+        state = SubagentState(
+            id=agent_id,
+            name=name or definition.name,
+            definition=definition,
+            controller=None,  # wired below
+            inbox=asyncio.Queue(),
+            status="running" if background else "pending",
+        )
+
         provider = _build_provider_for_agent(self.config, definition)
         registry, skills_text = _build_tool_registry_for_agent(self.config, definition)
 
@@ -223,20 +234,14 @@ class SubagentManager:
         controller.agent.skills_text = skills_text
         controller.agent.inbox = state.inbox
 
+        # Wire controller back to state
+        state.controller = controller
+        self.agents[agent_id] = state
+
         # Register SendMessage tool on this agent
         from tools.send_message_tool import SendMessageTool
         send_tool = SendMessageTool(self, agent_id)
         controller.registry.register(send_tool)
-
-        state = SubagentState(
-            id=agent_id,
-            name=name or definition.name,
-            definition=definition,
-            controller=controller,
-            inbox=asyncio.Queue(),
-            status="running" if background else "pending",
-        )
-        self.agents[agent_id] = state
 
         if background:
             state.background_task = asyncio.create_task(
@@ -266,7 +271,9 @@ class SubagentManager:
 
     async def _run_background(self, agent_id: str, prompt: str):
         """Run a subagent in the background."""
+        import sys
         state = self.agents[agent_id]
+        print(f"[SubagentMgr] {agent_id} background starting", file=sys.stderr, flush=True)
         try:
             state.status = "running"
             await state.controller.send_message(prompt)
@@ -276,21 +283,23 @@ class SubagentManager:
             ]
             state.result = "\n".join(assistant_msgs) if assistant_msgs else "(no response)"
             state.status = "completed"
+            print(f"[SubagentMgr] {agent_id} done: {state.result[:80]}", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             state.status = "killed"
+            print(f"[SubagentMgr] {agent_id} killed", file=sys.stderr, flush=True)
         except Exception as e:
             state.error = str(e)
             state.status = "failed"
+            import traceback
+            print(f"[SubagentMgr] {agent_id} FAILED: {e}\n{traceback.format_exc()}", file=sys.stderr, flush=True)
         finally:
             state.background_task = None
             self._update_est_tokens(agent_id)
-            # Notify master handler so UI can refresh
             try:
                 await self.master_handler.on_subagent_done(
                     agent_id, state.status, state.result)
             except Exception:
                 pass
-            # Fire on_change callback if set
             if self.on_change:
                 try:
                     self.on_change()
