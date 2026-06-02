@@ -14,6 +14,9 @@ from flet_ui.debug_drawer import DebugDrawer
 from flet_ui.config_dialog import show_config_dialog
 from flet_ui.mcp_dialog import show_mcp_dialog
 from flet_ui.skill_dialog import show_skill_dialog
+from flet_ui.agent_sidebar import AgentSidebar
+from subagent_manager import SubagentManager
+from agent_definitions import load_user_agents
 
 
 class _FletEventHandler(EventHandler):
@@ -52,6 +55,9 @@ class _FletEventHandler(EventHandler):
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
         self.app._on_snip(groups_removed, tokens_before, tokens_after)
 
+    async def on_subagent_done(self, agent_id: str, status: str, result: str):
+        self.app._on_subagent_done(agent_id, status, result)
+
 
 class FletApp:
     """Main Flet application controller."""
@@ -62,8 +68,12 @@ class FletApp:
 
         self.handler = _FletEventHandler(self)
         self._init_error: str | None = None
+
+        # ── Subagent support ──
+        self.user_agents = load_user_agents(config.cwd)
         try:
-            self.controller = AgentController(config, self.handler)
+            self.subagent_manager = SubagentManager(config, self.handler, self.user_agents)
+            self.controller = self.subagent_manager.agents["master"].controller
         except Exception as e:
             self.controller = None
             self._init_error = str(e)
@@ -78,6 +88,25 @@ class FletApp:
         )
         self.input_bar = InputBar(on_send=self._on_send)
         self._mcp_ready = False
+
+        # ── Agent sidebar ──
+        self.agent_sidebar = AgentSidebar(
+            self.subagent_manager,
+            on_switch=self._on_agent_switch,
+        )
+
+        # ── Register Agent + SendMessage tools on master ──
+        if self.controller:
+            try:
+                from tools.agent_tool import AgentTool
+                self.controller.registry.register(AgentTool(self.subagent_manager, self.user_agents))
+            except Exception:
+                pass
+            try:
+                from tools.send_message_tool import SendMessageTool
+                self.controller.registry.register(SendMessageTool(self.subagent_manager, "master"))
+            except Exception:
+                pass
 
         self._current_assistant_bubble: ft.Container | None = None
         self._current_md_text: str = ""
@@ -225,7 +254,14 @@ class FletApp:
             spacing=0,
             expand=True,
         )
-        self.page.add(layout)
+
+        # Wrap with agent sidebar
+        full_layout = ft.Row([
+            self.agent_sidebar,
+            ft.VerticalDivider(width=1, color="#E2E6EC"),
+            layout,
+        ], spacing=0, expand=True)
+        self.page.add(full_layout)
 
         self.page.on_keyboard_event = self._on_keyboard
 
@@ -859,6 +895,35 @@ class FletApp:
                 await self.handler.on_compact(pre, pre, "skipped (not enough messages)")
         except Exception as e:
             await self.handler.on_compact(pre, pre, f"failed: {e}")
+
+    def _on_agent_switch(self, agent_id: str):
+        """Handle agent switch from sidebar."""
+        state = self.subagent_manager.agents.get(agent_id)
+        if not state:
+            return
+        self.controller = state.controller
+        self.chat_view.clear()
+        for msg in state.controller.agent.messages:
+            if msg.role == "user" and not msg.is_tool_result:
+                self.chat_view.add_user_message(msg.content)
+            elif msg.role == "user" and msg.is_tool_result:
+                self.chat_view.add_tool_label("Tool Result", msg.content[:200])
+            elif msg.role == "assistant" and msg.content:
+                self.chat_view.add_assistant_message(flatten_headings(msg.content))
+        self.page.update()
+
+    def _on_subagent_done(self, agent_id: str, status: str, result: str):
+        """Background subagent completed — update UI."""
+        state = self.subagent_manager.agents.get(agent_id)
+        name = state.name if state else agent_id
+        icon = "✓" if status == "completed" else "✗"
+        color = "#22C55E" if status == "completed" else "#EF4444"
+        self.chat_view.add_tool_label(
+            f"[Agent] {name} {icon}",
+            result[:300] if result else status,
+        )
+        self.agent_sidebar.refresh()
+        self.chat_view._try_update()
 
     def _on_keyboard(self, e: ft.KeyboardEvent):
         if e.ctrl and e.key == "Enter":
