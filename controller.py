@@ -170,32 +170,23 @@ class AgentController:
             self.registry.register(tool)
         self._mcp_connected = True
 
+    @property
+    def mcp_manager(self):
+        return self._mcp_manager
+
     def get_mcp_info(self) -> dict | None:
         """Return MCP server info for UI display, or None if no servers."""
         if not self._mcp_manager:
             return None
-        servers = []
-        for task in self._mcp_manager._tasks:
-            # We don't have per-server state tracking, skip for now
-            pass
-        # Build from tools
-        tools = self._mcp_manager.get_tools()
-        if not tools:
+        statuses = self._mcp_manager.get_all_statuses()
+        if not statuses:
             return None
-        by_server: dict[str, list[dict]] = {}
-        for tool in tools:
-            server = tool._server_name
-            if server not in by_server:
-                by_server[server] = []
-            by_server[server].append({
-                "name": tool._tool_name,
-                "description": tool.description,
-            })
-        server_list = [{"name": s, "tools": t} for s, t in by_server.items()]
+        servers = [{"name": name, **info} for name, info in statuses.items()]
+        total_tools = sum(s["tool_count"] for s in servers)
         return {
-            "server_count": len(server_list),
-            "tool_count": len(tools),
-            "servers": server_list,
+            "server_count": len(servers),
+            "tool_count": total_tools,
+            "servers": servers,
         }
 
     def reconfigure(self, new_config: AgentConfig) -> None:
