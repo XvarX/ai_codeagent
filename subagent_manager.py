@@ -105,7 +105,7 @@ class _SubagentHandler(EventHandler):
                 pass
 
     async def on_thinking(self):
-        self._log("[Thinking]", "Agent thinking...", "#6366F1")
+        self._log("[Request]", "Sending to LLM...", "#6366F1")
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         preview = ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items())
@@ -114,12 +114,12 @@ class _SubagentHandler(EventHandler):
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         preview = result[:200].replace("\n", " ")
         color = "#EF4444" if is_error else "#8B5CF6"
-        self._log(f"[Result] {name}", preview, color)
+        self._log(f"[Send Tool Result]", f"{name}: {preview}", color)
 
     async def on_response_done(self, raw: dict):
         usage = raw.get("usage", {})
         tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        self._log("[Response]", f"Done  |  ~{tokens} tokens", "#3B82F6")
+        self._log("[Response]", f"~{tokens} tokens", "#3B82F6")
 
     async def on_error(self, message: str):
         state = self.manager.agents.get(self.agent_id)
@@ -131,7 +131,7 @@ class _SubagentHandler(EventHandler):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        self._log("[Done]", final_text[:200], "#6366F1")
+        self._log("[Final Response]", final_text[:200], "#22C55E")
 
 
 class SubagentManager:
