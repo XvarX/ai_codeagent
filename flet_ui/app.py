@@ -25,28 +25,27 @@ class _FletEventHandler(EventHandler):
     def __init__(self, app: "FletApp"):
         super().__init__()
         self.app = app
-        self._active = True  # toggled by _on_agent_switch
-        self._pending: list[dict] = []  # buffered events when inactive
 
     @property
     def _is_active(self):
         return self._active and self.app.subagent_manager.active_id == "master"
 
+    def _master_events(self):
+        """Get master's SubagentState.debug_events for buffering when inactive."""
+        master = self.app.subagent_manager.agents.get("master")
+        return master.debug_events if master else None
+
     def _buffer(self, prefix, message, color="#94A3B8", event_data=None, group_key=None):
         if self._is_active:
             return False
-        self._pending.append({"prefix": prefix, "message": message, "color": color,
-                              "event_data": event_data, "group_key": group_key})
+        events = self._master_events()
+        if events is not None:
+            events.append({"prefix": prefix, "message": message, "color": color,
+                           "event_data": event_data, "group_key": group_key})
         return True
 
-    def drain_pending(self) -> list[dict]:
-        events = self._pending[:]
-        self._pending.clear()
-        return events
-
     async def on_thinking(self):
-        if not self._buffer("[Request]", "Sending to LLM...", "#6366F1"):
-            self.app._on_thinking()
+        if self._is_active: self.app._on_thinking()
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
         if self._is_active: self.app._on_text_delta(token, reasoning)
@@ -978,10 +977,6 @@ class FletApp:
         self.controller = state.controller
         self.subagent_manager.active_id = agent_id
 
-        # Toggle master handler's active flag
-        if hasattr(self.handler, '_active'):
-            self.handler._active = (agent_id == "master")
-
         # ── Wire new handler — route events through app._on_* methods ──
         FletApp._wire_handler_forwarding(self, state.controller.handler)
 
@@ -997,14 +992,6 @@ class FletApp:
             self.debug_drawer.load_snapshot(None)
 
         # Replay new debug_events added since last view
-        # Drain master's pending events when switching to master
-        if agent_id == "master" and hasattr(self.handler, 'drain_pending'):
-            for evt in self.handler.drain_pending():
-                self.debug_drawer.add_event(
-                    evt["prefix"], evt["message"], evt["color"],
-                    evt.get("event_data"),
-                    group_key=evt.get("group_key"))
-
         if state.debug_events:
             for evt in state.debug_events[last_idx:]:
                 self.debug_drawer.add_event(
