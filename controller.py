@@ -87,7 +87,7 @@ class AgentController:
         self.registry = _build_registry()
         self.provider = _build_provider(config)
         self._mcp_manager = None
-        self._start_mcp(config.cwd)
+        self._mcp_started = False
         self.agent = Agent(
             provider=self.provider,
             registry=self.registry,
@@ -100,6 +100,9 @@ class AgentController:
         )
 
     async def send_message(self, text: str) -> None:
+        if not self._mcp_started:
+            self._mcp_started = True
+            self._start_mcp(self.config.cwd)
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
 
@@ -170,11 +173,7 @@ class AgentController:
             for tool in self._mcp_manager.get_tools():
                 self.registry.register(tool)
 
-        try:
-            loop = asyncio.get_running_loop()
-            self._mcp_task = loop.create_task(_connect_and_register())
-        except RuntimeError:
-            pass
+        self._mcp_task = asyncio.ensure_future(_connect_and_register())
 
     def reconfigure(self, new_config: AgentConfig) -> None:
         self.config = new_config

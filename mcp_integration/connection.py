@@ -52,12 +52,17 @@ class MCPConnectionManager:
         self._tasks: list[asyncio.Task] = []
 
     async def connect_all(self) -> None:
-        """Start background connection tasks for all servers."""
-        for server in self._servers:
-            task = asyncio.create_task(self._run_server(server))
+        """Start background connection tasks and wait for all to connect."""
+        if not self._servers:
+            return
+        events = [asyncio.Event() for _ in self._servers]
+        for server, ev in zip(self._servers, events):
+            task = asyncio.create_task(self._run_server(server, ev))
             self._tasks.append(task)
+        # Wait for all connections to complete (or fail)
+        await asyncio.gather(*(ev.wait() for ev in events))
 
-    async def _run_server(self, config: MCPServerConfig) -> None:
+    async def _run_server(self, config: MCPServerConfig, ready: asyncio.Event) -> None:
         """Connect to one server and hold the session open indefinitely."""
         server_name = config.name
         try:
@@ -78,14 +83,16 @@ class MCPConnectionManager:
                     logger.info(
                         f"MCP '{server_name}': {len(tools_result.tools)} tools"
                     )
+                    ready.set()
 
                     # Hold session open until cancelled
                     await asyncio.Event().wait()
 
         except asyncio.CancelledError:
-            pass
+            ready.set()
         except Exception as e:
             logger.warning(f"MCP '{server_name}': failed — {e}")
+            ready.set()
 
     def get_tools(self) -> list[MCPToolWrapper]:
         return list(self._tools)

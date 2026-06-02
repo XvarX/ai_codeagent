@@ -89,11 +89,6 @@ class Agent:
 
             # ── Compaction Pipeline (mirrors query.ts) ──────────
 
-            # Micro-compact — trim old tool results
-            if turn_count > 1:
-                from compact.microCompact import micro_compact
-                micro_compact(self.messages)
-
             # Auto-compact — use actual tokens from last API call as base
             from compact.autoCompact import should_auto_compact
             if should_auto_compact(
