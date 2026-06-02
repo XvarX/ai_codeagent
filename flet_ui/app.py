@@ -978,7 +978,11 @@ class FletApp:
         self.page.update()
 
     def _on_inbox_message(self, from_name: str, message: str):
-        """Debug entry for received inter-agent messages."""
+        """Debug entry + chat bubble for received inter-agent messages."""
+        self.chat_view.add_tool_label(
+            f"[Msg from {from_name}]",
+            message[:500],
+        )
         self.debug_drawer.add_event(
             f"[Msg from {from_name}]",
             message[:300],
@@ -991,6 +995,7 @@ class FletApp:
             },
             group_key="user",
         )
+        self.chat_view._try_update()
         self.debug_drawer._try_update()
 
     def _on_subagent_done(self, agent_id: str, status: str, result: str):
