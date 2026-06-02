@@ -78,6 +78,13 @@ class SnipEvent:
 
 
 @dataclass
+class InboxMessageEvent:
+    """An inbox message was drained and injected into the conversation."""
+    from_name: str
+    message: str
+
+
+@dataclass
 class SubagentDoneEvent:
     """后台 subagent 完成"""
     agent_id: str

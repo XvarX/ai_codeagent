@@ -59,6 +59,9 @@ class _FletEventHandler(EventHandler):
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
         self.app._on_subagent_done(agent_id, status, result)
 
+    async def on_inbox_message(self, from_name: str, message: str):
+        self.app._on_inbox_message(from_name, message)
+
 
 class FletApp:
     """Main Flet application controller."""
@@ -908,6 +911,7 @@ class FletApp:
         handler._fwd_response_done = app._on_response_done
         handler._fwd_done = app._on_done
         handler._fwd_error = app._on_error
+        handler._fwd_inbox_msg = app._on_inbox_message
 
     @staticmethod
     def _clear_handler_forwarding(handler):
@@ -919,6 +923,7 @@ class FletApp:
         handler._fwd_response_done = None
         handler._fwd_done = None
         handler._fwd_error = None
+        handler._fwd_inbox_msg = None
 
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""
@@ -970,6 +975,21 @@ class FletApp:
             elif msg.role == "assistant" and msg.content:
                 self.chat_view.add_assistant_message(flatten_headings(msg.content))
         self.page.update()
+
+    def _on_inbox_message(self, from_name: str, message: str):
+        """Debug entry for received inter-agent messages."""
+        self.debug_drawer.add_event(
+            f"[Msg from {from_name}]",
+            message[:300],
+            "#A855F7",
+            event_data={
+                "type": "InboxMessage",
+                "from": from_name,
+                "message": message,
+                "formatted": f"From: {from_name}\n\n{message[:2000]}",
+            },
+        )
+        self.debug_drawer._try_update()
 
     def _on_subagent_done(self, agent_id: str, status: str, result: str):
         """Background subagent completed — update UI."""

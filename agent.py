@@ -307,6 +307,7 @@ class Agent:
         from events import (
             ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
             ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
+            InboxMessageEvent,
         )
 
         self.messages.append(Message(role="user", content=user_message))
@@ -327,6 +328,7 @@ class Agent:
                             content=f"[Message from {from_name}]\n{message}",
                         ))
                         self.inbox.task_done()
+                        yield InboxMessageEvent(from_name=from_name, message=message)
                     except Exception:
                         break
 

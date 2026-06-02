@@ -103,6 +103,7 @@ class _SubagentHandler(EventHandler):
         self._fwd_response_done: callable | None = None
         self._fwd_done: callable | None = None
         self._fwd_error: callable | None = None
+        self._fwd_inbox_msg: callable | None = None
 
     @property
     def _is_forwarding(self):
@@ -164,6 +165,11 @@ class _SubagentHandler(EventHandler):
         self._record("[Final Response]", final_text[:200], "#22C55E")
         if self._fwd_done:
             self._fwd_done(final_text)
+
+    async def on_inbox_message(self, from_name: str, message: str):
+        self._record(f"[Msg from {from_name}]", message[:200], "#A855F7")
+        if self._fwd_inbox_msg:
+            self._fwd_inbox_msg(from_name, message)
 
 
 class SubagentManager:
