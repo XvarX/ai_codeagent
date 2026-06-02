@@ -107,6 +107,9 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     status_text = ft.Text("", size=12, color="#EF4444")
 
+    from flet_ui.agent_config import build_agent_presets_section
+    agent_presets_section = build_agent_presets_section(config)
+
     def on_provider_select(e):
         new_provider = provider_dd.value
         api_key_field.value = config.get("api_keys", {}).get(new_provider, "")
@@ -165,6 +168,12 @@ def show_config_dialog(page: ft.Page, on_save=None):
         compact_threshold_field,
         ft.Container(height=14),
         reserved_output_field,
+        ft.Container(height=18),
+        ft.Divider(height=1, color="#EEF0F4"),
+        ft.Container(height=10),
+        ft.Text("Agent 预设", size=13, weight=ft.FontWeight.W_600, color="#475569"),
+        ft.Container(height=6),
+        agent_presets_section,
         ft.Container(height=8),
         status_text,
     ], visible=True)
@@ -298,6 +307,12 @@ def show_config_dialog(page: ft.Page, on_save=None):
         config.setdefault("context_windows", {})[provider_dd.value] = int(context_window_field.value or 128000)
         config.setdefault("compact_thresholds", {})[provider_dd.value] = float(compact_threshold_field.value or 0.85)
         config.setdefault("reserved_outputs", {})[provider_dd.value] = int(reserved_output_field.value or 8000)
+        from flet_ui.agent_config import collect_agent_presets
+        raw_presets = collect_agent_presets([agent_presets_section])
+        config["agent_presets"] = {
+            k: v for k, v in raw_presets.items()
+            if v.get("provider") or v.get("allowed_tools")
+        }
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
@@ -318,7 +333,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             provider_actions,
             add_provider_row,
             config_fields,
-        ], width=550, height=580, scroll=ft.ScrollMode.AUTO),
+        ], width=550, height=720, scroll=ft.ScrollMode.AUTO),
         actions=[
             ft.TextButton(content=ft.Text("取消", size=14, color="#64748B"), on_click=lambda e: page.pop_dialog()),
             ft.TextButton(content=ft.Text("保存", size=14, color="#6366F1"), on_click=save_click),
