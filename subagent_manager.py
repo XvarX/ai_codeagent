@@ -111,6 +111,7 @@ class SubagentManager:
         self.master_handler = master_handler
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
+        self.on_change = None  # set by UI to refresh sidebar
 
         self._create_master()
 
@@ -182,6 +183,11 @@ class SubagentManager:
                 state.status = "failed"
 
         self._update_est_tokens(agent_id)
+        if self.on_change:
+            try:
+                self.on_change()
+            except Exception:
+                pass
         return agent_id
 
     async def _run_background(self, agent_id: str, prompt: str):
@@ -204,6 +210,18 @@ class SubagentManager:
         finally:
             state.background_task = None
             self._update_est_tokens(agent_id)
+            # Notify master handler so UI can refresh
+            try:
+                await self.master_handler.on_subagent_done(
+                    agent_id, state.status, state.result)
+            except Exception:
+                pass
+            # Fire on_change callback if set
+            if self.on_change:
+                try:
+                    self.on_change()
+                except Exception:
+                    pass
 
     def _update_est_tokens(self, agent_id: str):
         state = self.agents.get(agent_id)

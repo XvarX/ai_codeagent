@@ -30,7 +30,7 @@ class AgentSidebar(ft.Container):
         self.visible = False
 
         self._toggle_btn = ft.IconButton(
-            icon=ft.icons.KEYBOARD_ARROW_RIGHT,
+            icon=ft.icons.Icons.KEYBOARD_ARROW_RIGHT,
             icon_size=16,
             on_click=self._toggle,
             style=ft.ButtonStyle(padding=ft.Padding(4, 4, 4, 4)),
@@ -60,12 +60,12 @@ class AgentSidebar(ft.Container):
         self._expanded = not self._expanded
         if self._expanded:
             self.width = self._expanded_width
-            self._toggle_btn.icon = ft.icons.KEYBOARD_ARROW_LEFT
+            self._toggle_btn.icon = ft.icons.Icons.KEYBOARD_ARROW_LEFT
             self._expanded_content.visible = True
             self._collapsed_content.visible = False
         else:
             self.width = self._collapsed_width
-            self._toggle_btn.icon = ft.icons.KEYBOARD_ARROW_RIGHT
+            self._toggle_btn.icon = ft.icons.Icons.KEYBOARD_ARROW_RIGHT
             self._expanded_content.visible = False
             self._collapsed_content.visible = True
         self.update()

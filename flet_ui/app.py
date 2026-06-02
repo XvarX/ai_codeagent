@@ -94,6 +94,7 @@ class FletApp:
             self.subagent_manager,
             on_switch=self._on_agent_switch,
         )
+        self.subagent_manager.on_change = self.agent_sidebar.refresh
 
         # ── Register Agent + SendMessage tools on master ──
         if self.controller:
