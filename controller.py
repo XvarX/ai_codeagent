@@ -102,7 +102,7 @@ class AgentController:
     async def send_message(self, text: str) -> None:
         if not self._mcp_started:
             self._mcp_started = True
-            self._start_mcp(self.config.cwd)
+            await self._start_mcp(self.config.cwd)
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
 
@@ -155,8 +155,8 @@ class AgentController:
     def clear_history(self) -> None:
         self.agent.messages.clear()
 
-    def _start_mcp(self, cwd: str | None):
-        """Start MCP server connections in background."""
+    async def _start_mcp(self, cwd: str | None):
+        """Start MCP server connections. Blocks until all are connected."""
         from mcp_integration.config import load_mcp_configs
         from mcp_integration.connection import MCPConnectionManager
         from pathlib import Path
@@ -167,13 +167,9 @@ class AgentController:
             return
 
         self._mcp_manager = MCPConnectionManager(configs)
-
-        async def _connect_and_register():
-            await self._mcp_manager.connect_all()
-            for tool in self._mcp_manager.get_tools():
-                self.registry.register(tool)
-
-        self._mcp_task = asyncio.ensure_future(_connect_and_register())
+        await self._mcp_manager.connect_all()
+        for tool in self._mcp_manager.get_tools():
+            self.registry.register(tool)
 
     def reconfigure(self, new_config: AgentConfig) -> None:
         self.config = new_config
