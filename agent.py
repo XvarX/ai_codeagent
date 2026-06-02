@@ -58,7 +58,7 @@ class Agent:
         self.on_response = on_response
         self.on_compact = on_compact
         self.skills_text = ""
-        self.inbox: "asyncio.Queue | None" = None
+        self.agents_text = ""
         self._loop_running = False
         self._compact_count = 0
         self.context_window = context_window
@@ -83,19 +83,35 @@ class Agent:
         return pre_tok, post_tok, pre - len(self.messages)
 
     def _call_messages(self) -> list:
-        """Return messages for LLM call, injecting skill reminder each turn.
+        """Return messages for LLM call, injecting skill and agent reminders each turn.
 
-        The skill-reminder user message is prepended right before the latest
-        user message each turn, so the LLM always sees the current skill list
-        without it being baked into the system prompt.
+        Reminder messages are prepended right before the latest user message
+        each turn, so the LLM always sees current context without it being
+        baked into the system prompt.
         """
+        inserts = []
         if self.skills_text:
-            skill_msg = Message(
+            inserts.append(Message(
                 role="user",
                 content=f"Available skills (use Skill tool to invoke):\n{self.skills_text}",
-            )
-            return list(self.messages[:-1]) + [skill_msg, self.messages[-1]]
+            ))
+        if self.agents_text:
+            inserts.append(Message(
+                role="user",
+                content=self.agents_text,
+            ))
+        if inserts:
+            return list(self.messages[:-1]) + inserts + [self.messages[-1]]
         return list(self.messages)
+
+    def _refresh_agents_text(self):
+        """Update agents_text from the SubagentManager if available."""
+        if not hasattr(self, '_subagent_manager') or not self._subagent_manager:
+            return
+        text = self._subagent_manager.get_alive_agents_text(
+            for_agent_id=self._agent_id or "master"
+        )
+        self.agents_text = text
 
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
@@ -104,21 +120,6 @@ class Agent:
         turn_count = 0
         while turn_count < self.max_turns:
             turn_count += 1
-
-            # ── Drain inbox ──
-            if self.inbox:
-                while not self.inbox.empty():
-                    try:
-                        p = self.inbox.get_nowait()
-                        from_name = p.get("from_name", "unknown")
-                        message = p.get("message", "")
-                        self.messages.append(Message(
-                            role="user",
-                            content=f"[Message from {from_name}]\n{message}",
-                        ))
-                        self.inbox.task_done()
-                    except Exception:
-                        break
 
             # ── Compaction Pipeline (mirrors query.ts) ──────────
 
@@ -307,7 +308,6 @@ class Agent:
         from events import (
             ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
             ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
-            InboxMessageEvent,
         )
 
         self.messages.append(Message(role="user", content=user_message))
@@ -315,22 +315,6 @@ class Agent:
         turn_count = 0
         while turn_count < self.max_turns:
             turn_count += 1
-
-            # ── Drain inbox ──
-            if self.inbox:
-                while not self.inbox.empty():
-                    try:
-                        p = self.inbox.get_nowait()
-                        from_name = p.get("from_name", "unknown")
-                        message = p.get("message", "")
-                        self.messages.append(Message(
-                            role="user",
-                            content=f"[Message from {from_name}]\n{message}",
-                        ))
-                        self.inbox.task_done()
-                        yield InboxMessageEvent(from_name=from_name, message=message)
-                    except Exception:
-                        break
 
             # ── Compaction Pipeline (mirrors run()) ──────────
 
@@ -405,6 +389,9 @@ class Agent:
                 self.registry.get_tool_names(),
                 str(self.cwd),
             )
+
+            # Refresh alive agents text before each LLM call
+            self._refresh_agents_text()
 
             yield ThinkingEvent()
 

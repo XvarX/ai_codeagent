@@ -77,12 +77,6 @@ class SnipEvent:
     tokens_after: int
 
 
-@dataclass
-class InboxMessageEvent:
-    """An inbox message was drained and injected into the conversation."""
-    from_name: str
-    message: str
-
 
 @dataclass
 class SubagentDoneEvent:

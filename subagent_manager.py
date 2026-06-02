@@ -1,6 +1,7 @@
 """SubagentManager — manages multiple AgentController instances."""
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,13 +17,14 @@ class SubagentState:
     name: str
     definition: AgentDefinition
     controller: AgentController
-    inbox: asyncio.Queue
+    message_queue: "AgentMessageQueue | None" = None
     status: str = "pending"
     result: str = ""
     error: str = ""
     background_task: asyncio.Task | None = None
     turn_count: int = 0
     est_tokens: int = 0
+    keep_alive: bool = False
     debug_events: list = field(default_factory=list)  # captured debug entries
 
 
@@ -126,6 +128,28 @@ class _SubagentHandler(EventHandler):
                 "event_data": event_data, "group_key": group_key,
             })
 
+    async def on_request(self, text: str, msg_count: int, est_tokens: int,
+                         tools_count: int, model: str = ""):
+        # Master: [Request] handled by app._on_send()
+        if self.agent_id == "master":
+            return
+        msg_lines = [
+            f"Model: {model}",
+            f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools",
+            f"  [new] user: {text[:200]}",
+        ]
+        self._record("[Request]", "\n".join(msg_lines), "#569cd6",
+                     event_data={
+                         "type": "Request",
+                         "model": model,
+                         "message_count": msg_count,
+                         "est_tokens": est_tokens,
+                         "tools_count": tools_count,
+                         "user_message": text,
+                         "formatted": "\n".join(msg_lines),
+                     },
+                     group_key="user")
+
     async def on_thinking(self):
         # _fwd_thinking handles sync + thinking animation; no debug entry needed
         if self._fwd_thinking:
@@ -139,7 +163,8 @@ class _SubagentHandler(EventHandler):
         self._pending_tools += 1
         self._record(f"[Tool] {name}",
                      ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
-                     "#22C55E")
+                     "#22C55E",
+                     group_key=f"tool:{tool_use_id}" if tool_use_id else None)
         if self._fwd_tool_use:
             self._fwd_tool_use(name, input_dict, tool_use_id)
 
@@ -147,19 +172,86 @@ class _SubagentHandler(EventHandler):
         if self._pending_tools > 0:
             self._pending_tools -= 1
         color = "#EF4444" if is_error else "#8B5CF6"
-        self._record(f"[Send Tool Result]", f"{name}  |  {result[:200]}", color)
+        event_data = {
+            "type": "Tool",
+            "name": name,
+            "result": result,
+            "is_error": is_error,
+            "formatted": f"Tool: {name}\nStatus: {'ERROR' if is_error else 'OK'}\n\n{result[:2000]}",
+            "raw_json": json.dumps({"tool": name, "result": result, "is_error": is_error},
+                                   ensure_ascii=False, indent=2),
+        }
+        self._record("[Send Tool Result]", f"{name}  |  {result[:200]}", color,
+                     event_data=event_data,
+                     group_key=f"tool:{tool_use_id}" if tool_use_id else None)
         if self._fwd_tool_result:
             self._fwd_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
     async def on_response_done(self, raw: dict):
         has_tools = self._pending_tools > 0
         self._pending_tools = 0
-        usage = raw.get("usage", {})
-        tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        if has_tools:
-            self._record("[Response]", f"~{tokens} tokens", "#3B82F6")
+
+        # Normalize usage (same logic as FletApp._normalize_usage)
+        orig_usage = raw.get("usage", {})
+        if not orig_usage:
+            norm_usage = {}
+        elif "prompt_tokens" not in orig_usage and "input_tokens" in orig_usage:
+            input_total = (
+                (orig_usage.get("input_tokens") or 0)
+                + (orig_usage.get("cache_creation_input_tokens") or 0)
+                + (orig_usage.get("cache_read_input_tokens") or 0)
+            )
+            output = orig_usage.get("output_tokens") or 0
+            cache_tokens = orig_usage.get("cache_read_input_tokens") or 0
+            norm_usage = {
+                "prompt_tokens": input_total,
+                "completion_tokens": output,
+                "total_tokens": input_total + output,
+                "prompt_tokens_details": {"cached_tokens": cache_tokens},
+            }
         else:
-            self._record("[Final Response]", f"~{tokens} tokens", "#22C55E")
+            norm_usage = dict(orig_usage)
+            if "total_tokens" not in norm_usage:
+                norm_usage["total_tokens"] = norm_usage.get("prompt_tokens", 0) + norm_usage.get("completion_tokens", 0)
+
+        req = raw.get("_request", {})
+        msgs = req.get("messages", [])
+        model = req.get("model", "?")
+        prompt_tokens = norm_usage.get("prompt_tokens", "?")
+        completion_tokens = norm_usage.get("completion_tokens", "?")
+        total_tokens = norm_usage.get("total_tokens", "?")
+        pt_details = norm_usage.get("prompt_tokens_details") or {}
+        cache_read = pt_details.get("cached_tokens", 0) if isinstance(pt_details, dict) else 0
+
+        tool_blocks = raw.get("_tool_use_blocks", [])
+        final_text = raw.get("_text", "")
+
+        resp_lines = [f"Model: {model}  |  Msgs: {len(msgs)}"]
+        resp_lines.append(f"prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
+        if cache_read:
+            pt = prompt_tokens if isinstance(prompt_tokens, int) else 1
+            resp_lines.append(f"cache hit: {cache_read} tokens ({cache_read * 100 // max(pt, 1)}%)")
+        if tool_blocks:
+            resp_lines.append("Tool calls: " + ", ".join(t["tool_name"] for t in tool_blocks))
+        else:
+            text_preview = final_text[:200].replace("\n", " ")
+            resp_lines.append(f"Text: {text_preview}")
+
+        prefix = "[Final Response]" if not has_tools else "[Response]"
+        color = "#059669" if not has_tools else "#10B981"
+
+        resp_only = {k: v for k, v in raw.items() if k not in ("_request",)}
+        event_data = {
+            "type": "Response",
+            "model": model,
+            "raw_json": json.dumps(resp_only, ensure_ascii=False, indent=2),
+            "formatted": "\n".join(resp_lines),
+            "text": final_text,
+        }
+        group_key = f"asst:{raw.get('id', '')}" if raw.get("id") else None
+
+        self._record(prefix, "\n".join(resp_lines), color,
+                     event_data=event_data, group_key=group_key)
         if self._fwd_response_done:
             self._fwd_response_done(raw)
 
@@ -167,7 +259,12 @@ class _SubagentHandler(EventHandler):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.error = message
-        self._record("[Error]", message, "#EF4444")
+        self._record("[Error]", message, "#EF4444",
+                     event_data={
+                         "type": "Error",
+                         "formatted": message,
+                         "raw_json": json.dumps({"error": message}, ensure_ascii=False),
+                     })
         if self._fwd_error:
             self._fwd_error(message)
 
@@ -211,74 +308,21 @@ class SubagentManager:
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self.on_change = None  # set by UI to refresh sidebar
-        self._poller_task: asyncio.Task | None = None
 
         self._create_master()
         # master_handler exposed for _run_background notifications
         self.master_handler = self.agents["master"].controller.handler
-        self._start_poller()
 
-    def _start_poller(self):
-        """Start background poller that watches all inboxes."""
-        if self._poller_task is not None:
-            return
-        try:
-            loop = asyncio.get_running_loop()
-            self._poller_task = loop.create_task(self._inbox_poller())
-        except RuntimeError:
-            pass  # no running event loop (e.g. tests)
-
-    async def _inbox_poller(self):
-        """Poll inboxes every 1s, deliver messages when agent is idle."""
-        import sys
-        print("[InboxPoller] started", file=sys.stderr, flush=True)
-        while True:
-            await asyncio.sleep(1)
-            for agent_id, state in list(self.agents.items()):
-                try:
-                    if state is None or state.controller is None:
-                        continue
-                    if state.controller.agent._loop_running:
-                        continue
-                    pending = []
-                    while not state.inbox.empty():
-                        try:
-                            msg = state.inbox.get_nowait()
-                            pending.append(msg)
-                            state.inbox.task_done()
-                        except Exception:
-                            break
-                    if not pending:
-                        continue
-                    print(f"[InboxPoller] {len(pending)} msg(s) → {agent_id}", file=sys.stderr, flush=True)
-                    # Create entries on the active agent's panel, otherwise store for replay
-                    is_active = (agent_id == self.active_id)
-                    for p in pending:
-                        from_name = p.get("from_name", "unknown")
-                        msg_text = p.get("message", "")
-                        if is_active:
-                            try:
-                                await state.controller.handler.on_inbox_message(from_name, msg_text)
-                            except Exception:
-                                state.debug_events.append({
-                                    "prefix": f"[Msg from {from_name}]", "message": msg_text[:200],
-                                    "color": "#A855F7", "event_data": None, "group_key": "user",
-                                })
-                        else:
-                            state.debug_events.append({
-                                "prefix": f"[Msg from {from_name}]", "message": msg_text[:200],
-                                "color": "#A855F7", "event_data": None, "group_key": "user",
-                            })
-                    formatted = "\n\n".join(
-                        f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
-                        for p in pending
-                    )
-                    asyncio.create_task(
-                        state.controller.send_message(formatted)
-                    )
-                except Exception:
-                    import traceback
-                    print(f"[InboxPoller] error: {traceback.format_exc()}", file=sys.stderr, flush=True)
+    @staticmethod
+    async def _emit_request(controller, text: str):
+        """Emit on_request for an inactive agent's send_message call."""
+        agent = controller.agent
+        handler = controller.handler
+        msg_count = len(agent.messages) + 1
+        est_tokens = agent.est_tokens() + len(text) // 2
+        tools_count = len(agent.registry.get_schemas())
+        model = agent.provider.model or ""
+        await handler.on_request(text, msg_count, est_tokens, tools_count, model)
 
     def _create_master(self):
         """Create the master agent controller."""
@@ -293,14 +337,19 @@ class SubagentManager:
                 tools=None, source="built-in",
             ),
             controller=controller,
-            inbox=asyncio.Queue(),
+            message_queue=None,
             status="running",
         )
         self.agents["master"] = state
-        controller.agent.inbox = state.inbox
+        from agent_message_queue import AgentMessageQueue
+        queue = AgentMessageQueue(controller)
+        state.message_queue = queue
+        controller.agent._subagent_manager = self
+        controller.agent._agent_id = "master"
 
     async def spawn(self, definition: AgentDefinition, prompt: str,
-                    background: bool = False, name: str = "") -> str:
+                    background: bool = False, keep_alive: bool = False,
+                    name: str = "") -> str:
         """Spawn a new subagent. Returns agent_id."""
         import time
         agent_id = f"{definition.name.lower()}-{int(time.time() * 1000)}"
@@ -311,8 +360,9 @@ class SubagentManager:
             name=name or definition.name,
             definition=definition,
             controller=None,  # wired below
-            inbox=asyncio.Queue(),
+            message_queue=None,
             status="running" if background else "pending",
+            keep_alive=keep_alive,
         )
 
         provider = _build_provider_for_agent(self.config, definition)
@@ -325,7 +375,11 @@ class SubagentManager:
         controller.agent.provider = provider
         controller.agent.registry = registry
         controller.agent.skills_text = skills_text
-        controller.agent.inbox = state.inbox
+        from agent_message_queue import AgentMessageQueue
+        queue = AgentMessageQueue(controller)
+        state.message_queue = queue
+        controller.agent._subagent_manager = self
+        controller.agent._agent_id = agent_id
 
         # Wire controller back to state
         state.controller = controller
@@ -343,7 +397,9 @@ class SubagentManager:
         else:
             state.status = "running"
             try:
-                await controller.send_message(prompt)
+                await self._emit_request(controller, prompt)
+                async with controller._agent_lock:
+                    await controller.send_message(prompt)
                 assistant_msgs = [
                     m.content for m in controller.agent.messages
                     if m.role == "assistant" and m.content
@@ -353,6 +409,10 @@ class SubagentManager:
             except Exception as e:
                 state.error = str(e)
                 state.status = "failed"
+
+            # Auto-cleanup if not keep_alive
+            if not keep_alive:
+                await self._cleanup_agent(agent_id)
 
         self._update_est_tokens(agent_id)
         if self.on_change:
@@ -369,7 +429,9 @@ class SubagentManager:
         print(f"[SubagentMgr] {agent_id} background starting", file=sys.stderr, flush=True)
         try:
             state.status = "running"
-            await state.controller.send_message(prompt)
+            await self._emit_request(state.controller, prompt)
+            async with state.controller._agent_lock:
+                await state.controller.send_message(prompt)
             assistant_msgs = [
                 m.content for m in state.controller.agent.messages
                 if m.role == "assistant" and m.content
@@ -388,6 +450,9 @@ class SubagentManager:
         finally:
             state.background_task = None
             self._update_est_tokens(agent_id)
+            # Auto-cleanup if not keep_alive
+            if not state.keep_alive:
+                await self._cleanup_agent(agent_id)
             try:
                 await self.master_handler.on_subagent_done(
                     agent_id, state.status, state.result)
@@ -398,6 +463,22 @@ class SubagentManager:
                     self.on_change()
                 except Exception:
                     pass
+
+    async def _cleanup_agent(self, agent_id: str):
+        """Remove a completed agent and notify master."""
+        state = self.agents.get(agent_id)
+        if not state or agent_id == "master":
+            return
+        # Cancel any pending task
+        if state.background_task and not state.background_task.done():
+            state.background_task.cancel()
+        # Remove from agents dict
+        del self.agents[agent_id]
+        # Clean up snapshot/replay tracking
+        if hasattr(self, '_debug_snapshots'):
+            self._debug_snapshots.pop(agent_id, None)
+        if hasattr(self, '_replay_idx'):
+            self._replay_idx.pop(agent_id, None)
 
     def _update_est_tokens(self, agent_id: str):
         state = self.agents.get(agent_id)
@@ -427,30 +508,46 @@ class SubagentManager:
         """Get current active agent state."""
         return self.agents[self.active_id]
 
+    def get_alive_agents_text(self, for_agent_id: str = "master") -> str:
+        """Return alive agent info for injection into LLM context."""
+        alive = [
+            s for aid, s in self.agents.items()
+            if aid != for_agent_id and (s.keep_alive or aid == "master")
+        ]
+        if not alive:
+            return ""
+        lines = ["Alive agents (use SendMessage to communicate):"]
+        for s in alive:
+            running = s.controller.agent._loop_running if s.controller else False
+            status = "working" if running else "idle"
+            desc = s.definition.description or s.definition.name
+            if len(desc) > 80:
+                desc = desc[:77] + "..."
+            lines.append(f"  - {s.name}: {status} | {desc}")
+        return "\n".join(lines)
+
     async def send_message_to_agent(self, from_id: str, to_name_or_id: str, message: str):
-        """Send a message from one agent to another via inbox."""
-        # Prevent self-messaging
+        """Send a message from one agent to another via message queue."""
         from_state = self.agents.get(from_id)
         from_name_lower = from_state.name.lower() if from_state else ""
         if (to_name_or_id == from_id or
                 to_name_or_id.lower() == from_name_lower):
             raise ValueError(f"Cannot send message to yourself ('{to_name_or_id}')")
 
-        target = None
+        target_id = None
         for aid, st in self.agents.items():
             if aid == to_name_or_id or st.name.lower() == to_name_or_id.lower():
-                target = aid
+                target_id = aid
                 break
-        if target is None:
+        if target_id is None:
             raise ValueError(f"Agent '{to_name_or_id}' not found")
 
-        from_state = self.agents.get(from_id)
         from_name = from_state.name if from_state else "unknown"
-        await self.agents[target].inbox.put({
-            "from": from_id,
-            "from_name": from_name,
-            "message": message,
-        })
+        target_state = self.agents[target_id]
+        if not target_state.message_queue:
+            raise ValueError(f"Agent '{to_name_or_id}' has no message queue")
+        formatted = f"[Message from {from_name}]\n{message}"
+        target_state.message_queue.enqueue(formatted, source="agent")
 
     def list_subagents(self) -> list[SubagentState]:
         """Return all subagents (excluding master)."""
