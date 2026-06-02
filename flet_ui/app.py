@@ -927,7 +927,8 @@ class FletApp:
         if state.debug_events:
             for evt in state.debug_events:
                 self.debug_drawer.add_event(
-                    evt["prefix"], evt["message"], evt["color"])
+                    evt["prefix"], evt["message"], evt["color"],
+                    evt.get("event_data"))
 
         # ── Rebuild chat view ──
         self.chat_view.clear()

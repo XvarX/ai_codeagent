@@ -91,47 +91,82 @@ class _SubagentHandler(EventHandler):
         self.manager = manager
         self.agent_id = agent_id
 
-    def _log(self, prefix: str, message: str, color: str = "#94A3B8"):
+    def _log(self, prefix: str, message: str, color: str = "#94A3B8",
+             event_data: dict | None = None):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.debug_events.append({
                 "prefix": prefix, "message": message, "color": color,
+                "event_data": event_data,
             })
         # Also push to live debug drawer if wired
         if self.on_debug:
             try:
-                self.on_debug(prefix, message, color)
+                self.on_debug(prefix, message, color, event_data)
             except Exception:
                 pass
 
     async def on_thinking(self):
-        self._log("[Request]", "Sending to LLM...", "#6366F1")
+        self._log("[Request]", "Sending to LLM...", "#6366F1",
+                  {"type": "Request", "formatted": "Sending to LLM..."})
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
+        import json
         preview = ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items())
-        self._log(f"[Tool] {name}", preview, "#22C55E")
+        self._log(f"[Tool] {name}", preview, "#22C55E", {
+            "type": "Tool",
+            "name": name,
+            "input": input_dict,
+            "tool_use_id": tool_use_id,
+            "formatted": f"Tool: {name}\n{json.dumps(input_dict, ensure_ascii=False, indent=2)}",
+            "raw_json": json.dumps(input_dict, ensure_ascii=False, indent=2),
+        })
 
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
+        import json
         preview = result[:200].replace("\n", " ")
         color = "#EF4444" if is_error else "#8B5CF6"
-        self._log(f"[Send Tool Result]", f"{name}: {preview}", color)
+        self._log(f"[Send Tool Result]", f"{name}: {preview}", color, {
+            "type": "ToolResult",
+            "name": name,
+            "result": result,
+            "is_error": is_error,
+            "duration_ms": duration_ms,
+            "formatted": f"Tool: {name} ({duration_ms:.0f}ms)\n{result[:2000]}",
+            "raw_json": json.dumps(
+                {"name": name, "result": result[:2000], "is_error": is_error, "duration_ms": duration_ms},
+                ensure_ascii=False, indent=2),
+        })
 
     async def on_response_done(self, raw: dict):
+        import json
         usage = raw.get("usage", {})
         tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        self._log("[Response]", f"~{tokens} tokens", "#3B82F6")
+        self._log("[Response]", f"~{tokens} tokens", "#3B82F6", {
+            "type": "Response",
+            "usage": usage,
+            "tokens": tokens,
+            "formatted": f"Response complete\nTokens: ~{tokens}",
+            "raw_json": json.dumps(raw, ensure_ascii=False, indent=2),
+        })
 
     async def on_error(self, message: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.error = message
-        self._log("[Error]", message, "#EF4444")
+        self._log("[Error]", message, "#EF4444", {
+            "type": "Error",
+            "formatted": f"Error:\n{message}",
+        })
 
     async def on_done(self, final_text: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        self._log("[Final Response]", final_text[:200], "#22C55E")
+        self._log("[Final Response]", final_text[:200], "#22C55E", {
+            "type": "Done",
+            "formatted": f"Final Response:\n{final_text[:2000]}",
+        })
 
 
 class SubagentManager:
