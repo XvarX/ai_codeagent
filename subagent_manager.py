@@ -126,7 +126,7 @@ class _SubagentHandler(EventHandler):
             })
 
     async def on_thinking(self):
-        self._record("[Request]", "Sending to LLM...", "#6366F1")
+        # _fwd_thinking handles sync + thinking animation; no debug entry needed
         if self._fwd_thinking:
             self._fwd_thinking()
 
