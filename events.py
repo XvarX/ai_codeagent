@@ -75,3 +75,12 @@ class SnipEvent:
     messages_removed: int
     tokens_before: int
     tokens_after: int
+
+
+@dataclass
+class SubagentDoneEvent:
+    """后台 subagent 完成"""
+    agent_id: str
+    agent_name: str
+    status: str
+    result: str = ""

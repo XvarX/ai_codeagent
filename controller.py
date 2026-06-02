@@ -16,6 +16,7 @@ from agent import Agent
 from events import (
     ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
     ResponseDoneEvent, DoneEvent, ErrorEvent, CompactCallEvent, CompactEvent, SnipEvent,
+    SubagentDoneEvent,
 )
 
 
@@ -78,6 +79,7 @@ class EventHandler:
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int): pass
     async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""): pass
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int): pass
+    async def on_subagent_done(self, agent_id: str, status: str, result: str): pass
 
 
 class AgentController:
@@ -142,6 +144,9 @@ class AgentController:
                 elif isinstance(event, SnipEvent):
                     await self.handler.on_snip(
                         event.groups_removed, event.tokens_before, event.tokens_after)
+                elif isinstance(event, SubagentDoneEvent):
+                    await self.handler.on_subagent_done(
+                        event.agent_id, event.status, event.result)
         except asyncio.CancelledError:
             pass
         except Exception as e:
