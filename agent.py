@@ -58,6 +58,7 @@ class Agent:
         self.on_response = on_response
         self.on_compact = on_compact
         self.skills_text = ""
+        self.inbox: "asyncio.Queue | None" = None
         self._compact_count = 0
         self.context_window = context_window
         self.compact_threshold = compact_threshold
@@ -80,6 +81,21 @@ class Agent:
         post_tok = estimate_tokens_with_usage(self.messages)
         return pre_tok, post_tok, pre - len(self.messages)
 
+    def _call_messages(self) -> list:
+        """Return messages for LLM call, injecting skill reminder each turn.
+
+        The skill-reminder user message is prepended right before the latest
+        user message each turn, so the LLM always sees the current skill list
+        without it being baked into the system prompt.
+        """
+        if self.skills_text:
+            skill_msg = Message(
+                role="user",
+                content=f"Available skills (use Skill tool to invoke):\n{self.skills_text}",
+            )
+            return list(self.messages[:-1]) + [skill_msg, self.messages[-1]]
+        return list(self.messages)
+
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
         self.messages.append(Message(role="user", content=user_message))
@@ -87,6 +103,21 @@ class Agent:
         turn_count = 0
         while turn_count < self.max_turns:
             turn_count += 1
+
+            # ── Drain inbox ──
+            if self.inbox:
+                while not self.inbox.empty():
+                    try:
+                        p = self.inbox.get_nowait()
+                        from_name = p.get("from_name", "unknown")
+                        message = p.get("message", "")
+                        self.messages.append(Message(
+                            role="user",
+                            content=f"[Message from {from_name}]\n{message}",
+                        ))
+                        self.inbox.task_done()
+                    except Exception:
+                        break
 
             # ── Compaction Pipeline (mirrors query.ts) ──────────
 
@@ -150,15 +181,15 @@ class Agent:
             system_prompt = build_system_prompt(
                 self.registry.get_tool_names(),
                 str(self.cwd),
-                self.skills_text,
             )
 
             if self.on_thinking:
                 await self.on_thinking()
 
             try:
+                call_msgs = self._call_messages()
                 assistant_msg, tool_use_blocks, raw_response = await self.provider.call(
-                    messages=self.messages,
+                    messages=call_msgs,
                     tools=tools_schema,
                     system=system_prompt,
                 )
@@ -176,8 +207,9 @@ class Agent:
                         )
                     # Retry after compact
                     try:
+                        call_msgs = self._call_messages()
                         assistant_msg, tool_use_blocks, raw_response = await self.provider.call(
-                            messages=self.messages,
+                            messages=call_msgs,
                             tools=tools_schema,
                             system=system_prompt,
                         )
@@ -282,6 +314,21 @@ class Agent:
         while turn_count < self.max_turns:
             turn_count += 1
 
+            # ── Drain inbox ──
+            if self.inbox:
+                while not self.inbox.empty():
+                    try:
+                        p = self.inbox.get_nowait()
+                        from_name = p.get("from_name", "unknown")
+                        message = p.get("message", "")
+                        self.messages.append(Message(
+                            role="user",
+                            content=f"[Message from {from_name}]\n{message}",
+                        ))
+                        self.inbox.task_done()
+                    except Exception:
+                        break
+
             # ── Compaction Pipeline (mirrors run()) ──────────
 
             from compact.autoCompact import should_auto_compact
@@ -354,7 +401,6 @@ class Agent:
             system_prompt = build_system_prompt(
                 self.registry.get_tool_names(),
                 str(self.cwd),
-                self.skills_text,
             )
 
             yield ThinkingEvent()
@@ -363,8 +409,9 @@ class Agent:
             tool_use_blocks: list[ToolUseBlock] = []
 
             try:
+                call_msgs = self._call_messages()
                 async for event in self.provider.call_stream(
-                    messages=self.messages,
+                    messages=call_msgs,
                     tools=tools_schema,
                     system=system_prompt,
                 ):
@@ -412,8 +459,9 @@ class Agent:
                     try:
                         text_parts = []
                         tool_use_blocks = []
+                        call_msgs = self._call_messages()
                         async for event in self.provider.call_stream(
-                            messages=self.messages,
+                            messages=call_msgs,
                             tools=tools_schema,
                             system=system_prompt,
                         ):

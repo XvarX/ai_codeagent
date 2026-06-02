@@ -158,6 +158,7 @@ class SubagentManager:
             status="running",
         )
         self.agents["master"] = state
+        controller.agent.inbox = state.inbox
 
     async def spawn(self, definition: AgentDefinition, prompt: str,
                     background: bool = False, name: str = "") -> str:
@@ -175,6 +176,7 @@ class SubagentManager:
         controller.agent.provider = provider
         controller.agent.registry = registry
         controller.agent.skills_text = skills_text
+        controller.agent.inbox = state.inbox
 
         # Register SendMessage tool on this agent
         from tools.send_message_tool import SendMessageTool

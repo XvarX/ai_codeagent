@@ -926,6 +926,25 @@ class FletApp:
 
         # Rebuild chat view
         self.chat_view.clear()
+
+        # Show pending inbox messages
+        import asyncio
+        pending = []
+        while not state.inbox.empty():
+            try:
+                p = state.inbox.get_nowait()
+                pending.append(p)
+            except asyncio.QueueEmpty:
+                break
+        for p in pending:
+            from_name = p.get("from_name", "unknown")
+            message = p.get("message", "")
+            self.chat_view.add_tool_label(
+                f"[Msg from {from_name}]", message[:300],
+            )
+            # Put back for agent loop to process
+            state.inbox.put_nowait(p)
+
         for msg in state.controller.agent.messages:
             if msg.role == "user" and not msg.is_tool_result:
                 self.chat_view.add_user_message(msg.content)
