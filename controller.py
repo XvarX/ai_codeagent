@@ -82,6 +82,7 @@ class EventHandler:
     async def on_subagent_done(self, agent_id: str, status: str, result: str): pass
     async def on_request(self, text: str, msg_count: int, est_tokens: int,
                          tools_count: int, model: str = ""): pass
+    async def on_enqueued(self, from_name: str, message: str, source: str): pass
 
 
 class AgentController:

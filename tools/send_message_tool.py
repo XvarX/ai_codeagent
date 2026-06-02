@@ -9,8 +9,8 @@ class SendMessageTool(Tool):
     def __init__(self, manager, from_agent_id: str):
         self.name = "SendMessage"
         self.description = (
-            "Send a message to another agent. "
-            "Use to coordinate between agents or delegate subtasks."
+            "Send a message to another agent by name. "
+            "Use to share information, coordinate, delegate tasks, or send follow-up instructions."
         )
         self.parameters = {
             "type": "object",

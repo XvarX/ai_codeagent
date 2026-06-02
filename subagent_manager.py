@@ -110,6 +110,7 @@ class _SubagentHandler(EventHandler):
         self._fwd_compact: callable | None = None
         self._fwd_snip: callable | None = None
         self._fwd_subagent_done: callable | None = None
+        self._fwd_enqueued: callable | None = None
 
     @property
     def _is_forwarding(self):
@@ -289,6 +290,18 @@ class _SubagentHandler(EventHandler):
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
         if self._fwd_subagent_done:
             self._fwd_subagent_done(agent_id, status, result)
+
+    async def on_enqueued(self, from_name: str, message: str, source: str):
+        self._record(f"[Msg from {from_name}]", message[:200], "#A855F7",
+                     event_data={
+                         "type": "InboxMessage",
+                         "from": from_name,
+                         "message": message,
+                         "formatted": f"From: {from_name}\n\n{message[:2000]}",
+                     },
+                     group_key="user")
+        if self._fwd_enqueued:
+            self._fwd_enqueued(from_name, message, source)
 
 
 class SubagentManager:

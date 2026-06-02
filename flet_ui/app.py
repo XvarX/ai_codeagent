@@ -911,6 +911,7 @@ class FletApp:
         handler._fwd_compact = app._on_compact
         handler._fwd_snip = app._on_snip
         handler._fwd_subagent_done = app._on_subagent_done
+        handler._fwd_enqueued = app._on_enqueued
 
     @staticmethod
     def _clear_handler_forwarding(handler):
@@ -918,7 +919,8 @@ class FletApp:
         for attr in ('_fwd_thinking', '_fwd_text_delta', '_fwd_tool_use',
                      '_fwd_tool_result', '_fwd_response_done', '_fwd_done',
                      '_fwd_error', '_fwd_compact_call',
-                     '_fwd_compact', '_fwd_snip', '_fwd_subagent_done'):
+                     '_fwd_compact', '_fwd_snip', '_fwd_subagent_done',
+                     '_fwd_enqueued'):
             setattr(handler, attr, None)
 
     def _on_agent_switch(self, agent_id: str):
@@ -985,6 +987,27 @@ class FletApp:
         except RuntimeError:
             pass
         self.page.update()
+
+    def _on_enqueued(self, from_name: str, message: str, source: str):
+        """Debug entry + chat bubble for received inter-agent messages."""
+        self.chat_view.add_tool_label(
+            f"[Msg from {from_name}]",
+            message[:500],
+        )
+        self.debug_drawer.add_event(
+            f"[Msg from {from_name}]",
+            message[:300],
+            "#A855F7",
+            event_data={
+                "type": "InboxMessage",
+                "from": from_name,
+                "message": message,
+                "formatted": f"From: {from_name}\n\n{message[:2000]}",
+            },
+            group_key="user",
+        )
+        self.chat_view._try_update()
+        self.debug_drawer._try_update()
 
     def _on_subagent_done(self, agent_id: str, status: str, result: str):
         """Background subagent completed — update UI."""

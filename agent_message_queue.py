@@ -37,6 +37,13 @@ class AgentMessageQueue:
         while True:
             text, source = await self._queue.get()
             try:
+                if source == "agent":
+                    import re
+                    m = re.match(r"\[Message from ([^\]]+)\]", text)
+                    from_name = m.group(1) if m else "unknown"
+                    msg_body = text[m.end():].strip() if m else text
+                    await self._controller.handler.on_enqueued(
+                        from_name, msg_body, source)
                 async with self._controller._agent_lock:
                     await self._controller.send_message(text)
             except asyncio.CancelledError:

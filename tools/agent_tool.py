@@ -12,8 +12,8 @@ class AgentTool(Tool):
         self.description = (
             "Launch a new agent to handle complex, multi-step tasks. "
             "Each agent type has specific capabilities and tools available to it. "
-            "Use when a task is complex enough to benefit from a specialized, "
-            "isolated agent with focused context."
+            "Agents can optionally stay alive after completing their task (keep_alive), "
+            "allowing you to send them further messages via SendMessage."
         )
         self.parameters = {
             "type": "object",
@@ -39,9 +39,17 @@ class AgentTool(Tool):
                     "type": "boolean",
                     "description": "Set to true to run this agent in the background.",
                 },
+                "keep_alive": {
+                    "type": "boolean",
+                    "description": (
+                        "Set to true to keep the agent alive after it completes its task. "
+                        "The agent can then receive follow-up messages via SendMessage. "
+                        "If false or omitted, the agent is cleaned up after completion."
+                    ),
+                },
                 "name": {
                     "type": "string",
-                    "description": "Name for the spawned agent. Makes it addressable via SendMessage.",
+                    "description": "Name for the spawned agent. Required if keep_alive is true. Makes it addressable via SendMessage.",
                 },
             },
             "required": ["description", "prompt"],
@@ -57,6 +65,7 @@ class AgentTool(Tool):
         prompt = input.get("prompt", "")
         subagent_type = input.get("subagent_type", "general-purpose")
         background = input.get("run_in_background", False)
+        keep_alive = input.get("keep_alive", False)
         name = input.get("name", "")
 
         definition = resolve_agent(subagent_type, self._user_agents)
@@ -65,11 +74,15 @@ class AgentTool(Tool):
             available.extend(self._user_agents.keys())
             return f"Unknown agent type: {subagent_type}\nAvailable: {', '.join(available)}"
 
+        if keep_alive and not name:
+            return "Error: name is required when keep_alive is true."
+
         try:
             agent_id = await self._manager.spawn(
                 definition=definition,
                 prompt=prompt,
                 background=background,
+                keep_alive=keep_alive,
                 name=name,
             )
             state = self._manager.agents[agent_id]
