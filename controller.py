@@ -86,6 +86,8 @@ class AgentController:
 
         self.registry = _build_registry()
         self.provider = _build_provider(config)
+        self._mcp_manager = None
+        self._start_mcp(config.cwd)
         self.agent = Agent(
             provider=self.provider,
             registry=self.registry,
@@ -149,6 +151,30 @@ class AgentController:
 
     def clear_history(self) -> None:
         self.agent.messages.clear()
+
+    def _start_mcp(self, cwd: str | None):
+        """Start MCP server connections in background."""
+        from mcp_integration.config import load_mcp_configs
+        from mcp_integration.connection import MCPConnectionManager
+        from pathlib import Path
+
+        cwd_path = Path(cwd) if cwd else Path.cwd()
+        configs = load_mcp_configs(cwd_path)
+        if not configs:
+            return
+
+        self._mcp_manager = MCPConnectionManager(configs)
+
+        async def _connect_and_register():
+            await self._mcp_manager.connect_all()
+            for tool in self._mcp_manager.get_tools():
+                self.registry.register(tool)
+
+        try:
+            loop = asyncio.get_running_loop()
+            self._mcp_task = loop.create_task(_connect_and_register())
+        except RuntimeError:
+            pass
 
     def reconfigure(self, new_config: AgentConfig) -> None:
         self.config = new_config
