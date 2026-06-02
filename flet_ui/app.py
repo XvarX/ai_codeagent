@@ -35,6 +35,7 @@ class FletApp:
             self.controller = self.subagent_manager.agents["master"].controller
             self.handler = self.controller.handler
         except Exception as e:
+            self.subagent_manager = None
             self.controller = None
             self.handler = None
             self._init_error = str(e)
@@ -55,14 +56,17 @@ class FletApp:
         self._mcp_ready = False
 
         # ── Agent sidebar ──
-        self.agent_sidebar = AgentSidebar(
-            self.subagent_manager,
-            on_switch=self._on_agent_switch,
-        )
-        self.subagent_manager.on_change = self.agent_sidebar.refresh
+        if self.subagent_manager:
+            self.agent_sidebar = AgentSidebar(
+                self.subagent_manager,
+                on_switch=self._on_agent_switch,
+            )
+            self.subagent_manager.on_change = self.agent_sidebar.refresh
+        else:
+            self.agent_sidebar = None
 
         # ── Register Agent + SendMessage tools on master ──
-        if self.controller:
+        if self.controller and self.subagent_manager:
             try:
                 from tools.agent_tool import AgentTool
                 self.controller.registry.register(AgentTool(self.subagent_manager, self.user_agents))
@@ -221,12 +225,15 @@ class FletApp:
             expand=True,
         )
 
-        # Wrap with agent sidebar
-        full_layout = ft.Row([
-            self.agent_sidebar,
-            ft.VerticalDivider(width=1, color="#E2E6EC"),
-            layout,
-        ], spacing=0, expand=True)
+        # Wrap with agent sidebar (if available)
+        if self.agent_sidebar:
+            full_layout = ft.Row([
+                self.agent_sidebar,
+                ft.VerticalDivider(width=1, color="#E2E6EC"),
+                layout,
+            ], spacing=0, expand=True)
+        else:
+            full_layout = layout
         self.page.add(full_layout)
 
         self.page.on_keyboard_event = self._on_keyboard
@@ -728,7 +735,17 @@ class FletApp:
             f.write(f"User: {text}\n")
             f.write("*" * 60 + "\n\n")
 
-        self.page.run_task(self.controller.send_message, text)
+        queue = self._get_active_queue()
+        if queue:
+            queue.enqueue(text, source="user")
+        else:
+            self.page.run_task(self.controller.send_message, text)
+
+    def _get_active_queue(self):
+        if not self.subagent_manager:
+            return None
+        state = self.subagent_manager.agents.get(self.subagent_manager.active_id)
+        return state.message_queue if state else None
 
     def _handle_test_command(self, cmd: str):
         """Handle /test debug commands."""
@@ -789,6 +806,24 @@ class FletApp:
         self._provider_label.update()
         if self.controller:
             self.controller.reconfigure(new_config)
+        elif self.subagent_manager is None:
+            # Initial SubagentManager creation failed — retry with new config
+            try:
+                self.subagent_manager = SubagentManager(new_config, self.user_agents)
+                self.controller = self.subagent_manager.agents["master"].controller
+                self.handler = self.controller.handler
+                FletApp._wire_handler_forwarding(self, self.handler)
+                self.agent_sidebar = AgentSidebar(
+                    self.subagent_manager,
+                    on_switch=self._on_agent_switch,
+                )
+                self.subagent_manager.on_change = self.agent_sidebar.refresh
+                # Rebuild UI to include sidebar
+                self.page.clean()
+                self._build_ui()
+                self._init_error = None
+            except Exception as e:
+                self._init_error = str(e)
         else:
             try:
                 self.controller = AgentController(new_config, self.handler)
@@ -872,7 +907,6 @@ class FletApp:
         handler._fwd_response_done = app._on_response_done
         handler._fwd_done = app._on_done
         handler._fwd_error = app._on_error
-        handler._fwd_inbox_msg = app._on_inbox_message
         handler._fwd_compact_call = app._on_compact_call
         handler._fwd_compact = app._on_compact
         handler._fwd_snip = app._on_snip
@@ -883,13 +917,13 @@ class FletApp:
         """Clear forwarding callbacks on a subagent handler."""
         for attr in ('_fwd_thinking', '_fwd_text_delta', '_fwd_tool_use',
                      '_fwd_tool_result', '_fwd_response_done', '_fwd_done',
-                     '_fwd_error', '_fwd_inbox_msg', '_fwd_compact_call',
+                     '_fwd_error', '_fwd_compact_call',
                      '_fwd_compact', '_fwd_snip', '_fwd_subagent_done'):
             setattr(handler, attr, None)
 
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""
-        if agent_id == self.subagent_manager.active_id:
+        if not self.subagent_manager or agent_id == self.subagent_manager.active_id:
             return
         state = self.subagent_manager.agents.get(agent_id)
         if not state:
@@ -937,38 +971,25 @@ class FletApp:
         # ── Rebuild chat view ──
         self.chat_view.clear()
 
-        for msg in state.controller.agent.messages:
+        # Snapshot messages to avoid iterating a list being mutated by a running agent
+        msgs_snapshot = list(state.controller.agent.messages)
+        for msg in msgs_snapshot:
             if msg.role == "user" and not msg.is_tool_result:
                 self.chat_view.add_user_message(msg.content)
             elif msg.role == "user" and msg.is_tool_result:
                 self.chat_view.add_tool_label("Tool Result", msg.content[:200])
             elif msg.role == "assistant" and msg.content:
                 self.chat_view.add_assistant_message(flatten_headings(msg.content))
+        try:
+            self.chat_view.update()
+        except RuntimeError:
+            pass
         self.page.update()
-
-    def _on_inbox_message(self, from_name: str, message: str):
-        """Debug entry + chat bubble for received inter-agent messages."""
-        self.chat_view.add_tool_label(
-            f"[Msg from {from_name}]",
-            message[:500],
-        )
-        self.debug_drawer.add_event(
-            f"[Msg from {from_name}]",
-            message[:300],
-            "#A855F7",
-            event_data={
-                "type": "InboxMessage",
-                "from": from_name,
-                "message": message,
-                "formatted": f"From: {from_name}\n\n{message[:2000]}",
-            },
-            group_key="user",
-        )
-        self.chat_view._try_update()
-        self.debug_drawer._try_update()
 
     def _on_subagent_done(self, agent_id: str, status: str, result: str):
         """Background subagent completed — update UI."""
+        if not self.subagent_manager:
+            return
         state = self.subagent_manager.agents.get(agent_id)
         name = state.name if state else agent_id
         icon = "✓" if status == "completed" else "✗"

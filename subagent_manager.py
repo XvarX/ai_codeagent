@@ -106,7 +106,6 @@ class _SubagentHandler(EventHandler):
         self._fwd_response_done: callable | None = None
         self._fwd_done: callable | None = None
         self._fwd_error: callable | None = None
-        self._fwd_inbox_msg: callable | None = None
         self._fwd_compact_call: callable | None = None
         self._fwd_compact: callable | None = None
         self._fwd_snip: callable | None = None
@@ -274,12 +273,6 @@ class _SubagentHandler(EventHandler):
             state.result = final_text
         if self._fwd_done:
             self._fwd_done(final_text)
-
-    async def on_inbox_message(self, from_name: str, message: str):
-        self._record(f"[Msg from {from_name}]", message[:200], "#A855F7",
-                     group_key="user")
-        if self._fwd_inbox_msg:
-            self._fwd_inbox_msg(from_name, message)
 
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
         if self._fwd_compact_call:
