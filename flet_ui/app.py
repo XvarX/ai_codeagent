@@ -923,12 +923,15 @@ class FletApp:
 
         # ── Load target agent's debug state ──
         target_snapshot = self._debug_snapshots.get(agent_id)
-        self.debug_drawer.load_snapshot(None)
-        if state.debug_events:
-            for evt in state.debug_events:
-                self.debug_drawer.add_event(
-                    evt["prefix"], evt["message"], evt["color"],
-                    evt.get("event_data"))
+        if target_snapshot is not None:
+            self.debug_drawer.load_snapshot(target_snapshot)
+        else:
+            self.debug_drawer.load_snapshot(None)
+            if state.debug_events:
+                for evt in state.debug_events:
+                    self.debug_drawer.add_event(
+                        evt["prefix"], evt["message"], evt["color"],
+                        evt.get("event_data"))
 
         # ── Rebuild chat view ──
         self.chat_view.clear()
