@@ -222,15 +222,24 @@ class SubagentManager:
                     if not pending:
                         continue
                     print(f"[InboxPoller] {len(pending)} msg(s) → {agent_id}", file=sys.stderr, flush=True)
-                    # Create debug entries for each received message
+                    # Create entries on the active agent's panel, otherwise store for replay
+                    is_active = (agent_id == self.active_id)
                     for p in pending:
-                        try:
-                            await state.controller.handler.on_inbox_message(
-                                p.get("from_name", "unknown"),
-                                p.get("message", ""),
-                            )
-                        except Exception:
-                            pass
+                        from_name = p.get("from_name", "unknown")
+                        msg_text = p.get("message", "")
+                        if is_active:
+                            try:
+                                await state.controller.handler.on_inbox_message(from_name, msg_text)
+                            except Exception:
+                                state.debug_events.append({
+                                    "prefix": f"[Msg from {from_name}]", "message": msg_text[:200],
+                                    "color": "#A855F7", "event_data": None, "group_key": "user",
+                                })
+                        else:
+                            state.debug_events.append({
+                                "prefix": f"[Msg from {from_name}]", "message": msg_text[:200],
+                                "color": "#A855F7", "event_data": None, "group_key": "user",
+                            })
                     formatted = "\n\n".join(
                         f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
                         for p in pending
