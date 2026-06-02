@@ -13,6 +13,7 @@ from flet_ui.input_bar import InputBar
 from flet_ui.debug_drawer import DebugDrawer
 from flet_ui.config_dialog import show_config_dialog
 from flet_ui.mcp_dialog import show_mcp_dialog
+from flet_ui.skill_dialog import show_skill_dialog
 
 
 class _FletEventHandler(EventHandler):
@@ -168,6 +169,11 @@ class FletApp:
                 ),
             ], spacing=10),
             actions=[
+                ft.TextButton(
+                    content=ft.Text("Skills", size=11, color="#64748B"),
+                    on_click=lambda e: show_skill_dialog(
+                        self.page, self.config.cwd),
+                ),
                 ft.TextButton(
                     content=ft.Text("MCP", size=11, color="#64748B"),
                     on_click=lambda e: show_mcp_dialog(
