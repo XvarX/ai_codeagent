@@ -117,31 +117,31 @@ class _SubagentHandler(EventHandler):
     async def on_thinking(self):
         self._record("[Request]", "Sending to LLM...", "#6366F1")
         if self._fwd_thinking:
-            await self._fwd_thinking()
+            self._fwd_thinking()
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
         if self._fwd_text_delta:
-            await self._fwd_text_delta(token, reasoning)
+            self._fwd_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._record(f"[Tool] {name}",
                      ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
                      "#22C55E")
         if self._fwd_tool_use:
-            await self._fwd_tool_use(name, input_dict, tool_use_id)
+            self._fwd_tool_use(name, input_dict, tool_use_id)
 
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         color = "#EF4444" if is_error else "#8B5CF6"
         self._record(f"[Send Tool Result]", f"{name}  |  {result[:200]}", color)
         if self._fwd_tool_result:
-            await self._fwd_tool_result(name, result, is_error, duration_ms, tool_use_id)
+            self._fwd_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
     async def on_response_done(self, raw: dict):
         usage = raw.get("usage", {})
         tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         self._record("[Response]", f"~{tokens} tokens", "#3B82F6")
         if self._fwd_response_done:
-            await self._fwd_response_done(raw)
+            self._fwd_response_done(raw)
 
     async def on_error(self, message: str):
         state = self.manager.agents.get(self.agent_id)
@@ -149,7 +149,7 @@ class _SubagentHandler(EventHandler):
             state.error = message
         self._record("[Error]", message, "#EF4444")
         if self._fwd_error:
-            await self._fwd_error(message)
+            self._fwd_error(message)
 
     async def on_done(self, final_text: str):
         state = self.manager.agents.get(self.agent_id)
@@ -157,7 +157,7 @@ class _SubagentHandler(EventHandler):
             state.result = final_text
         self._record("[Final Response]", final_text[:200], "#22C55E")
         if self._fwd_done:
-            await self._fwd_done(final_text)
+            self._fwd_done(final_text)
 
 
 class SubagentManager:

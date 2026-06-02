@@ -124,6 +124,7 @@ class AgentSidebar(ft.Container):
         )
 
     def _switch_to(self, agent_id: str):
+        print(f"[Sidebar] switch to {agent_id}", flush=True)
         self.manager.switch(agent_id)
         self.refresh()
         if self.on_switch:

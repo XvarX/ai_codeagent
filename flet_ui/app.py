@@ -922,9 +922,12 @@ class FletApp:
 
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""
+        if agent_id == self.subagent_manager.active_id:
+            return
         state = self.subagent_manager.agents.get(agent_id)
         if not state:
             return
+        print(f"[AgentSwitch] {self.subagent_manager.active_id} → {agent_id}", flush=True)
 
         # ── Save current debug state ──
         if not hasattr(self, '_debug_snapshots'):
