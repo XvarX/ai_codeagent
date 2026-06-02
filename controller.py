@@ -87,7 +87,7 @@ class AgentController:
         self.registry = _build_registry()
         self.provider = _build_provider(config)
         self._mcp_manager = None
-        self._mcp_started = False
+        self._mcp_connected = False
         self.agent = Agent(
             provider=self.provider,
             registry=self.registry,
@@ -100,9 +100,6 @@ class AgentController:
         )
 
     async def send_message(self, text: str) -> None:
-        if not self._mcp_started:
-            self._mcp_started = True
-            await self._start_mcp(self.config.cwd)
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
 
@@ -155,21 +152,51 @@ class AgentController:
     def clear_history(self) -> None:
         self.agent.messages.clear()
 
-    async def _start_mcp(self, cwd: str | None):
-        """Start MCP server connections. Blocks until all are connected."""
+    async def connect_mcp(self):
+        """Connect MCP servers at startup. Blocks until connected or failed."""
         from mcp_integration.config import load_mcp_configs
         from mcp_integration.connection import MCPConnectionManager
         from pathlib import Path
 
-        cwd_path = Path(cwd) if cwd else Path.cwd()
+        cwd_path = Path(self.config.cwd) if self.config.cwd else Path.cwd()
         configs = load_mcp_configs(cwd_path)
         if not configs:
+            self._mcp_connected = True
             return
 
         self._mcp_manager = MCPConnectionManager(configs)
         await self._mcp_manager.connect_all()
         for tool in self._mcp_manager.get_tools():
             self.registry.register(tool)
+        self._mcp_connected = True
+
+    def get_mcp_info(self) -> dict | None:
+        """Return MCP server info for UI display, or None if no servers."""
+        if not self._mcp_manager:
+            return None
+        servers = []
+        for task in self._mcp_manager._tasks:
+            # We don't have per-server state tracking, skip for now
+            pass
+        # Build from tools
+        tools = self._mcp_manager.get_tools()
+        if not tools:
+            return None
+        by_server: dict[str, list[dict]] = {}
+        for tool in tools:
+            server = tool._server_name
+            if server not in by_server:
+                by_server[server] = []
+            by_server[server].append({
+                "name": tool._tool_name,
+                "description": tool.description,
+            })
+        server_list = [{"name": s, "tools": t} for s, t in by_server.items()]
+        return {
+            "server_count": len(server_list),
+            "tool_count": len(tools),
+            "servers": server_list,
+        }
 
     def reconfigure(self, new_config: AgentConfig) -> None:
         self.config = new_config

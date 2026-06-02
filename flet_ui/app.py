@@ -75,6 +75,7 @@ class FletApp:
             max_tokens=config.context_window,
         )
         self.input_bar = InputBar(on_send=self._on_send)
+        self._mcp_ready = False
 
         self._current_assistant_bubble: ft.Container | None = None
         self._current_md_text: str = ""
@@ -85,6 +86,42 @@ class FletApp:
         self._log_path = self._init_log()
 
         self._build_ui()
+        self.page.run_task(self._init_mcp)
+
+    async def _init_mcp(self):
+        """Connect MCP servers at startup."""
+        if not self.controller:
+            self._mcp_ready = True
+            return
+
+        self.input_bar._text_field.hint_text = "MCP 连接中..."
+        self.input_bar._text_field.update()
+
+        await self.controller.connect_mcp()
+        self._mcp_ready = True
+
+        self.input_bar._text_field.hint_text = "输入消息... (Ctrl+Enter 发送)"
+        self.input_bar._text_field.update()
+
+        info = self.controller.get_mcp_info()
+        if info:
+            import json
+            svr_lines = [f"MCP: {info['server_count']} servers, {info['tool_count']} tools"]
+            for s in info["servers"]:
+                tool_names = ", ".join(t["name"] for t in s["tools"])
+                svr_lines.append(f"  {s['name']}: {tool_names}")
+            self.debug_drawer.add_event(
+                "System", "\n".join(svr_lines), "#6366F1",
+                event_data={
+                    "type": "MCP",
+                    "formatted": "\n".join(svr_lines),
+                    "raw_json": json.dumps(info, ensure_ascii=False, indent=2),
+                    "servers": info["servers"],
+                },
+            )
+        else:
+            self.debug_drawer.add_event(
+                "System", "MCP: no servers configured", "#94A3B8")
 
     def _init_log(self) -> Path:
         logs_dir = Path(".myagent") / "logs"
@@ -594,6 +631,9 @@ class FletApp:
 
     def _on_send(self, text: str):
         self._has_pending_tool_results = False
+        if not self._mcp_ready:
+            self.chat_view.add_assistant_message("**MCP 连接中，请稍候...**")
+            return
         if self._compacting:
             self.chat_view.add_assistant_message("**压缩中，请稍候...**")
             return
