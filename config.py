@@ -27,6 +27,7 @@ class AgentConfig:
     context_window: int = 128000
     compact_threshold: float = 0.85
     reserved_output: int = 8000
+    agent_presets: dict = field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, path: str | None = None) -> "AgentConfig":
@@ -121,6 +122,14 @@ class AgentConfig:
             or 8000
         )
 
+        agent_presets = cfg.get("agent_presets", {})
+        normalized_presets = {}
+        for pname, pdata in agent_presets.items():
+            normalized_presets[pname] = {
+                "provider": pdata.get("provider", ""),
+                "allowed_tools": pdata.get("allowed_tools", []),
+            }
+
         return cls(
             provider=provider,
             model=os.environ.get("AGENT_MODEL") or cfg.get("model"),
@@ -136,7 +145,32 @@ class AgentConfig:
             context_window=context_window,
             compact_threshold=compact_threshold,
             reserved_output=reserved_output,
+            agent_presets=normalized_presets,
         )
+
+    def get_agent_provider_config(self, preset_name: str) -> dict | None:
+        """Get provider config for a named agent preset.
+
+        Returns {provider, api_key, base_url, model} or None for defaults.
+        """
+        preset = self.agent_presets.get(preset_name.lower())
+        if not preset or not preset.get("provider"):
+            return None
+
+        provider = preset["provider"]
+        import yaml
+        config_path = Path("config.yaml")
+        cfg = {}
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+
+        return {
+            "provider": provider,
+            "api_key": cfg.get("api_keys", {}).get(provider, ""),
+            "base_url": cfg.get("base_urls", {}).get(provider, ""),
+            "model": cfg.get("models", {}).get(provider, ""),
+        }
 
     # Keep from_env for backwards compat
     @classmethod
