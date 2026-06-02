@@ -99,13 +99,13 @@ def show_mcp_dialog(page: ft.Page, controller):
         def make_stop(n):
             async def stop(e):
                 await mgr.stop_server(n)
-                page.run_task(lambda: _refresh(page, controller))
+                _refresh(page, controller)
             return stop
 
         def make_restart(n):
             async def restart(e):
                 await mgr.restart_server(n)
-                page.run_task(lambda: _refresh(page, controller))
+                _refresh(page, controller)
             return restart
 
         stop_btn = ft.TextButton(
