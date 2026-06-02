@@ -69,6 +69,9 @@ def _build_provider(config: AgentConfig):
 class EventHandler:
     """Base event handler — override methods in UI layer."""
 
+    def __init__(self):
+        self.on_debug: callable | None = None  # (prefix, message, color) for live debug
+
     async def on_thinking(self): pass
     async def on_text_delta(self, token: str, reasoning: bool = False): pass
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""): pass

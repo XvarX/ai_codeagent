@@ -97,6 +97,12 @@ class _SubagentHandler(EventHandler):
             state.debug_events.append({
                 "prefix": prefix, "message": message, "color": color,
             })
+        # Also push to live debug drawer if wired
+        if self.on_debug:
+            try:
+                self.on_debug(prefix, message, color)
+            except Exception:
+                pass
 
     async def on_thinking(self):
         self._log("[Thinking]", "Agent thinking...", "#6366F1")

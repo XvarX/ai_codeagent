@@ -23,6 +23,7 @@ class _FletEventHandler(EventHandler):
     """Bridge from AgentController events to Flet UI updates."""
 
     def __init__(self, app: "FletApp"):
+        super().__init__()
         self.app = app
 
     async def on_thinking(self):
@@ -903,47 +904,33 @@ class FletApp:
         if not state:
             return
 
-        # Save current debug state
+        # ── Save current debug state ──
         if not hasattr(self, '_debug_snapshots'):
             self._debug_snapshots = {}
         self._debug_snapshots[self.subagent_manager.active_id] = self.debug_drawer.save_snapshot()
 
-        # Switch controller
+        # ── Unwire old handler's debug callback ──
+        old_state = self.subagent_manager.agents.get(self.subagent_manager.active_id)
+        if old_state:
+            old_state.controller.handler.on_debug = None
+
+        # ── Switch controller ──
         self.controller = state.controller
         self.subagent_manager.active_id = agent_id
 
-        # Load target agent's debug state
+        # ── Wire new handler's debug callback ──
+        state.controller.handler.on_debug = self.debug_drawer.add_event
+
+        # ── Load target agent's debug state ──
         target_snapshot = self._debug_snapshots.get(agent_id)
-        if target_snapshot is None and state.debug_events:
-            # First time viewing — replay captured events into debug drawer
-            self.debug_drawer.load_snapshot(None)
+        self.debug_drawer.load_snapshot(None)
+        if state.debug_events:
             for evt in state.debug_events:
                 self.debug_drawer.add_event(
                     evt["prefix"], evt["message"], evt["color"])
-            self._debug_snapshots[agent_id] = self.debug_drawer.save_snapshot()
-        else:
-            self.debug_drawer.load_snapshot(target_snapshot)
 
-        # Rebuild chat view
+        # ── Rebuild chat view ──
         self.chat_view.clear()
-
-        # Show pending inbox messages
-        import asyncio
-        pending = []
-        while not state.inbox.empty():
-            try:
-                p = state.inbox.get_nowait()
-                pending.append(p)
-            except asyncio.QueueEmpty:
-                break
-        for p in pending:
-            from_name = p.get("from_name", "unknown")
-            message = p.get("message", "")
-            self.chat_view.add_tool_label(
-                f"[Msg from {from_name}]", message[:300],
-            )
-            # Put back for agent loop to process
-            state.inbox.put_nowait(p)
 
         for msg in state.controller.agent.messages:
             if msg.role == "user" and not msg.is_tool_result:
