@@ -8,16 +8,16 @@ Two pipes to the LLM:
 from datetime import datetime
 
 
-def build_system_prompt(tool_names: list[str], cwd: str, skills_text: str = "") -> str:
+def build_system_prompt(tool_names: list[str], cwd: str) -> str:
     """
     Build the full system prompt string.
-    Static section (cacheable) + dynamic section (date, cwd, skills).
+    Static section (cacheable) + dynamic section (date, cwd).
+    Skills are injected as a user-role system reminder each turn.
     """
     sections = [
         _get_role_section(),
         _get_doing_tasks_section(),
         _get_using_your_tools_section(tool_names),
-        _get_skills_section(skills_text) if skills_text else None,
         _get_tone_section(),
         _get_dynamic_section(cwd),
     ]
@@ -89,15 +89,6 @@ def _get_tone_section() -> str:
         "Keep responses short and direct. "
         "Default to writing no comments in code. "
         "Only explain when the WHY is non-obvious."
-    )
-
-
-def _get_skills_section(skills_text: str) -> str:
-    return (
-        "# Available skills\n\n"
-        "You can invoke skills using the Skill tool. "
-        "When the user types /name, check if a matching skill exists.\n\n"
-        f"{skills_text}"
     )
 
 
