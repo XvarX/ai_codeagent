@@ -25,42 +25,71 @@ class _FletEventHandler(EventHandler):
     def __init__(self, app: "FletApp"):
         super().__init__()
         self.app = app
+        self._active = True  # toggled by _on_agent_switch
+        self._pending: list[dict] = []  # buffered events when inactive
+
+    @property
+    def _is_active(self):
+        return self._active and self.app.subagent_manager.active_id == "master"
+
+    def _buffer(self, prefix, message, color="#94A3B8", event_data=None, group_key=None):
+        if self._is_active:
+            return False
+        self._pending.append({"prefix": prefix, "message": message, "color": color,
+                              "event_data": event_data, "group_key": group_key})
+        return True
+
+    def drain_pending(self) -> list[dict]:
+        events = self._pending[:]
+        self._pending.clear()
+        return events
 
     async def on_thinking(self):
-        self.app._on_thinking()
+        if not self._buffer("[Request]", "Sending to LLM...", "#6366F1"):
+            self.app._on_thinking()
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
-        self.app._on_text_delta(token, reasoning)
+        if self._is_active: self.app._on_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
-        self.app._on_tool_use(name, input_dict, tool_use_id)
+        if not self._buffer(f"[Tool] {name}",
+                            ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
+                            "#22C55E"):
+            self.app._on_tool_use(name, input_dict, tool_use_id)
 
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
-        self.app._on_tool_result(name, result, is_error, duration_ms, tool_use_id)
+        color = "#EF4444" if is_error else "#8B5CF6"
+        if not self._buffer(f"[Send Tool Result]", f"{name}  |  {result[:200]}", color):
+            self.app._on_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
     async def on_response_done(self, raw: dict):
-        self.app._on_response_done(raw)
+        usage = raw.get("usage", {})
+        tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+        if not self._buffer("[Response]", f"~{tokens} tokens", "#3B82F6"):
+            self.app._on_response_done(raw)
 
     async def on_done(self, final_text: str):
-        self.app._on_done(final_text)
+        if not self._buffer("[Final Response]", final_text[:200], "#22C55E"):
+            self.app._on_done(final_text)
 
     async def on_error(self, message: str):
-        self.app._on_error(message)
+        if not self._buffer("[Error]", message, "#EF4444"):
+            self.app._on_error(message)
 
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
-        self.app._on_compact_call(old_msg_count, pre_tokens)
+        if self._is_active: self.app._on_compact_call(old_msg_count, pre_tokens)
 
     async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
-        self.app._on_compact(pre_tokens, post_tokens, trigger, summary)
+        if self._is_active: self.app._on_compact(pre_tokens, post_tokens, trigger, summary)
 
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
-        self.app._on_snip(groups_removed, tokens_before, tokens_after)
+        if self._is_active: self.app._on_snip(groups_removed, tokens_before, tokens_after)
 
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
-        self.app._on_subagent_done(agent_id, status, result)
+        if self._is_active: self.app._on_subagent_done(agent_id, status, result)
 
     async def on_inbox_message(self, from_name: str, message: str):
-        self.app._on_inbox_message(from_name, message)
+        if self._is_active: self.app._on_inbox_message(from_name, message)
 
 
 class FletApp:
@@ -949,6 +978,10 @@ class FletApp:
         self.controller = state.controller
         self.subagent_manager.active_id = agent_id
 
+        # Toggle master handler's active flag
+        if hasattr(self.handler, '_active'):
+            self.handler._active = (agent_id == "master")
+
         # ── Wire new handler — route events through app._on_* methods ──
         FletApp._wire_handler_forwarding(self, state.controller.handler)
 
@@ -964,6 +997,14 @@ class FletApp:
             self.debug_drawer.load_snapshot(None)
 
         # Replay new debug_events added since last view
+        # Drain master's pending events when switching to master
+        if agent_id == "master" and hasattr(self.handler, 'drain_pending'):
+            for evt in self.handler.drain_pending():
+                self.debug_drawer.add_event(
+                    evt["prefix"], evt["message"], evt["color"],
+                    evt.get("event_data"),
+                    group_key=evt.get("group_key"))
+
         if state.debug_events:
             for evt in state.debug_events[last_idx:]:
                 self.debug_drawer.add_event(
