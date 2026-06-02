@@ -7,7 +7,7 @@ from datetime import datetime
 import flet as ft
 
 from config import AgentConfig
-from controller import AgentController, EventHandler
+from controller import AgentController
 from flet_ui.chat_view import ChatView, flatten_headings
 from flet_ui.input_bar import InputBar
 from flet_ui.debug_drawer import DebugDrawer
@@ -19,78 +19,6 @@ from subagent_manager import SubagentManager
 from agent_definitions import load_user_agents
 
 
-class _FletEventHandler(EventHandler):
-    """Bridge from AgentController events to Flet UI updates."""
-
-    def __init__(self, app: "FletApp"):
-        super().__init__()
-        self.app = app
-
-    @property
-    def _is_active(self):
-        return self._active and self.app.subagent_manager.active_id == "master"
-
-    def _master_events(self):
-        """Get master's SubagentState.debug_events for buffering when inactive."""
-        master = self.app.subagent_manager.agents.get("master")
-        return master.debug_events if master else None
-
-    def _buffer(self, prefix, message, color="#94A3B8", event_data=None, group_key=None):
-        if self._is_active:
-            return False
-        events = self._master_events()
-        if events is not None:
-            events.append({"prefix": prefix, "message": message, "color": color,
-                           "event_data": event_data, "group_key": group_key})
-        return True
-
-    async def on_thinking(self):
-        if self._is_active: self.app._on_thinking()
-
-    async def on_text_delta(self, token: str, reasoning: bool = False):
-        if self._is_active: self.app._on_text_delta(token, reasoning)
-
-    async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
-        if not self._buffer(f"[Tool] {name}",
-                            ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
-                            "#22C55E"):
-            self.app._on_tool_use(name, input_dict, tool_use_id)
-
-    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
-        color = "#EF4444" if is_error else "#8B5CF6"
-        if not self._buffer(f"[Send Tool Result]", f"{name}  |  {result[:200]}", color):
-            self.app._on_tool_result(name, result, is_error, duration_ms, tool_use_id)
-
-    async def on_response_done(self, raw: dict):
-        usage = raw.get("usage", {})
-        tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        if not self._buffer("[Response]", f"~{tokens} tokens", "#3B82F6"):
-            self.app._on_response_done(raw)
-
-    async def on_done(self, final_text: str):
-        if not self._buffer("[Final Response]", final_text[:200], "#22C55E"):
-            self.app._on_done(final_text)
-
-    async def on_error(self, message: str):
-        if not self._buffer("[Error]", message, "#EF4444"):
-            self.app._on_error(message)
-
-    async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
-        if self._is_active: self.app._on_compact_call(old_msg_count, pre_tokens)
-
-    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
-        if self._is_active: self.app._on_compact(pre_tokens, post_tokens, trigger, summary)
-
-    async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
-        if self._is_active: self.app._on_snip(groups_removed, tokens_before, tokens_after)
-
-    async def on_subagent_done(self, agent_id: str, status: str, result: str):
-        if self._is_active: self.app._on_subagent_done(agent_id, status, result)
-
-    async def on_inbox_message(self, from_name: str, message: str):
-        if self._is_active: self.app._on_inbox_message(from_name, message)
-
-
 class FletApp:
     """Main Flet application controller."""
 
@@ -98,17 +26,22 @@ class FletApp:
         self.page = page
         self.config = config
 
-        self.handler = _FletEventHandler(self)
         self._init_error: str | None = None
 
-        # ── Subagent support ──
+        # ── Subagent support (all agents use unified _SubagentHandler) ──
         self.user_agents = load_user_agents(config.cwd)
         try:
-            self.subagent_manager = SubagentManager(config, self.handler, self.user_agents)
+            self.subagent_manager = SubagentManager(config, self.user_agents)
             self.controller = self.subagent_manager.agents["master"].controller
+            self.handler = self.controller.handler
         except Exception as e:
             self.controller = None
+            self.handler = None
             self._init_error = str(e)
+
+        # Wire master's handler as initially active
+        if self.handler:
+            FletApp._wire_handler_forwarding(self, self.handler)
 
         self.chat_view = ChatView()
         self.debug_drawer = DebugDrawer(
@@ -940,18 +873,19 @@ class FletApp:
         handler._fwd_done = app._on_done
         handler._fwd_error = app._on_error
         handler._fwd_inbox_msg = app._on_inbox_message
+        handler._fwd_compact_call = app._on_compact_call
+        handler._fwd_compact = app._on_compact
+        handler._fwd_snip = app._on_snip
+        handler._fwd_subagent_done = app._on_subagent_done
 
     @staticmethod
     def _clear_handler_forwarding(handler):
         """Clear forwarding callbacks on a subagent handler."""
-        handler._fwd_thinking = None
-        handler._fwd_text_delta = None
-        handler._fwd_tool_use = None
-        handler._fwd_tool_result = None
-        handler._fwd_response_done = None
-        handler._fwd_done = None
-        handler._fwd_error = None
-        handler._fwd_inbox_msg = None
+        for attr in ('_fwd_thinking', '_fwd_text_delta', '_fwd_tool_use',
+                     '_fwd_tool_result', '_fwd_response_done', '_fwd_done',
+                     '_fwd_error', '_fwd_inbox_msg', '_fwd_compact_call',
+                     '_fwd_compact', '_fwd_snip', '_fwd_subagent_done'):
+            setattr(handler, attr, None)
 
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""

@@ -56,8 +56,7 @@ def test_subagent_manager_creates_master(monkeypatch):
     monkeypatch.setattr("controller._build_provider", mock_build_provider)
 
     config = AgentConfig(provider="glm")
-    handler = TestHandler()
-    mgr = SubagentManager(config, handler)
+    mgr = SubagentManager(config)
 
     assert "master" in mgr.agents
     assert mgr.active_id == "master"

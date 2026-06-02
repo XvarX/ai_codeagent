@@ -104,6 +104,10 @@ class _SubagentHandler(EventHandler):
         self._fwd_done: callable | None = None
         self._fwd_error: callable | None = None
         self._fwd_inbox_msg: callable | None = None
+        self._fwd_compact_call: callable | None = None
+        self._fwd_compact: callable | None = None
+        self._fwd_snip: callable | None = None
+        self._fwd_subagent_done: callable | None = None
 
     @property
     def _is_forwarding(self):
@@ -172,21 +176,38 @@ class _SubagentHandler(EventHandler):
         if self._fwd_inbox_msg:
             self._fwd_inbox_msg(from_name, message)
 
+    async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
+        if self._fwd_compact_call:
+            self._fwd_compact_call(old_msg_count, pre_tokens)
+
+    async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
+        if self._fwd_compact:
+            self._fwd_compact(pre_tokens, post_tokens, trigger, summary)
+
+    async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
+        if self._fwd_snip:
+            self._fwd_snip(groups_removed, tokens_before, tokens_after)
+
+    async def on_subagent_done(self, agent_id: str, status: str, result: str):
+        if self._fwd_subagent_done:
+            self._fwd_subagent_done(agent_id, status, result)
+
 
 class SubagentManager:
     """Manages the lifecycle of all agents (master + subagents)."""
 
-    def __init__(self, config: AgentConfig, master_handler: EventHandler,
+    def __init__(self, config: AgentConfig,
                  user_agents: dict[str, AgentDefinition] | None = None):
         self.config = config
         self.user_agents = user_agents or {}
-        self.master_handler = master_handler
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self.on_change = None  # set by UI to refresh sidebar
         self._poller_task: asyncio.Task | None = None
 
         self._create_master()
+        # master_handler exposed for _run_background notifications
+        self.master_handler = self.agents["master"].controller.handler
         self._start_poller()
 
     def _start_poller(self):
@@ -253,7 +274,8 @@ class SubagentManager:
 
     def _create_master(self):
         """Create the master agent controller."""
-        controller = AgentController(self.config, self.master_handler)
+        handler = _SubagentHandler(self, "master")
+        controller = AgentController(self.config, handler)
         state = SubagentState(
             id="master",
             name="Master",
