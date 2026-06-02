@@ -159,27 +159,33 @@ class SubagentManager:
         while True:
             await asyncio.sleep(1)
             for agent_id, state in list(self.agents.items()):
-                if state.controller.agent._loop_running:
-                    continue
-                # Drain pending messages
-                pending = []
-                while not state.inbox.empty():
-                    try:
-                        msg = state.inbox.get_nowait()
-                        pending.append(msg)
-                        state.inbox.task_done()
-                    except asyncio.QueueEmpty:
-                        break
-                if not pending:
-                    continue
-                # Format and deliver
-                formatted = "\n\n".join(
-                    f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
-                    for p in pending
-                )
-                asyncio.create_task(
-                    state.controller.send_message(formatted)
-                )
+                try:
+                    if state is None or state.controller is None:
+                        continue
+                    if state.controller.agent._loop_running:
+                        continue
+                    # Drain pending messages
+                    pending = []
+                    while not state.inbox.empty():
+                        try:
+                            msg = state.inbox.get_nowait()
+                            pending.append(msg)
+                            state.inbox.task_done()
+                        except Exception:
+                            break
+                    if not pending:
+                        continue
+                    # Format and deliver
+                    formatted = "\n\n".join(
+                        f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
+                        for p in pending
+                    )
+                    asyncio.create_task(
+                        state.controller.send_message(formatted)
+                    )
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
 
     def _create_master(self):
         """Create the master agent controller."""
