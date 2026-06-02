@@ -23,6 +23,7 @@ class SubagentState:
     background_task: asyncio.Task | None = None
     turn_count: int = 0
     est_tokens: int = 0
+    debug_events: list = field(default_factory=list)  # captured debug entries
 
 
 def _build_provider_for_agent(config: AgentConfig, definition: AgentDefinition):
@@ -83,22 +84,48 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
 
 
 class _SubagentHandler(EventHandler):
-    """EventHandler that captures subagent events for status updates."""
+    """EventHandler that captures subagent events for status updates and debug."""
 
     def __init__(self, manager: "SubagentManager", agent_id: str):
         super().__init__()
         self.manager = manager
         self.agent_id = agent_id
 
+    def _log(self, prefix: str, message: str, color: str = "#94A3B8"):
+        state = self.manager.agents.get(self.agent_id)
+        if state:
+            state.debug_events.append({
+                "prefix": prefix, "message": message, "color": color,
+            })
+
+    async def on_thinking(self):
+        self._log("[Thinking]", "Agent thinking...", "#6366F1")
+
+    async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
+        preview = ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items())
+        self._log(f"[Tool] {name}", preview, "#22C55E")
+
+    async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
+        preview = result[:200].replace("\n", " ")
+        color = "#EF4444" if is_error else "#8B5CF6"
+        self._log(f"[Result] {name}", preview, color)
+
+    async def on_response_done(self, raw: dict):
+        usage = raw.get("usage", {})
+        tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+        self._log("[Response]", f"Done  |  ~{tokens} tokens", "#3B82F6")
+
     async def on_error(self, message: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.error = message
+        self._log("[Error]", message, "#EF4444")
 
     async def on_done(self, final_text: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
+        self._log("[Done]", final_text[:200], "#6366F1")
 
 
 class SubagentManager:

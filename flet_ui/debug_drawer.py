@@ -392,3 +392,26 @@ class DebugDrawer(ft.Container):
         self._event_log.controls = new_controls
         if self._is_open and self._event_log.page:
             self._event_log.update()
+
+    # ── Per-agent snapshots ──
+
+    def save_snapshot(self) -> dict:
+        """Save current debug state. Returns a snapshot dict."""
+        return {
+            "entry_records": list(self._entry_records),
+            "event_controls": list(self._event_log.controls),
+            "entry_id": self._entry_id,
+        }
+
+    def load_snapshot(self, snapshot: dict | None):
+        """Restore debug state from a previously saved snapshot."""
+        if snapshot is None:
+            self._entry_records = []
+            self._event_log.controls = []
+            self._entry_id = 0
+        else:
+            self._entry_records = snapshot["entry_records"]
+            self._event_log.controls = snapshot["event_controls"]
+            self._entry_id = snapshot["entry_id"]
+        if self._is_open and self._event_log.page:
+            self._event_log.update()

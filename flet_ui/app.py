@@ -902,7 +902,29 @@ class FletApp:
         state = self.subagent_manager.agents.get(agent_id)
         if not state:
             return
+
+        # Save current debug state
+        if not hasattr(self, '_debug_snapshots'):
+            self._debug_snapshots = {}
+        self._debug_snapshots[self.subagent_manager.active_id] = self.debug_drawer.save_snapshot()
+
+        # Switch controller
         self.controller = state.controller
+        self.subagent_manager.active_id = agent_id
+
+        # Load target agent's debug state
+        target_snapshot = self._debug_snapshots.get(agent_id)
+        if target_snapshot is None and state.debug_events:
+            # First time viewing — replay captured events into debug drawer
+            self.debug_drawer.load_snapshot(None)
+            for evt in state.debug_events:
+                self.debug_drawer.add_event(
+                    evt["prefix"], evt["message"], evt["color"])
+            self._debug_snapshots[agent_id] = self.debug_drawer.save_snapshot()
+        else:
+            self.debug_drawer.load_snapshot(target_snapshot)
+
+        # Rebuild chat view
         self.chat_view.clear()
         for msg in state.controller.agent.messages:
             if msg.role == "user" and not msg.is_tool_result:
