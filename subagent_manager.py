@@ -84,89 +84,80 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
 
 
 class _SubagentHandler(EventHandler):
-    """EventHandler that captures subagent events for status updates and debug."""
+    """EventHandler that captures subagent events and optionally forwards to app pipeline.
+
+    Always stores events in SubagentState.debug_events for replay on switch.
+    When wired (on_activate set), forwards events to the app's _on_* methods
+    so the chat view and debug drawer update identically to the master agent.
+    """
 
     def __init__(self, manager: "SubagentManager", agent_id: str):
         super().__init__()
         self.manager = manager
         self.agent_id = agent_id
+        # Callbacks set by app when this agent is the active one
+        self._fwd_thinking: callable | None = None
+        self._fwd_text_delta: callable | None = None
+        self._fwd_tool_use: callable | None = None
+        self._fwd_tool_result: callable | None = None
+        self._fwd_response_done: callable | None = None
+        self._fwd_done: callable | None = None
+        self._fwd_error: callable | None = None
 
-    def _log(self, prefix: str, message: str, color: str = "#94A3B8",
-             event_data: dict | None = None):
+    def _record(self, prefix: str, message: str, color: str = "#94A3B8",
+                event_data: dict | None = None):
+        """Always store event for replay when switching back to this agent."""
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.debug_events.append({
                 "prefix": prefix, "message": message, "color": color,
                 "event_data": event_data,
             })
-        # Also push to live debug drawer if wired
-        if self.on_debug:
-            try:
-                self.on_debug(prefix, message, color, event_data)
-            except Exception:
-                pass
 
     async def on_thinking(self):
-        self._log("[Request]", "Sending to LLM...", "#6366F1",
-                  {"type": "Request", "formatted": "Sending to LLM..."})
+        self._record("[Request]", "Sending to LLM...", "#6366F1")
+        if self._fwd_thinking:
+            await self._fwd_thinking()
+
+    async def on_text_delta(self, token: str, reasoning: bool = False):
+        if self._fwd_text_delta:
+            await self._fwd_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
-        import json
-        preview = ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items())
-        self._log(f"[Tool] {name}", preview, "#22C55E", {
-            "type": "Tool",
-            "name": name,
-            "input": input_dict,
-            "tool_use_id": tool_use_id,
-            "formatted": f"Tool: {name}\n{json.dumps(input_dict, ensure_ascii=False, indent=2)}",
-            "raw_json": json.dumps(input_dict, ensure_ascii=False, indent=2),
-        })
+        self._record(f"[Tool] {name}",
+                     ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
+                     "#22C55E")
+        if self._fwd_tool_use:
+            await self._fwd_tool_use(name, input_dict, tool_use_id)
 
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
-        import json
-        preview = result[:200].replace("\n", " ")
         color = "#EF4444" if is_error else "#8B5CF6"
-        self._log(f"[Send Tool Result]", f"{name}: {preview}", color, {
-            "type": "ToolResult",
-            "name": name,
-            "result": result,
-            "is_error": is_error,
-            "duration_ms": duration_ms,
-            "formatted": f"Tool: {name} ({duration_ms:.0f}ms)\n{result[:2000]}",
-            "raw_json": json.dumps(
-                {"name": name, "result": result[:2000], "is_error": is_error, "duration_ms": duration_ms},
-                ensure_ascii=False, indent=2),
-        })
+        self._record(f"[Send Tool Result]", f"{name}  |  {result[:200]}", color)
+        if self._fwd_tool_result:
+            await self._fwd_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
     async def on_response_done(self, raw: dict):
-        import json
         usage = raw.get("usage", {})
         tokens = usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        self._log("[Response]", f"~{tokens} tokens", "#3B82F6", {
-            "type": "Response",
-            "usage": usage,
-            "tokens": tokens,
-            "formatted": f"Response complete\nTokens: ~{tokens}",
-            "raw_json": json.dumps(raw, ensure_ascii=False, indent=2),
-        })
+        self._record("[Response]", f"~{tokens} tokens", "#3B82F6")
+        if self._fwd_response_done:
+            await self._fwd_response_done(raw)
 
     async def on_error(self, message: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.error = message
-        self._log("[Error]", message, "#EF4444", {
-            "type": "Error",
-            "formatted": f"Error:\n{message}",
-        })
+        self._record("[Error]", message, "#EF4444")
+        if self._fwd_error:
+            await self._fwd_error(message)
 
     async def on_done(self, final_text: str):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        self._log("[Final Response]", final_text[:200], "#22C55E", {
-            "type": "Done",
-            "formatted": f"Final Response:\n{final_text[:2000]}",
-        })
+        self._record("[Final Response]", final_text[:200], "#22C55E")
+        if self._fwd_done:
+            await self._fwd_done(final_text)
 
 
 class SubagentManager:

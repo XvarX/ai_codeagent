@@ -898,6 +898,28 @@ class FletApp:
         except Exception as e:
             await self.handler.on_compact(pre, pre, f"failed: {e}")
 
+    @staticmethod
+    def _wire_handler_forwarding(app: "FletApp", handler):
+        """Wire subagent handler to forward events through app._on_* pipeline."""
+        handler._fwd_thinking = app._on_thinking
+        handler._fwd_text_delta = app._on_text_delta
+        handler._fwd_tool_use = app._on_tool_use
+        handler._fwd_tool_result = app._on_tool_result
+        handler._fwd_response_done = app._on_response_done
+        handler._fwd_done = app._on_done
+        handler._fwd_error = app._on_error
+
+    @staticmethod
+    def _clear_handler_forwarding(handler):
+        """Clear forwarding callbacks on a subagent handler."""
+        handler._fwd_thinking = None
+        handler._fwd_text_delta = None
+        handler._fwd_tool_use = None
+        handler._fwd_tool_result = None
+        handler._fwd_response_done = None
+        handler._fwd_done = None
+        handler._fwd_error = None
+
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""
         state = self.subagent_manager.agents.get(agent_id)
@@ -909,17 +931,17 @@ class FletApp:
             self._debug_snapshots = {}
         self._debug_snapshots[self.subagent_manager.active_id] = self.debug_drawer.save_snapshot()
 
-        # ── Unwire old handler's debug callback ──
+        # ── Unwire old handler ──
         old_state = self.subagent_manager.agents.get(self.subagent_manager.active_id)
         if old_state:
-            old_state.controller.handler.on_debug = None
+            self._clear_handler_forwarding(old_state.controller.handler)
 
         # ── Switch controller ──
         self.controller = state.controller
         self.subagent_manager.active_id = agent_id
 
-        # ── Wire new handler's debug callback ──
-        state.controller.handler.on_debug = self.debug_drawer.add_event
+        # ── Wire new handler — route events through app._on_* methods ──
+        FletApp._wire_handler_forwarding(self, state.controller.handler)
 
         # ── Load target agent's debug state ──
         target_snapshot = self._debug_snapshots.get(agent_id)
