@@ -927,17 +927,18 @@ class FletApp:
         state = self.subagent_manager.agents.get(agent_id)
         if not state:
             return
-        print(f"[AgentSwitch] {self.subagent_manager.active_id} → {agent_id}", flush=True)
+        old_id = self.subagent_manager.active_id
+        print(f"[AgentSwitch] {old_id} → {agent_id}", flush=True)
 
-        # ── Save current debug state ──
+        # ── Save current debug state (under OLD id) ──
         if not hasattr(self, '_debug_snapshots'):
             self._debug_snapshots = {}
-        self._debug_snapshots[self.subagent_manager.active_id] = self.debug_drawer.save_snapshot()
+        self._debug_snapshots[old_id] = self.debug_drawer.save_snapshot()
 
         # ── Unwire old handler ──
-        old_state = self.subagent_manager.agents.get(self.subagent_manager.active_id)
+        old_state = self.subagent_manager.agents.get(old_id)
         if old_state:
-            self._clear_handler_forwarding(old_state.controller.handler)
+            FletApp._clear_handler_forwarding(old_state.controller.handler)
 
         # ── Switch controller ──
         self.controller = state.controller
