@@ -988,6 +988,7 @@ class FletApp:
                 "message": message,
                 "formatted": f"From: {from_name}\n\n{message[:2000]}",
             },
+            group_key="user",
         )
         self.debug_drawer._try_update()
 
