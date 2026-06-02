@@ -110,7 +110,7 @@ class _SubagentHandler(EventHandler):
         return self._fwd_tool_use is not None
 
     def _record(self, prefix: str, message: str, color: str = "#94A3B8",
-                event_data: dict | None = None):
+                event_data: dict | None = None, group_key: str | None = None):
         """Store event for later replay (only when NOT forwarding to app)."""
         if self._is_forwarding:
             return  # app._on_* methods already write to debug drawer
@@ -118,7 +118,7 @@ class _SubagentHandler(EventHandler):
         if state:
             state.debug_events.append({
                 "prefix": prefix, "message": message, "color": color,
-                "event_data": event_data,
+                "event_data": event_data, "group_key": group_key,
             })
 
     async def on_thinking(self):
@@ -167,7 +167,8 @@ class _SubagentHandler(EventHandler):
             self._fwd_done(final_text)
 
     async def on_inbox_message(self, from_name: str, message: str):
-        self._record(f"[Msg from {from_name}]", message[:200], "#A855F7")
+        self._record(f"[Msg from {from_name}]", message[:200], "#A855F7",
+                     group_key="user")
         if self._fwd_inbox_msg:
             self._fwd_inbox_msg(from_name, message)
 
