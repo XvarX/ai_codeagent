@@ -21,13 +21,21 @@ from providers.openai_compat import OpenAICompatProvider
 from agent import Agent
 
 
-def build_registry() -> ToolRegistry:
+def build_registry() -> tuple[ToolRegistry, str]:
+    from skills.loader import load_skills
+    from skills.skill_tool import SkillTool
+
+    skills = load_skills()
+    skill_tool = SkillTool(skills)
+    skills_text = skill_tool.get_skill_list()
+
     registry = ToolRegistry()
-    registry.register_all([
-        BashTool(), FileReadTool(), FileEditTool(),
-        FileWriteTool(), GlobTool(), GrepTool(),
-    ])
-    return registry
+    tools = [BashTool(), FileReadTool(), FileEditTool(),
+             FileWriteTool(), GlobTool(), GrepTool()]
+    if skills:
+        tools.append(skill_tool)
+    registry.register_all(tools)
+    return registry, skills_text
 
 
 def build_provider(config: AgentConfig):
@@ -79,7 +87,7 @@ async def _on_tool_result(name: str, result: str, is_error: bool):
 
 
 async def run_one_shot(config: AgentConfig, user_message: str):
-    registry = build_registry()
+    registry, skills_text = build_registry()
     provider = build_provider(config)
     agent = Agent(
         provider=provider, registry=registry, cwd=config.cwd,
@@ -88,6 +96,7 @@ async def run_one_shot(config: AgentConfig, user_message: str):
         on_tool_call=_on_tool_call,
         on_tool_result=_on_tool_result,
     )
+    agent.skills_text = skills_text
     print("Working...", flush=True)
     result = await agent.run(user_message)
     print(f"\n{'─' * 60}")
@@ -96,7 +105,7 @@ async def run_one_shot(config: AgentConfig, user_message: str):
 
 
 async def run_interactive(config: AgentConfig):
-    registry = build_registry()
+    registry, skills_text = build_registry()
     provider = build_provider(config)
     agent = Agent(
         provider=provider, registry=registry, cwd=config.cwd,
@@ -105,6 +114,7 @@ async def run_interactive(config: AgentConfig):
         on_tool_call=_on_tool_call,
         on_tool_result=_on_tool_result,
     )
+    agent.skills_text = skills_text
 
     print()
     print(f"  Provider: {config.provider}  |  Model: {provider.model}")

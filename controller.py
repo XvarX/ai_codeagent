@@ -19,13 +19,21 @@ from events import (
 )
 
 
-def _build_registry() -> ToolRegistry:
+def _build_registry(cwd: str | None = None) -> tuple[ToolRegistry, str]:
+    from skills.loader import load_skills
+    from skills.skill_tool import SkillTool
+
+    skills = load_skills(cwd)
+    skill_tool = SkillTool(skills)
+    skills_text = skill_tool.get_skill_list()
+
     registry = ToolRegistry()
-    registry.register_all([
-        BashTool(), FileReadTool(), FileEditTool(),
-        FileWriteTool(), GlobTool(), GrepTool(),
-    ])
-    return registry
+    tools = [BashTool(), FileReadTool(), FileEditTool(),
+             FileWriteTool(), GlobTool(), GrepTool()]
+    if skills:
+        tools.append(skill_tool)
+    registry.register_all(tools)
+    return registry, skills_text
 
 
 def _load_provider_type(provider_name: str) -> str:
@@ -84,7 +92,7 @@ class AgentController:
         self._cancel_event = asyncio.Event()
         self._current_task: asyncio.Task | None = None
 
-        self.registry = _build_registry()
+        self.registry, skills_text = _build_registry(config.cwd)
         self.provider = _build_provider(config)
         self._mcp_manager = None
         self._mcp_connected = False
@@ -98,6 +106,7 @@ class AgentController:
             compact_threshold=config.compact_threshold,
             reserved_output=config.reserved_output,
         )
+        self.agent.skills_text = skills_text
 
     async def send_message(self, text: str) -> None:
         self._cancel_event.clear()

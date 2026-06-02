@@ -57,6 +57,7 @@ class Agent:
         self.on_tool_result = on_tool_result
         self.on_response = on_response
         self.on_compact = on_compact
+        self.skills_text = ""
         self._compact_count = 0
         self.context_window = context_window
         self.compact_threshold = compact_threshold
@@ -149,6 +150,7 @@ class Agent:
             system_prompt = build_system_prompt(
                 self.registry.get_tool_names(),
                 str(self.cwd),
+                self.skills_text,
             )
 
             if self.on_thinking:
@@ -352,6 +354,7 @@ class Agent:
             system_prompt = build_system_prompt(
                 self.registry.get_tool_names(),
                 str(self.cwd),
+                self.skills_text,
             )
 
             yield ThinkingEvent()
