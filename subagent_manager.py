@@ -390,6 +390,13 @@ class SubagentManager:
 
     async def send_message_to_agent(self, from_id: str, to_name_or_id: str, message: str):
         """Send a message from one agent to another via inbox."""
+        # Prevent self-messaging
+        from_state = self.agents.get(from_id)
+        from_name_lower = from_state.name.lower() if from_state else ""
+        if (to_name_or_id == from_id or
+                to_name_or_id.lower() == from_name_lower):
+            raise ValueError(f"Cannot send message to yourself ('{to_name_or_id}')")
+
         target = None
         for aid, st in self.agents.items():
             if aid == to_name_or_id or st.name.lower() == to_name_or_id.lower():
