@@ -281,9 +281,6 @@ class Agent:
             turn_count += 1
 
             # ── Compaction Pipeline (mirrors run()) ──────────
-            if turn_count > 1:
-                from compact.microCompact import micro_compact
-                micro_compact(self.messages)
 
             from compact.autoCompact import should_auto_compact
             if should_auto_compact(
