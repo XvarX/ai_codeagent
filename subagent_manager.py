@@ -139,8 +139,47 @@ class SubagentManager:
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self.on_change = None  # set by UI to refresh sidebar
+        self._poller_task: asyncio.Task | None = None
 
         self._create_master()
+        self._start_poller()
+
+    def _start_poller(self):
+        """Start background poller that watches all inboxes."""
+        if self._poller_task is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            self._poller_task = loop.create_task(self._inbox_poller())
+        except RuntimeError:
+            pass  # no running event loop (e.g. tests)
+
+    async def _inbox_poller(self):
+        """Poll inboxes every 1s, deliver messages when agent is idle."""
+        while True:
+            await asyncio.sleep(1)
+            for agent_id, state in list(self.agents.items()):
+                if state.controller.agent._loop_running:
+                    continue
+                # Drain pending messages
+                pending = []
+                while not state.inbox.empty():
+                    try:
+                        msg = state.inbox.get_nowait()
+                        pending.append(msg)
+                        state.inbox.task_done()
+                    except asyncio.QueueEmpty:
+                        break
+                if not pending:
+                    continue
+                # Format and deliver
+                formatted = "\n\n".join(
+                    f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
+                    for p in pending
+                )
+                asyncio.create_task(
+                    state.controller.send_message(formatted)
+                )
 
     def _create_master(self):
         """Create the master agent controller."""

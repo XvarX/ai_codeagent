@@ -113,6 +113,7 @@ class AgentController:
     async def send_message(self, text: str) -> None:
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
+        self.agent._loop_running = True
 
         try:
             async for event in self.agent.run_stream(text):
@@ -153,6 +154,7 @@ class AgentController:
             await self.handler.on_error(f"Agent error: {e}")
         finally:
             self._current_task = None
+            self.agent._loop_running = False
 
     async def cancel(self) -> None:
         self._cancel_event.set()

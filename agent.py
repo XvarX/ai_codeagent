@@ -59,6 +59,7 @@ class Agent:
         self.on_compact = on_compact
         self.skills_text = ""
         self.inbox: "asyncio.Queue | None" = None
+        self._loop_running = False
         self._compact_count = 0
         self.context_window = context_window
         self.compact_threshold = compact_threshold
