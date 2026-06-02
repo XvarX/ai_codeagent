@@ -222,6 +222,15 @@ class SubagentManager:
                     if not pending:
                         continue
                     print(f"[InboxPoller] {len(pending)} msg(s) → {agent_id}", file=sys.stderr, flush=True)
+                    # Create debug entries for each received message
+                    for p in pending:
+                        try:
+                            await state.controller.handler.on_inbox_message(
+                                p.get("from_name", "unknown"),
+                                p.get("message", ""),
+                            )
+                        except Exception:
+                            pass
                     formatted = "\n\n".join(
                         f"[Message from {p.get('from_name', 'unknown')}]\n{p.get('message', '')}"
                         for p in pending
