@@ -54,15 +54,15 @@ def show_config_dialog(page: ft.Page, on_save=None):
     provider_dd = ft.Dropdown(
         value=provider if provider in all_providers else sorted(all_providers)[0],
         options=provider_options,
-        text_style=ft.TextStyle(size=14),
+        text_style=ft.TextStyle(size=18),
         border_color="#E2E6EC",
     )
 
     api_key_field = ft.TextField(
         value=api_key,
         hint_text="API Key",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         password=True,
         can_reveal_password=True,
         border=ft.InputBorder.UNDERLINE,
@@ -70,42 +70,42 @@ def show_config_dialog(page: ft.Page, on_save=None):
     model_field = ft.TextField(
         value=model,
         hint_text="Model (e.g. glm-5.1)",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         border=ft.InputBorder.UNDERLINE,
     )
     base_url_field = ft.TextField(
         value=base_url,
         hint_text="Base URL (optional)",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         border=ft.InputBorder.UNDERLINE,
     )
     context_window_field = ft.TextField(
         value=context_window,
         hint_text="Context Window (tokens)",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         border=ft.InputBorder.UNDERLINE,
         keyboard_type=ft.KeyboardType.NUMBER,
     )
     compact_threshold_field = ft.TextField(
         value=compact_threshold,
         hint_text="Compact Threshold (0.1 - 1.0)",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         border=ft.InputBorder.UNDERLINE,
     )
     reserved_output_field = ft.TextField(
         value=reserved_output,
         hint_text="Reserved Output (tokens)",
-        hint_style=ft.TextStyle(size=14, color="#94A3B8"),
-        text_style=ft.TextStyle(size=14),
+        hint_style=ft.TextStyle(size=18, color="#94A3B8"),
+        text_style=ft.TextStyle(size=18),
         border=ft.InputBorder.UNDERLINE,
         keyboard_type=ft.KeyboardType.NUMBER,
     )
 
-    status_text = ft.Text("", size=12, color="#EF4444")
+    status_text = ft.Text("", size=16, color="#EF4444")
 
     from flet_ui.agent_config import build_agent_presets_section
     agent_presets_section = build_agent_presets_section(config)
@@ -136,8 +136,8 @@ def show_config_dialog(page: ft.Page, on_save=None):
 
     new_provider_field = ft.TextField(
         hint_text="New provider name...",
-        hint_style=ft.TextStyle(size=13, color="#94A3B8"),
-        text_style=ft.TextStyle(size=13),
+        hint_style=ft.TextStyle(size=17, color="#94A3B8"),
+        text_style=ft.TextStyle(size=17),
         border=ft.InputBorder.UNDERLINE,
         visible=False,
     )
@@ -147,7 +147,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
             ft.dropdown.Option("openai", "OpenAI-compatible"),
             ft.dropdown.Option("anthropic", "Anthropic-compatible"),
         ],
-        text_style=ft.TextStyle(size=13),
+        text_style=ft.TextStyle(size=17),
         visible=False,
     )
 
@@ -161,7 +161,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         ft.Container(height=18),
         ft.Divider(height=1, color="#EEF0F4"),
         ft.Container(height=10),
-        ft.Text("上下文设置", size=13, weight=ft.FontWeight.W_600, color="#475569"),
+        ft.Text("上下文设置", size=17, weight=ft.FontWeight.W_600, color="#475569"),
         ft.Container(height=10),
         context_window_field,
         ft.Container(height=14),
@@ -171,7 +171,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         ft.Container(height=18),
         ft.Divider(height=1, color="#EEF0F4"),
         ft.Container(height=10),
-        ft.Text("Agent 预设", size=13, weight=ft.FontWeight.W_600, color="#475569"),
+        ft.Text("Agent 预设", size=17, weight=ft.FontWeight.W_600, color="#475569"),
         ft.Container(height=6),
         agent_presets_section,
         ft.Container(height=8),
@@ -218,7 +218,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
     ], spacing=8, visible=False)
 
     add_provider_btn = ft.TextButton(
-        content=ft.Text("+ Add Provider", size=12, color="#6366F1"),
+        content=ft.Text("+ Add Provider", size=16, color="#6366F1"),
         on_click=show_add_provider,
     )
 
@@ -254,12 +254,12 @@ def show_config_dialog(page: ft.Page, on_save=None):
             do_delete_provider(name)
 
         dlg = ft.AlertDialog(
-            title=ft.Text("确认删除", size=14, weight=ft.FontWeight.W_600),
+            title=ft.Text("确认删除", size=18, weight=ft.FontWeight.W_600),
             content=ft.Text(f"确定要删除 Provider \"{name}\" 及其所有配置吗？"),
             actions=[
-                ft.TextButton(content=ft.Text("取消", size=13, color="#64748B"),
+                ft.TextButton(content=ft.Text("取消", size=17, color="#64748B"),
                              on_click=lambda e: page.pop_dialog()),
-                ft.TextButton(content=ft.Text("删除", size=13, color="#EF4444"),
+                ft.TextButton(content=ft.Text("删除", size=17, color="#EF4444"),
                              on_click=on_confirm),
             ],
             shape=ft.RoundedRectangleBorder(radius=10),
@@ -267,7 +267,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         page.show_dialog(dlg)
 
     delete_btn = ft.TextButton(
-        content=ft.Text("Delete Provider", size=12, color="#EF4444"),
+        content=ft.Text("Delete Provider", size=16, color="#EF4444"),
         on_click=delete_provider,
         visible=provider not in BUILTIN_PROVIDERS,
     )
@@ -326,17 +326,17 @@ def show_config_dialog(page: ft.Page, on_save=None):
             status_text.update()
 
     dlg = ft.AlertDialog(
-        title=ft.Text("LLM 配置", size=16, weight=ft.FontWeight.W_600),
+        title=ft.Text("LLM 配置", size=20, weight=ft.FontWeight.W_600),
         content=ft.Column([
-            ft.Text("Provider", size=13, color="#475569"),
+            ft.Text("Provider", size=17, color="#475569"),
             provider_dd,
             provider_actions,
             add_provider_row,
             config_fields,
         ], width=550, height=720, scroll=ft.ScrollMode.AUTO),
         actions=[
-            ft.TextButton(content=ft.Text("取消", size=14, color="#64748B"), on_click=lambda e: page.pop_dialog()),
-            ft.TextButton(content=ft.Text("保存", size=14, color="#6366F1"), on_click=save_click),
+            ft.TextButton(content=ft.Text("取消", size=18, color="#64748B"), on_click=lambda e: page.pop_dialog()),
+            ft.TextButton(content=ft.Text("保存", size=18, color="#6366F1"), on_click=save_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
         shape=ft.RoundedRectangleBorder(radius=10),

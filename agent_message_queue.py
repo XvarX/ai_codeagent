@@ -44,6 +44,15 @@ class AgentMessageQueue:
                     msg_body = text[m.end():].strip() if m else text
                     await self._controller.handler.on_enqueued(
                         from_name, msg_body, source)
+                elif source == "user":
+                    agent = self._controller.agent
+                    await self._controller.handler.on_request(
+                        text,
+                        len(agent.messages) + 1,
+                        agent.est_tokens() + len(text) // 2,
+                        len(agent.registry.get_schemas()),
+                        agent.provider.model or "",
+                    )
                 async with self._controller._agent_lock:
                     await self._controller.send_message(text)
             except asyncio.CancelledError:

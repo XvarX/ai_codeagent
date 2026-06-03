@@ -111,6 +111,7 @@ class _SubagentHandler(EventHandler):
         self._fwd_snip: callable | None = None
         self._fwd_subagent_done: callable | None = None
         self._fwd_enqueued: callable | None = None
+        self._fwd_request: callable | None = None
 
     @property
     def _is_forwarding(self):
@@ -130,9 +131,6 @@ class _SubagentHandler(EventHandler):
 
     async def on_request(self, text: str, msg_count: int, est_tokens: int,
                          tools_count: int, model: str = ""):
-        # Master: [Request] handled by app._on_send()
-        if self.agent_id == "master":
-            return
         msg_lines = [
             f"Model: {model}",
             f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools",
@@ -149,6 +147,8 @@ class _SubagentHandler(EventHandler):
                          "formatted": "\n".join(msg_lines),
                      },
                      group_key="user")
+        if self._fwd_request:
+            self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
     async def on_thinking(self):
         # _fwd_thinking handles sync + thinking animation; no debug entry needed

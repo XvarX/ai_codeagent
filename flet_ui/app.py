@@ -6,6 +6,15 @@ from datetime import datetime
 
 import flet as ft
 
+_MD_STYLE = ft.MarkdownStyleSheet(
+    p_text_style=ft.TextStyle(size=16),
+    h1_text_style=ft.TextStyle(size=24, weight=ft.FontWeight.W_700),
+    h2_text_style=ft.TextStyle(size=22, weight=ft.FontWeight.W_600),
+    h3_text_style=ft.TextStyle(size=20, weight=ft.FontWeight.W_600),
+    code_text_style=ft.TextStyle(size=15, font_family="Consolas"),
+    strong_text_style=ft.TextStyle(size=16, weight=ft.FontWeight.W_700),
+)
+
 from config import AgentConfig
 from controller import AgentController
 from flet_ui.chat_view import ChatView, flatten_headings
@@ -52,7 +61,7 @@ class FletApp:
             on_toggle=self._on_drawer_toggle,
             max_tokens=config.context_window,
         )
-        self.input_bar = InputBar(on_send=self._on_send)
+        self.input_bar = InputBar(on_send=self._on_send, on_stop=self._on_stop)
         self._mcp_ready = False
 
         # ── Agent sidebar ──
@@ -133,7 +142,10 @@ class FletApp:
 
     def _build_ui(self):
         self.page.title = "AI Code Agent"
-        self.page.theme = ft.Theme(font_family="Microsoft YaHei")
+        self.page.theme = ft.Theme(
+            font_family="Microsoft YaHei",
+            text_theme=ft.TextTheme(body_large=ft.TextStyle(size=16)),
+        )
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.window.width = 1200
         self.page.window.height = 750
@@ -144,12 +156,12 @@ class FletApp:
 
         self._provider_label = ft.Text(
             f"{self.config.provider}  |  {self.config.model or 'default'}",
-            size=10, color="#64748B",
+            size=14, color="#64748B",
         )
         self.page.appbar = ft.AppBar(
             title=ft.Row([
                 ft.Container(
-                    content=ft.Text("A", size=10, color="white",
+                    content=ft.Text("A", size=14, color="white",
                                    weight=ft.FontWeight.W_700),
                     width=22, height=22, border_radius=5,
                     gradient=ft.LinearGradient(
@@ -159,7 +171,7 @@ class FletApp:
                     ),
                     alignment=ft.alignment.Alignment.CENTER,
                 ),
-                ft.Text("AI Code Agent", size=14, weight=ft.FontWeight.W_600,
+                ft.Text("AI Code Agent", size=18, weight=ft.FontWeight.W_600,
                         color="#1E1B3A"),
                 ft.Container(
                     content=self._provider_label,
@@ -169,26 +181,26 @@ class FletApp:
             ], spacing=10),
             actions=[
                 ft.TextButton(
-                    content=ft.Text("Skills", size=11, color="#64748B"),
+                    content=ft.Text("Skills", size=15, color="#64748B"),
                     on_click=lambda e: show_skill_dialog(
                         self.page, self.config.cwd),
                 ),
                 ft.TextButton(
-                    content=ft.Text("MCP", size=11, color="#64748B"),
+                    content=ft.Text("MCP", size=15, color="#64748B"),
                     on_click=lambda e: show_mcp_dialog(
                         self.page, self.controller),
                 ),
                 ft.TextButton(
-                    content=ft.Text("配置", size=11, color="#64748B"),
+                    content=ft.Text("配置", size=15, color="#64748B"),
                     on_click=lambda e: show_config_dialog(
                         self.page, on_save=self._on_config_saved),
                 ),
                 ft.TextButton(
-                    content=ft.Text("清除", size=11, color="#64748B"),
+                    content=ft.Text("清除", size=15, color="#64748B"),
                     on_click=lambda e: self._clear_history(),
                 ),
                 ft.TextButton(
-                    content=ft.Text("调试", size=11, color="#64748B"),
+                    content=ft.Text("调试", size=15, color="#64748B"),
                     on_click=lambda e: self.debug_drawer._toggle(),
                 ),
             ],
@@ -261,19 +273,14 @@ class FletApp:
 
     def _on_thinking(self):
         if self.controller:
+            if self._pending_compact:
+                # Gray old compact entries BEFORE sync_groups so compact_idx is correct
+                self.debug_drawer.detect_compacted(self.controller.agent.messages)
             self.debug_drawer.sync_groups(self.controller.agent.messages)
+            if self._pending_compact:
+                self.debug_drawer.reposition_compact_entries()
         if self._pending_compact:
             self._pending_compact = False
-            # Backfill [Compact Call] with [Compact]'s group_idx
-            for rec in self.debug_drawer._entry_records:
-                if rec.get("prefix") == "[Compact]" and rec["group_idx"] is not None:
-                    for prev in self.debug_drawer._entry_records:
-                        if prev.get("prefix") == "[Compact Call]" and prev["group_idx"] is None:
-                            prev["group_idx"] = rec["group_idx"]
-                            prev["prefix_text"].value = f"[Compact Call] · G{rec['group_idx']}"
-                            break
-                    break
-            self.debug_drawer.detect_compacted(self.controller.agent.messages)
         if self._has_pending_tool_results:
             self._has_pending_tool_results = False
             recs = self.debug_drawer._entry_records
@@ -291,7 +298,7 @@ class FletApp:
         self._current_md_text += token
         if self._current_assistant_bubble is None:
             avatar = ft.Container(
-                content=ft.Text("AI", size=10, color="white",
+                content=ft.Text("AI", size=14, color="white",
                                weight=ft.FontWeight.W_600),
                 width=28, height=28, border_radius=14,
                 gradient=ft.LinearGradient(
@@ -312,6 +319,7 @@ class FletApp:
                     selectable=True,
                     extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                     code_theme="atom-one-light",
+                    md_style_sheet=_MD_STYLE,
                 ),
                 bgcolor="#EBEEF2",
                 border=ft.Border.all(1, "#DDE0E5"),
@@ -333,6 +341,7 @@ class FletApp:
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
+                md_style_sheet=_MD_STYLE,
             )
         self.page.update()
 
@@ -346,6 +355,20 @@ class FletApp:
         self._pending_tool_calls.append({
             "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
         })
+        # Pre-read file for diff display
+        if name in ("FileEdit", "FileWrite") and input_dict.get("file_path"):
+            from pathlib import Path
+            fp = Path(input_dict["file_path"])
+            if not fp.is_absolute() and self.controller:
+                fp = Path(self.controller.agent.cwd) / fp
+            old = ""
+            try:
+                old = fp.read_text(encoding="utf-8")
+            except (FileNotFoundError, IOError):
+                pass
+            if not hasattr(self, '_pre_edit_files'):
+                self._pre_edit_files = {}
+            self._pre_edit_files[tool_use_id] = {'path': str(fp), 'old': old}
 
     def _on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         color = "#10B981" if not is_error else "#EF4444"
@@ -400,6 +423,19 @@ class FletApp:
             group_key=f"tool:{tool_use_id}" if tool_use_id else None,
         )
         self._has_pending_tool_results = True
+        # Show diff viewer for file edits
+        if name in ("FileEdit", "FileWrite"):
+            info = (getattr(self, '_pre_edit_files', None) or {}).pop(tool_use_id, None)
+            if info and not is_error:
+                from pathlib import Path
+                try:
+                    new = Path(info['path']).read_text(encoding="utf-8")
+                except (FileNotFoundError, IOError):
+                    new = ""
+                if info['old'] != new:
+                    from flet_ui.diff_viewer import DiffViewer
+                    self.chat_view.add_diff_viewer(
+                        DiffViewer(info['path'], info['old'], new))
 
     def _on_response_done(self, raw: dict):
         # Save text before clearing
@@ -410,6 +446,7 @@ class FletApp:
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
+                md_style_sheet=_MD_STYLE,
             )
             self.page.update()
         self._current_md_text = ""
@@ -530,11 +567,11 @@ class FletApp:
                 }, ensure_ascii=False, indent=2)
 
         formatted_text = ft.Text(
-            formatted, size=11, color="#1E1B3A",
+            formatted, size=15, color="#1E1B3A",
             font_family="monospace", selectable=True,
         )
         raw_text = ft.Text(
-            raw_json, size=11, color="#1E1B3A",
+            raw_json, size=15, color="#1E1B3A",
             font_family="monospace", selectable=True,
         )
 
@@ -551,7 +588,7 @@ class FletApp:
                     btn.update()
                 content_area.update()
             return ft.TextButton(
-                content=ft.Text(label, size=11, color="#6366F1" if idx == 0 else "#64748B"),
+                content=ft.Text(label, size=15, color="#6366F1" if idx == 0 else "#64748B"),
                 on_click=click,
             )
 
@@ -561,7 +598,7 @@ class FletApp:
         ], spacing=0)
 
         dlg = ft.AlertDialog(
-            title=ft.Text(f"{event_type} 详情", size=14, weight=ft.FontWeight.W_600),
+            title=ft.Text(f"{event_type} 详情", size=18, weight=ft.FontWeight.W_600),
             content=ft.Column([
                 tab_row,
                 ft.Container(height=8),
@@ -588,9 +625,17 @@ class FletApp:
             f"Snip removed {groups_removed} groups\n"
             f"tokens: ~{tokens_before} → ~{tokens_after}",
             "#94A3B8",
+            group_key="snip",
         )
         if groups_removed > 0:
             self.debug_drawer.mark_groups_gray(groups_removed - 1)
+            # mark_groups_gray uses raw gi count, which diverges from
+            # persistent GX after the first snip. detect_compacted fixes
+            # any missed entries by checking message IDs directly.
+            if self.controller:
+                self.debug_drawer.sync_groups(self.controller.agent.messages)
+                self.debug_drawer.detect_compacted(self.controller.agent.messages)
+                self.debug_drawer.reposition_compact_entries()
 
     def _on_compact_call(self, old_msg_count: int, pre_tokens: int):
         self._compacting = True
@@ -599,6 +644,7 @@ class FletApp:
         self.debug_drawer.add_event(
             "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
             "#F59E0B",
+            group_key="compact_call",
         )
 
     def _on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""):
@@ -650,6 +696,48 @@ class FletApp:
             usage["total_tokens"] = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
         return usage
 
+    def _on_request(self, text: str, msg_count: int, est_tokens: int,
+                    tools_count: int, model: str = ""):
+        """Add [Request] debug entry. Called by queue consumer or directly."""
+        agent = self.controller.agent
+        msg_lines = [f"Model: {model}"]
+        msg_lines.append(f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools")
+        msg_lines.append(f"  [new] user: {text[:80]}")
+        for i, m in enumerate(agent.messages[-5:]):
+            role = m.role
+            content_preview = (m.content or "")[:50].replace("\n", " ")
+            if m.tool_use_id:
+                msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
+            else:
+                msg_lines.append(f"  [{i}] {role}: {content_preview}")
+        if len(agent.messages) > 5:
+            msg_lines.append(f"  ... +{len(agent.messages) - 5} earlier messages")
+        request_data = {
+            "type": "Request",
+            "provider": model,
+            "model": model,
+            "message_count": msg_count,
+            "est_tokens": est_tokens,
+            "tools_count": tools_count,
+            "user_message": text,
+            "messages": [
+                {"role": m.role, "content": m.content or "",
+                 "tool_use_id": getattr(m, "tool_use_id", ""),
+                 "tool_use_blocks": [
+                    {"tool_name": b.tool_name, "input": b.input}
+                    for b in (getattr(m, "tool_use_blocks", None) or [])
+                 ]}
+                for m in agent.messages
+            ],
+            "formatted": "\n".join(msg_lines),
+        }
+        self._pending_request_data = request_data
+        self.debug_drawer.add_event(
+            "[Request]", "\n".join(msg_lines), "#569cd6",
+            event_data=request_data,
+            group_key="user",
+        )
+
     def _on_send(self, text: str):
         self._has_pending_tool_results = False
         if not self._mcp_ready:
@@ -682,54 +770,6 @@ class FletApp:
         self.chat_view.show_thinking()
         self.input_bar.set_busy(True)
 
-        # Show request info immediately
-        provider_name = self.controller.agent.provider.model or self.config.provider
-        agent = self.controller.agent
-        msg_count = len(agent.messages) + 1
-        est_tokens = agent.est_tokens() + len(text) // 2
-        tools_count = len(agent.registry.get_schemas())
-
-        # Build message summary (include current user message)
-        msg_lines = [f"Model: {provider_name}"]
-        msg_lines.append(f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools")
-        msg_lines.append(f"  [new] user: {text[:80]}")
-        for i, m in enumerate(agent.messages[-5:]):
-            role = m.role
-            content_preview = (m.content or "")[:50].replace("\n", " ")
-            if m.tool_use_id:
-                msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
-            else:
-                msg_lines.append(f"  [{i}] {role}: {content_preview}")
-        if len(agent.messages) > 5:
-            msg_lines.append(f"  ... +{len(agent.messages) - 5} earlier messages")
-        # Store full request data for detail dialog
-        request_data = {
-            "type": "Request",
-            "provider": provider_name,
-            "model": provider_name,
-            "message_count": msg_count,
-            "est_tokens": est_tokens,
-            "tools_count": tools_count,
-            "user_message": text,
-            "messages": [
-                {"role": m.role, "content": m.content or "",
-                 "tool_use_id": getattr(m, "tool_use_id", ""),
-                 "tool_use_blocks": [
-                    {"tool_name": b.tool_name, "input": b.input}
-                    for b in (getattr(m, "tool_use_blocks", None) or [])
-                 ]}
-                for m in agent.messages
-            ],
-            "formatted": "\n".join(msg_lines),
-        }
-        self._pending_request_data = request_data
-        self.debug_drawer.add_event(
-            "[Request]", "\n".join(msg_lines), "#569cd6",
-            event_data=request_data,
-            group_key="user",
-        )
-        self.page.update()
-
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "*" * 60 + "\n")
             f.write(f"User: {text}\n")
@@ -737,9 +777,35 @@ class FletApp:
 
         queue = self._get_active_queue()
         if queue:
+            # [Request] emitted by queue consumer via on_request right before send_message
             queue.enqueue(text, source="user")
         else:
+            # No queue — add [Request] inline, then send directly
+            agent = self.controller.agent
+            self._on_request(
+                text,
+                len(agent.messages) + 1,
+                agent.est_tokens() + len(text) // 2,
+                len(agent.registry.get_schemas()),
+                agent.provider.model or self.config.provider,
+            )
             self.page.run_task(self.controller.send_message, text)
+
+    def _on_stop(self):
+        if not self._in_round or not self.controller:
+            return
+        self.page.run_task(self._do_stop)
+
+    async def _do_stop(self):
+        await self.controller.cancel()
+        self.chat_view.hide_thinking()
+        self.input_bar.set_busy(False)
+        self._in_round = False
+        self._compacting = False
+        self.input_bar.set_compacting(False)
+        self.debug_drawer.set_compacting(False)
+        self.chat_view.add_tool_label("停止", "用户中止了当前任务")
+        self.debug_drawer.add_event("[Stopped]", "用户中止了当前任务", "#EF4444")
 
     def _get_active_queue(self):
         if not self.subagent_manager:
@@ -772,6 +838,7 @@ class FletApp:
             self.debug_drawer.add_event(
                 "[SnipCompact]", f"Direct snip: removed {len(groups) - 1} groups",
                 "#94A3B8",
+                group_key="snip",
             )
             if len(groups) > 1:
                 self.debug_drawer.mark_groups_gray(len(groups) - 2)
@@ -880,17 +947,9 @@ class FletApp:
                     summary=result.summary_text,
                 )
                 # Sync and gray immediately for manual compact
-                self.debug_drawer.sync_groups(self.controller.agent.messages)
-                # Backfill [Compact Call] with same group as [Compact]
-                for rec in self.debug_drawer._entry_records:
-                    if rec.get("prefix") == "[Compact]" and rec["group_idx"] is not None:
-                        for prev in self.debug_drawer._entry_records:
-                            if prev.get("prefix") == "[Compact Call]" and prev["group_idx"] is None:
-                                prev["group_idx"] = rec["group_idx"]
-                                prev["prefix_text"].value = f"[Compact Call] · G{rec['group_idx']}"
-                                break
-                        break
                 self.debug_drawer.detect_compacted(self.controller.agent.messages)
+                self.debug_drawer.sync_groups(self.controller.agent.messages)
+                self.debug_drawer.reposition_compact_entries()
                 self._pending_compact = False  # handled inline
             else:
                 await self.handler.on_compact(pre, pre, "skipped (not enough messages)")
@@ -912,6 +971,7 @@ class FletApp:
         handler._fwd_snip = app._on_snip
         handler._fwd_subagent_done = app._on_subagent_done
         handler._fwd_enqueued = app._on_enqueued
+        handler._fwd_request = app._on_request
 
     @staticmethod
     def _clear_handler_forwarding(handler):
@@ -920,7 +980,7 @@ class FletApp:
                      '_fwd_tool_result', '_fwd_response_done', '_fwd_done',
                      '_fwd_error', '_fwd_compact_call',
                      '_fwd_compact', '_fwd_snip', '_fwd_subagent_done',
-                     '_fwd_enqueued'):
+                     '_fwd_enqueued', '_fwd_request'):
             setattr(handler, attr, None)
 
     def _on_agent_switch(self, agent_id: str):

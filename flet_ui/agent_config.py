@@ -27,7 +27,7 @@ def build_agent_presets_section(current_config: dict) -> ft.Column:
         provider_dd = ft.Dropdown(
             value=saved_provider,
             options=provider_options,
-            text_style=ft.TextStyle(size=12),
+            text_style=ft.TextStyle(size=16),
             border_color="#E2E6EC",
             width=140,
             data={"agent_key": agent_key, "field": "provider"},
@@ -40,7 +40,7 @@ def build_agent_presets_section(current_config: dict) -> ft.Column:
                 ft.Checkbox(
                     label=tool_name,
                     value=checked,
-                    label_style=ft.TextStyle(size=11),
+                    label_style=ft.TextStyle(size=15),
                     data={
                         "agent_key": agent_key,
                         "field": "tool",
@@ -53,13 +53,13 @@ def build_agent_presets_section(current_config: dict) -> ft.Column:
             ft.Container(
                 content=ft.Column([
                     ft.Row([
-                        ft.Text(definition.name, size=13,
+                        ft.Text(definition.name, size=17,
                                 weight=ft.FontWeight.W_600, color="#1E1B3A"),
-                        ft.Text("Provider:", size=11, color="#64748B"),
+                        ft.Text("Provider:", size=15, color="#64748B"),
                         provider_dd,
                     ], spacing=8,
                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    ft.Text("可用工具:", size=11, color="#64748B"),
+                    ft.Text("可用工具:", size=15, color="#64748B"),
                     ft.Row(tool_checks, spacing=4, wrap=True, run_spacing=0),
                 ], spacing=4, tight=True),
                 padding=ft.Padding(12, 8, 12, 8),

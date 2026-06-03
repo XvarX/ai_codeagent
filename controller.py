@@ -153,7 +153,7 @@ class AgentController:
                     await self.handler.on_subagent_done(
                         event.agent_id, event.status, event.result)
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as e:
             await self.handler.on_error(f"Agent error: {e}")
         finally:

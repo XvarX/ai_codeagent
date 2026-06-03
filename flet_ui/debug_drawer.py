@@ -31,8 +31,8 @@ class DebugDrawer(ft.Container):
         self._collapsed_view = ft.Container(
             content=ft.Column([
                 ft.Container(height=12),
-                ft.Text("调", size=10, color="#64748B", text_align=ft.TextAlign.CENTER),
-                ft.Text("试", size=10, color="#64748B", text_align=ft.TextAlign.CENTER),
+                ft.Text("调", size=14, color="#64748B", text_align=ft.TextAlign.CENTER),
+                ft.Text("试", size=14, color="#64748B", text_align=ft.TextAlign.CENTER),
                 ft.Container(
                     width=6, height=6, border_radius=3,
                     bgcolor="#E2E6EC",
@@ -50,26 +50,26 @@ class DebugDrawer(ft.Container):
 
         self._usage_bar = ft.ProgressBar(value=0, color="#6366F1", bgcolor="#E8E8EF",
                                          bar_height=6)
-        self._usage_text = ft.Text("-- tokens", size=10, color="#64748B")
+        self._usage_text = ft.Text("-- tokens", size=14, color="#64748B")
 
         self.content = self._collapsed_view
 
     def _build_expanded(self):
         title_bar = ft.Row([
-            ft.Text("调试面板", size=12, weight=ft.FontWeight.W_600, color="#1E1B3A"),
+            ft.Text("调试面板", size=16, weight=ft.FontWeight.W_600, color="#1E1B3A"),
             ft.IconButton(icon=ft.Icons.CLOSE, icon_size=14, icon_color="#64748B",
                           on_click=self._toggle),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         self._compact_btn = ft.TextButton(
-            content=ft.Text("Compact", size=10, color="#64748B"),
+            content=ft.Text("Compact", size=14, color="#64748B"),
             style=ft.ButtonStyle(
                 padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
             on_click=lambda e: self._on_compact and self._on_compact(),
         )
         clear_btn = ft.TextButton(
-            content=ft.Text("Clear History", size=10, color="#EF4444"),
+            content=ft.Text("Clear History", size=14, color="#EF4444"),
             style=ft.ButtonStyle(
                 padding=ft.Padding.symmetric(horizontal=10, vertical=4),
             ),
@@ -80,13 +80,13 @@ class DebugDrawer(ft.Container):
             title_bar,
             ft.Divider(height=1, color="#EEF0F4"),
             ft.Container(height=6),
-            ft.Text("上下文窗口", size=10, color="#64748B"),
+            ft.Text("上下文窗口", size=14, color="#64748B"),
             ft.Container(height=4),
             self._usage_bar,
             ft.Container(height=2),
             self._usage_text,
             ft.Container(height=10),
-            ft.Text("事件日志", size=10, color="#64748B"),
+            ft.Text("事件日志", size=14, color="#64748B"),
             ft.Container(
                 content=self._event_log,
                 expand=True,
@@ -101,6 +101,8 @@ class DebugDrawer(ft.Container):
         ], spacing=0)
 
     def set_compacting(self, busy: bool):
+        if not hasattr(self, '_compact_btn'):
+            return
         self._compact_btn.disabled = busy
         self._compact_btn.content.color = "#A5B4FC" if busy else "#64748B"
         try:
@@ -143,11 +145,11 @@ class DebugDrawer(ft.Container):
                 ft.Divider(height=1, color="#E8EAF0")
             )
 
-        prefix_text = ft.Text(prefix, size=10, weight=ft.FontWeight.W_600, color=color)
+        prefix_text = ft.Text(prefix, size=14, weight=ft.FontWeight.W_600, color=color)
         entry = ft.Container(
             content=ft.Column([
                 prefix_text,
-                ft.Text(message, size=9, color="#475569",
+                ft.Text(message, size=13, color="#475569",
                         max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=0, tight=True),
             padding=ft.Padding.only(left=4, right=4, top=1, bottom=1),
@@ -263,17 +265,21 @@ class DebugDrawer(ft.Container):
                 gi = tool_id_to_gi.get(key[5:])
 
             if gi is not None:
-                gid = persistent.get(gi, next_gid)
-                rec["group_idx"] = gid
-                if gid == next_gid:
-                    persistent[gi] = gid
-                    next_gid += 1
-                pfx = rec.get("prefix", "")
-                rec["prefix_text"].value = f"{pfx} · G{gid}"
-                try:
-                    rec["prefix_text"].update()
-                except RuntimeError:
-                    pass
+                if key == "compact":
+                    # Compact entries: use raw gi, don't consume persistent gid
+                    rec["group_idx"] = gi
+                else:
+                    gid = persistent.get(gi, next_gid)
+                    rec["group_idx"] = gid
+                    if gid == next_gid:
+                        persistent[gi] = gid
+                        next_gid += 1
+                    pfx = rec.get("prefix", "")
+                    rec["prefix_text"].value = f"{pfx} · G{gid}"
+                    try:
+                        rec["prefix_text"].update()
+                    except RuntimeError:
+                        pass
                 updated = True
 
         if updated and self._is_open:
@@ -311,12 +317,17 @@ class DebugDrawer(ft.Container):
         groups = group_by_api_round(messages)
         asst_ids = set()
         tool_ids = set()
+        compact_msg_count = 0
         for _gi, g in enumerate(groups):
             for msg in g:
                 if msg.role == "assistant" and msg.id:
                     asst_ids.add(msg.id)
                 elif msg.role == "user" and msg.tool_use_id:
                     tool_ids.add(msg.tool_use_id)
+                elif (msg.role == "user" and not msg.is_tool_result
+                      and not msg.tool_use_id
+                      and (msg.content or "").startswith("[Context compressed")):
+                    compact_msg_count += 1
 
         # Phase 1: gray asst/tool entries whose IDs are gone
         for rec in self._entry_records:
@@ -331,6 +342,26 @@ class DebugDrawer(ft.Container):
             if removed:
                 self._gray_with_tag(rec, "[Compacted]")
 
+        # Phase 1.5: gray excess compact entries (each compact replaces the
+        # previous summary, so there are always <= compact_msg_count summaries
+        # but potentially more [Compact] debug entries)
+        compact_records = [rec for rec in self._entry_records
+                           if rec.get("group_key") == "compact"
+                           and rec["control"].opacity >= 1.0]
+        excess = len(compact_records) - compact_msg_count
+        if excess > 0:
+            for rec in compact_records[:excess]:
+                self._gray_with_tag(rec, "[Compacted]")
+
+        # Phase 1.6: cascade to compact_call entries
+        for i, rec in enumerate(self._entry_records):
+            if rec.get("group_key") != "compact" or rec["control"].opacity >= 1.0:
+                continue
+            if i > 0 and self._entry_records[i - 1].get("prefix") == "[Compact Call]":
+                prev_rec = self._entry_records[i - 1]
+                if prev_rec["control"].opacity >= 1.0:
+                    self._gray_with_tag(prev_rec, "[Compacted]")
+
         # Phase 2: cascade to user entries — gray if next non-compact entry is grayed
         records = self._entry_records
         for i, rec in enumerate(records):
@@ -339,7 +370,7 @@ class DebugDrawer(ft.Container):
             cascade = False
             for j in range(i + 1, len(records)):
                 nk = records[j].get("group_key") or ""
-                if nk in (None, "", "compact"):
+                if nk in (None, "", "compact", "compact_call"):
                     continue  # skip meta/compact entries
                 if records[j]["control"].opacity < 1.0:
                     cascade = True
@@ -359,6 +390,24 @@ class DebugDrawer(ft.Container):
             if prev["control"].opacity < 1.0:
                 self._gray_with_tag(rec, "[Compacted]")
 
+        # Phase 4: cascade snip entries based on next entry's state
+        # [SnipCompact] follows the fate of E (the first real entry after it)
+        for i, rec in enumerate(self._entry_records):
+            if rec.get("group_key") != "snip" or rec["control"].opacity < 1.0:
+                continue
+            for j in range(i + 1, len(self._entry_records)):
+                nk = self._entry_records[j].get("group_key") or ""
+                if nk in ("", "snip", "compact", "compact_call"):
+                    continue  # skip meta/snip/compact entries
+                if self._entry_records[j]["control"].opacity < 1.0:
+                    # Copy tag from the next grayed entry
+                    cur = self._entry_records[j]["prefix_text"].value or ""
+                    tag = "[Compacted]"
+                    if "[Remove]" in cur:
+                        tag = "[Remove]"
+                    self._gray_with_tag(rec, tag)
+                break
+
         try:
             if self._is_open and self._event_log.page:
                 self._event_log.update()
@@ -377,6 +426,55 @@ class DebugDrawer(ft.Container):
                 rec["control"].update()
         except RuntimeError:
             pass
+
+    def reposition_compact_entries(self):
+        """Move non-grayed [Compact Call]/[Compact] entries to the gray boundary."""
+        compact_prefixes = ("[Compact Call]", "[Compact]")
+        compact_indices = [
+            i for i, rec in enumerate(self._entry_records)
+            if rec["control"].opacity >= 1.0
+            and rec.get("prefix") in compact_prefixes
+        ]
+        if not compact_indices:
+            return
+
+        # Find boundary: insert after last grayed entry
+        boundary = 0
+        for i, rec in enumerate(self._entry_records):
+            if rec["control"].opacity < 1.0:
+                boundary = i + 1
+
+        if boundary == 0:
+            return  # no grayed entries, compact entries are already well-placed
+
+        # Check if already at correct position
+        if compact_indices[0] == boundary:
+            return
+
+        # Remove and reinsert
+        moved = [self._entry_records[i] for i in compact_indices]
+        for i in reversed(compact_indices):
+            self._entry_records.pop(i)
+        removed_before = sum(1 for idx in compact_indices if idx < boundary)
+        boundary -= removed_before
+        for j, rec in enumerate(moved):
+            self._entry_records.insert(boundary + j, rec)
+
+        self._rebuild_controls()
+
+    def _rebuild_controls(self):
+        """Rebuild _event_log.controls from _entry_records."""
+        controls = []
+        for i, rec in enumerate(self._entry_records):
+            if i > 0:
+                controls.append(ft.Divider(height=1, color="#E8EAF0"))
+            controls.append(rec["control"])
+        self._event_log.controls = controls
+        if self._is_open and self._event_log.page:
+            try:
+                self._event_log.update()
+            except RuntimeError:
+                pass
 
     def clear(self) -> None:
         # Keep system entries (prefix "System")

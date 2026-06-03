@@ -43,7 +43,7 @@ class ChatView(ft.ListView):
 
     def add_user_message(self, text: str) -> None:
         bubble = ft.Container(
-            content=ft.Text(text, size=13, color="#1E1B3A", selectable=True),
+            content=ft.Text(text, size=17, color="#1E1B3A", selectable=True),
             bgcolor="#F1F3F6",
             border=ft.Border.all(1, "#EAEAEF"),
             border_radius=ft.BorderRadius.only(
@@ -58,7 +58,7 @@ class ChatView(ft.ListView):
 
     def add_assistant_message(self, markdown_text: str) -> None:
         avatar = ft.Container(
-            content=ft.Text("AI", size=10, color="white", weight=ft.FontWeight.W_600),
+            content=ft.Text("AI", size=14, color="white", weight=ft.FontWeight.W_600),
             width=28, height=28,
             border_radius=14,
             gradient=ft.LinearGradient(
@@ -79,6 +79,14 @@ class ChatView(ft.ListView):
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme="atom-one-light",
                 auto_follow_links=True,
+                md_style_sheet=ft.MarkdownStyleSheet(
+                    p_text_style=ft.TextStyle(size=16),
+                    h1_text_style=ft.TextStyle(size=24, weight=ft.FontWeight.W_700),
+                    h2_text_style=ft.TextStyle(size=22, weight=ft.FontWeight.W_600),
+                    h3_text_style=ft.TextStyle(size=20, weight=ft.FontWeight.W_600),
+                    code_text_style=ft.TextStyle(size=15, font_family="Consolas"),
+                    strong_text_style=ft.TextStyle(size=16, weight=ft.FontWeight.W_700),
+                ),
             ),
             bgcolor="#EBEEF2",
             border=ft.Border.all(1, "#DDE0E5"),
@@ -100,7 +108,7 @@ class ChatView(ft.ListView):
         label = ft.Container(
             content=ft.Text(
                 f"{name}  {preview}",
-                size=10, color="#475569",
+                size=14, color="#475569",
             ),
             bgcolor="#F8F9FB",
             border=ft.Border.all(1, "#EEF0F4"),
@@ -109,6 +117,10 @@ class ChatView(ft.ListView):
         )
         row = ft.Row([label], alignment=ft.MainAxisAlignment.START)
         self.controls.append(row)
+        self._try_update()
+
+    def add_diff_viewer(self, viewer) -> None:
+        self.controls.append(ft.Row([viewer], alignment=ft.MainAxisAlignment.START))
         self._try_update()
 
     def show_thinking(self) -> None:
@@ -125,7 +137,7 @@ class ChatView(ft.ListView):
             ],
             spacing=4,
         )
-        label = ft.Text("思考中...", size=10, color="#94A3B8")
+        label = ft.Text("思考中...", size=14, color="#94A3B8")
         self._thinking_row = ft.Row(
             [dots, label], spacing=6,
             alignment=ft.MainAxisAlignment.START,

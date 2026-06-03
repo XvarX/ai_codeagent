@@ -1,19 +1,20 @@
-"""Bottom input bar with text field and send button."""
+"""Bottom input bar with text field, send button and stop button."""
 
 import flet as ft
 
 
 class InputBar(ft.Container):
-    """Multi-line input with send button."""
+    """Multi-line input with send and stop buttons."""
 
-    def __init__(self, on_send=None):
+    def __init__(self, on_send=None, on_stop=None):
         super().__init__()
         self._on_send_callback = on_send
+        self._on_stop_callback = on_stop
 
         self._text_field = ft.TextField(
             hint_text="输入消息... (Ctrl+Enter 发送)",
-            hint_style=ft.TextStyle(size=13, color="#64748B"),
-            text_style=ft.TextStyle(size=13, color="#1E1B3A"),
+            hint_style=ft.TextStyle(size=17, color="#64748B"),
+            text_style=ft.TextStyle(size=17, color="#1E1B3A"),
             multiline=True,
             shift_enter=True,
             min_lines=1,
@@ -35,6 +36,24 @@ class InputBar(ft.Container):
             ),
         )
 
+        self._stop_button = ft.IconButton(
+            icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+            icon_size=16,
+            bgcolor="#EF4444",
+            icon_color="white",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=9),
+                padding=ft.Padding.all(8),
+            ),
+            visible=False,
+        )
+
+        self._buttons_column = ft.Column(
+            [self._stop_button, self._send_button],
+            spacing=4,
+            alignment=ft.MainAxisAlignment.END,
+        )
+
         self.content = ft.Row(
             [
                 ft.Container(
@@ -45,7 +64,7 @@ class InputBar(ft.Container):
                     expand=True,
                     bgcolor="#FFFFFF",
                 ),
-                self._send_button,
+                self._buttons_column,
             ],
             spacing=8,
             alignment=ft.MainAxisAlignment.CENTER,
@@ -57,6 +76,7 @@ class InputBar(ft.Container):
         self.padding = ft.Padding.symmetric(horizontal=18, vertical=10)
 
         self._send_button.on_click = self._on_send_click
+        self._stop_button.on_click = self._on_stop_click
 
     def _on_send_click(self, e):
         text = self._text_field.value.strip()
@@ -64,6 +84,10 @@ class InputBar(ft.Container):
             self._on_send_callback(text)
             self._text_field.value = ""
             self._text_field.update()
+
+    def _on_stop_click(self, e):
+        if self._on_stop_callback:
+            self._on_stop_callback()
 
     @property
     def on_send(self):
@@ -76,17 +100,24 @@ class InputBar(ft.Container):
     def set_busy(self, busy: bool) -> None:
         self._send_button.disabled = busy
         self._send_button.bgcolor = "#A5B4FC" if busy else "#6366F1"
-        if self._send_button.page:
-            self._send_button.update()
+        self._stop_button.visible = busy
+        try:
+            if self._send_button.page:
+                self._send_button.update()
+                self._stop_button.update()
+        except RuntimeError:
+            pass
 
     def set_compacting(self, busy: bool):
         self._send_button.disabled = busy
         self._send_button.bgcolor = "#A5B4FC" if busy else "#6366F1"
+        self._stop_button.visible = busy
         self._text_field.disabled = busy
         self._text_field.hint_text = "Compacting..." if busy else "输入消息... (Ctrl+Enter 发送)"
         try:
             if self._send_button.page:
                 self._send_button.update()
+                self._stop_button.update()
                 self._text_field.update()
         except RuntimeError:
             pass

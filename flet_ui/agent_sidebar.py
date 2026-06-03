@@ -40,7 +40,7 @@ class AgentSidebar(ft.Container):
 
         self._expanded_content = ft.Column([
             ft.Row([
-                ft.Text("Agents", size=12, weight=ft.FontWeight.W_600, color="#475569"),
+                ft.Text("Agents", size=16, weight=ft.FontWeight.W_600, color="#475569"),
                 self._toggle_btn,
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(height=1, color="#E2E6EC"),
@@ -108,9 +108,9 @@ class AgentSidebar(ft.Container):
         )
 
         text_color = "#1E1B3A" if is_active else "#475569"
-        texts = [ft.Text(name, size=12, color=text_color, weight=ft.FontWeight.W_500)]
+        texts = [ft.Text(name, size=16, color=text_color, weight=ft.FontWeight.W_500)]
         if subtitle:
-            texts.append(ft.Text(subtitle, size=10, color="#94A3B8"))
+            texts.append(ft.Text(subtitle, size=14, color="#94A3B8"))
 
         return ft.Container(
             content=ft.Row([

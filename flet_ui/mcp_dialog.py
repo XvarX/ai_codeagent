@@ -17,9 +17,9 @@ def show_mcp_dialog(page: ft.Page, controller):
 
     if not controller or not controller.mcp_manager:
         dlg = ft.AlertDialog(
-            title=ft.Text("MCP 管理", size=16, weight=ft.FontWeight.W_600),
-            content=ft.Text("无 MCP 服务器配置", size=13, color="#64748B"),
-            actions=[ft.TextButton(content=ft.Text("关闭", size=13),
+            title=ft.Text("MCP 管理", size=20, weight=ft.FontWeight.W_600),
+            content=ft.Text("无 MCP 服务器配置", size=17, color="#64748B"),
+            actions=[ft.TextButton(content=ft.Text("关闭", size=17),
                      on_click=lambda e: page.pop_dialog())],
             actions_alignment=ft.MainAxisAlignment.END,
             shape=ft.RoundedRectangleBorder(radius=10),
@@ -39,7 +39,7 @@ def show_mcp_dialog(page: ft.Page, controller):
 
         # Status badge
         status_badge = ft.Container(
-            content=ft.Text(status_label, size=10, color=status_color,
+            content=ft.Text(status_label, size=14, color=status_color,
                           weight=ft.FontWeight.W_600),
             padding=ft.Padding.symmetric(horizontal=8, vertical=2),
             border_radius=6,
@@ -49,13 +49,13 @@ def show_mcp_dialog(page: ft.Page, controller):
 
         # Server header row
         header = ft.Row([
-            ft.Text(name, size=13, weight=ft.FontWeight.W_600, color="#1E1B3A"),
+            ft.Text(name, size=17, weight=ft.FontWeight.W_600, color="#1E1B3A"),
             status_badge,
         ], spacing=10)
 
         # Tool count
         tool_text = ft.Text(
-            f"{info['tool_count']} 个工具", size=11, color="#64748B")
+            f"{info['tool_count']} 个工具", size=15, color="#64748B")
 
         # Expandable tool list
         tool_items = []
@@ -63,9 +63,9 @@ def show_mcp_dialog(page: ft.Page, controller):
             tool_items.append(
                 ft.Container(
                     content=ft.Column([
-                        ft.Text(t["name"], size=11, weight=ft.FontWeight.W_600,
+                        ft.Text(t["name"], size=15, weight=ft.FontWeight.W_600,
                               color="#475569"),
-                        ft.Text(t.get("description", ""), size=10, color="#94A3B8"),
+                        ft.Text(t.get("description", ""), size=14, color="#94A3B8"),
                     ], spacing=1, tight=True),
                     padding=ft.Padding.only(left=16, top=4, bottom=4),
                 )
@@ -84,7 +84,7 @@ def show_mcp_dialog(page: ft.Page, controller):
             return toggle
 
         toggle_btn = ft.TextButton(
-            content=ft.Text("▸", size=11, color="#64748B"),
+            content=ft.Text("▸", size=15, color="#64748B"),
             style=ft.ButtonStyle(padding=ft.Padding.all(2)),
         )
         toggle_btn.on_click = make_toggle(0)
@@ -109,12 +109,12 @@ def show_mcp_dialog(page: ft.Page, controller):
             return restart
 
         stop_btn = ft.TextButton(
-            content=ft.Text("停止", size=10, color="#EF4444"),
+            content=ft.Text("停止", size=14, color="#EF4444"),
             style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=8, vertical=2)),
             on_click=make_stop(name),
         )
         restart_btn = ft.TextButton(
-            content=ft.Text("重连", size=10, color="#6366F1"),
+            content=ft.Text("重连", size=14, color="#6366F1"),
             style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=8, vertical=2)),
             on_click=make_restart(name),
         )
@@ -135,7 +135,7 @@ def show_mcp_dialog(page: ft.Page, controller):
 
     if not server_cards:
         server_cards.append(
-            ft.Text("无 MCP 服务器", size=13, color="#94A3B8"))
+            ft.Text("无 MCP 服务器", size=17, color="#94A3B8"))
 
     content_col = ft.Column(
         server_cards, spacing=10, scroll=ft.ScrollMode.AUTO)
@@ -147,15 +147,15 @@ def show_mcp_dialog(page: ft.Page, controller):
         show_mcp_dialog(page, controller)
 
     dlg = ft.AlertDialog(
-        title=ft.Text("MCP 管理", size=16, weight=ft.FontWeight.W_600),
+        title=ft.Text("MCP 管理", size=20, weight=ft.FontWeight.W_600),
         content=content_container,
         actions=[
             ft.TextButton(
-                content=ft.Text("刷新", size=13, color="#6366F1"),
+                content=ft.Text("刷新", size=17, color="#6366F1"),
                 on_click=refresh,
             ),
             ft.TextButton(
-                content=ft.Text("关闭", size=13, color="#64748B"),
+                content=ft.Text("关闭", size=17, color="#64748B"),
                 on_click=lambda e: page.pop_dialog(),
             ),
         ],
