@@ -54,7 +54,9 @@ function onClear() {
 onMounted(() => {
   agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
   agentWs.on('thinking', () => chatStore.startThinking());
-  agentWs.on('text_delta', (d: { token: string }) => chatStore.appendToken(d.token));
+  agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
+    if (!d.reasoning) chatStore.appendToken(d.token);
+  });
   agentWs.on('done', () => chatStore.finalizeAssistantMessage());
   agentWs.on('error', (d: { message: string }) => debugStore.addEvent('[Error]', d.message, '#EF4444'));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
