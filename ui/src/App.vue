@@ -107,6 +107,9 @@ onMounted(() => {
   // Agent state
   agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
+  agentWs.on('mcp_info', (d: any) => {
+    if (d.mcp) agentStore.mcpInfo = d.mcp;
+  });
   agentWs.on('error', () => agentStore.setBusy(false));
 
   // Agent switching — full state reload
