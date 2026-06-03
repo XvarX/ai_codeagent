@@ -29,6 +29,7 @@ export const useDebugStore = defineStore('debug', () => {
     color: string,
     data?: any,
     groupKey?: string,
+    groupIdx?: number | null,
   ) {
     const id = _nextId++;
     const entry: DebugEntry = {
@@ -38,7 +39,7 @@ export const useDebugStore = defineStore('debug', () => {
       color,
       data,
       groupKey,
-      groupIdx: null,
+      groupIdx: groupIdx ?? null,
       opacity: 1.0,
     };
     entries.value.push(entry);
@@ -53,6 +54,7 @@ export const useDebugStore = defineStore('debug', () => {
     color: string;
     data?: any;
     group_key?: string;
+    group_idx?: number | null;
   }>) {
     entries.value = events.map((e) => ({
       id: _nextId++,
@@ -61,7 +63,7 @@ export const useDebugStore = defineStore('debug', () => {
       color: e.color,
       data: e.data,
       groupKey: e.group_key,
-      groupIdx: null,
+      groupIdx: e.group_idx ?? null,
       opacity: 1.0,
     }));
   }
@@ -75,7 +77,28 @@ export const useDebugStore = defineStore('debug', () => {
   }
 
   function clear() {
-    entries.value = [];
+    entries.value = entries.value.filter(e => !e.groupKey);
+  }
+
+  function syncEvents(events: Array<{
+    prefix: string;
+    message: string;
+    color: string;
+    data?: any;
+    group_key?: string;
+    group_idx?: number | null;
+    opacity?: number;
+  }>) {
+    entries.value = events.map((e) => ({
+      id: _nextId++,
+      prefix: e.prefix,
+      message: e.message,
+      color: e.color,
+      data: e.data,
+      groupKey: e.group_key,
+      groupIdx: e.group_idx ?? null,
+      opacity: e.opacity ?? 1.0,
+    }));
   }
 
   function setCompacting(busy: boolean) {
@@ -92,6 +115,7 @@ export const useDebugStore = defineStore('debug', () => {
     open,
     addEvent,
     loadEvents,
+    syncEvents,
     updateContextUsage,
     clear,
     setCompacting,
