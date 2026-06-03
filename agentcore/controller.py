@@ -174,8 +174,8 @@ class AgentController:
 
     async def connect_mcp(self):
         """Connect MCP servers at startup. Blocks until connected or failed."""
-        from mcp_integration.config import load_mcp_configs
-        from mcp_integration.connection import MCPConnectionManager
+        from agentcore.mcp_integration.config import load_mcp_configs
+        from agentcore.mcp_integration.connection import MCPConnectionManager
         from pathlib import Path
 
         cwd_path = Path(self.config.cwd) if self.config.cwd else Path.cwd()
