@@ -52,31 +52,24 @@ function onClear() {
 }
 
 onMounted(() => {
-  agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
-  agentWs.on('thinking', () => {
-    chatStore.startThinking();
-    debugStore.addEvent('[Think]', 'Agent thinking...', '#6366F1');
-  });
+  // Chat streaming events
+  agentWs.on('thinking', () => chatStore.startThinking());
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
     if (!d.reasoning) chatStore.appendToken(d.token);
   });
-  agentWs.on('done', (d: { final_text?: string }) => {
-    chatStore.finalizeAssistantMessage();
-    debugStore.addEvent('[Done]', 'Response complete', '#22C55E');
+  agentWs.on('done', () => chatStore.finalizeAssistantMessage());
+
+  // Debug panel — all formatted events come via debug_event
+  agentWs.on('debug_event', (d: any) => {
+    debugStore.addEvent(d.prefix, d.message, d.color, d.data, d.group_key);
   });
-  agentWs.on('connected', (d: any) => debugStore.addEvent('[System]', `Connected v${d.version || ''}`, '#64748B'));
-  agentWs.on('status', (d: any) => debugStore.addEvent('[Status]', `${d.config?.provider || ''} / ${d.config?.model || ''}`, '#64748B', d));
-  agentWs.on('error', (d: { message: string }) => debugStore.addEvent('[Error]', d.message, '#EF4444'));
+
+  // Agent state
+  agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
-  agentWs.on('tool_use', (d: { name: string; [k: string]: any }) => debugStore.addEvent('[Tool]', `${d.name}`, '#6366F1', d));
-  agentWs.on('tool_result', (d: { name: string; is_error: boolean; [k: string]: any }) => debugStore.addEvent('[Result]', `${d.name} ${d.is_error ? '✗' : '✓'}`, d.is_error ? '#EF4444' : '#22C55E', d));
-  agentWs.on('request', (d: { model: string; est_tokens: number }) => debugStore.addEvent('[Request]', `${d.model} tokens≈${d.est_tokens}`, '#6366F1', d));
-  agentWs.on('compact_call', (d: { pre_tokens: number }) => debugStore.addEvent('[Compact]', `pre=${d.pre_tokens}`, '#F59E0B'));
-  agentWs.on('compact', (d: { pre_tokens: number; post_tokens: number }) => debugStore.addEvent('[Compact]', `${d.pre_tokens}→${d.post_tokens}`, '#F59E0B'));
-  agentWs.on('snip', (d: { groups_removed: number }) => debugStore.addEvent('[Snip]', `-${d.groups_removed} groups`, '#F59E0B'));
-  agentWs.on('send_message', () => agentStore.setBusy(true));
   agentWs.on('done', () => agentStore.setBusy(false));
   agentWs.on('error', () => agentStore.setBusy(false));
+
   agentWs.connect();
 });
 
