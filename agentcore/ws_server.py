@@ -152,5 +152,6 @@ async def run_ws_server(config: AgentConfig, port: int = 18765):
         await _handle_client(websocket, controller)
 
     logger.info(f"WebSocket server listening on ws://127.0.0.1:{port}")
+    print(f"WebSocket server listening on ws://127.0.0.1:{port}")
     async with serve(handler, "127.0.0.1", port):
         await asyncio.Future()  # run forever
