@@ -364,6 +364,12 @@ async def _handle_client(websocket: ServerConnection, controller: AgentControlle
                     f"Config updated: {new_config.provider} / {new_config.model}",
                     "#6366F1")
             elif msg_type == "get_status":
+                # Build agent list
+                agents = [{
+                    "id": "master",
+                    "name": "Master",
+                    "status": "running" if controller.agent._loop_running else "idle",
+                }]
                 await websocket.send(json.dumps({
                     "type": "status",
                     "busy": controller.agent._loop_running,
@@ -372,6 +378,7 @@ async def _handle_client(websocket: ServerConnection, controller: AgentControlle
                         "model": controller.provider.model,
                     },
                     "usage": controller.estimate_usage(),
+                    "agents": agents,
                 }, ensure_ascii=False))
             elif msg_type == "shutdown":
                 break
