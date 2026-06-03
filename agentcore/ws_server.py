@@ -34,13 +34,17 @@ class WsEventHandler(EventHandler):
 
     async def _send(self, data: dict):
         try:
-            await self._ws.send(json.dumps(data, ensure_ascii=False))
+            payload = json.dumps(data, ensure_ascii=False)
+            await self._ws.send(payload)
         except websockets.exceptions.ConnectionClosed:
             pass
+        except Exception as e:
+            print(f"[ws_server] _send error: {e}")
 
     async def _send_debug(self, prefix: str, message: str, color: str,
                           event_data: dict | None = None,
                           group_key: str | None = None):
+        print(f"[ws_server] debug_event: {prefix}")
         await self._send({
             "type": "debug_event",
             "prefix": prefix,
@@ -157,6 +161,12 @@ class WsEventHandler(EventHandler):
         resp_only = {k: v for k, v in raw.items() if k not in ("_request",)}
 
         await self._send({"type": "response_done", "raw": raw})
+        await self._send({
+            "type": "context_usage",
+            "total_tokens": total_tokens,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        })
         await self._send_debug(
             prefix, "\n".join(resp_lines), color,
             event_data={

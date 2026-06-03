@@ -64,6 +64,18 @@ onMounted(() => {
     debugStore.addEvent(d.prefix, d.message, d.color, d.data, d.group_key);
   });
 
+  // Context usage from backend
+  agentWs.on('response_done', (d: any) => {
+    const usage = d.raw?.usage || {};
+    const total = usage.total_tokens || usage.totalTokens || 0;
+    debugStore.updateContextUsage(total, 128000);
+    chatStore.updateUsage(total);
+  });
+  agentWs.on('context_usage', (d: any) => {
+    debugStore.updateContextUsage(d.total_tokens || 0, d.max_tokens || 128000);
+    chatStore.updateUsage(d.total_tokens || 0);
+  });
+
   // Agent state
   agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));

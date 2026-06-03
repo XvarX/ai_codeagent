@@ -20,6 +20,8 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([]);
   const thinking = ref(false);
   const currentAssistantMsg = ref('');
+  const maxTokens = ref(128000);
+  const usageTokens = ref(0);
 
   function addUserMessage(text: string) {
     messages.value.push({ role: 'user', content: text });
@@ -56,6 +58,10 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function updateUsage(tokens: number) {
+    usageTokens.value = tokens;
+  }
+
   function clear() {
     messages.value = [];
     currentAssistantMsg.value = '';
@@ -64,7 +70,8 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     messages, thinking, currentAssistantMsg,
+    maxTokens, usageTokens,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
-    addToolResult, clear,
+    addToolResult, updateUsage, clear,
   };
 });
