@@ -3,7 +3,6 @@
     <div v-for="(msg, i) in chatStore.messages" :key="i" :class="['bubble-row', msg.role]">
       <div v-if="msg.role === 'assistant'" class="avatar">AI</div>
       <div :class="['bubble', msg.role]">
-        <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
         <div v-if="msg.toolLabels && msg.toolLabels.length" class="tool-labels">
           <div v-for="(tl, ti) in msg.toolLabels" :key="'tl-' + ti" class="tool-label">
             <span class="tl-icon">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
@@ -11,6 +10,7 @@
             <span v-if="tl.resultPreview" class="tl-result">{{ tl.resultPreview }}</span>
           </div>
         </div>
+        <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
       </div>
     </div>
     <div v-if="chatStore.thinking" class="thinking-row">
@@ -20,7 +20,6 @@
     <div v-if="chatStore.currentAssistantMsg" class="bubble-row assistant">
       <div class="avatar">AI</div>
       <div class="bubble assistant">
-        <div class="bubble-content" v-html="renderMarkdown(chatStore.currentAssistantMsg)"></div>
         <div v-if="chatStore.toolLabels && chatStore.toolLabels.length" class="tool-labels">
           <div v-for="(tl, ti) in chatStore.toolLabels" :key="'tl-' + ti" class="tool-label">
             <span class="tl-icon">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
@@ -28,6 +27,7 @@
             <span v-if="tl.resultPreview" class="tl-result">{{ tl.resultPreview }}</span>
           </div>
         </div>
+        <div class="bubble-content" v-html="renderMarkdown(chatStore.currentAssistantMsg)"></div>
       </div>
     </div>
     <div v-for="(diff, di) in chatStore.diffs" :key="'diff-' + di" class="diff-wrapper">
@@ -96,7 +96,7 @@ watch(
 .dot { width: 6px; height: 6px; border-radius: 3px; background: #94A3B8; }
 .thinking-text { font-size: 14px; color: #94A3B8; }
 .diff-wrapper { margin: 8px 0; }
-.tool-labels { margin-top: 4px; }
+.tool-labels { margin-bottom: 4px; }
 .tool-label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #64748B; padding: 2px 0; }
 .tl-icon { font-size: 12px; width: 14px; text-align: center; }
 .tl-name { font-weight: 600; color: #475569; }

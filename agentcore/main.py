@@ -153,7 +153,8 @@ async def main():
         from agentcore.ws_server import run_ws_server
         port_idx = sys.argv.index("--port") if "--port" in sys.argv else -1
         port = int(sys.argv[port_idx + 1]) if port_idx != -1 else 18765
-        await run_ws_server(config, port)
+        _reload = "--reload" in sys.argv
+        await run_ws_server(config, port, reload=_reload)
         return
 
     if len(sys.argv) >= 3 and sys.argv[1] == "-c":

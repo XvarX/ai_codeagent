@@ -117,6 +117,31 @@ class _SubagentHandler(EventHandler):
     def _is_forwarding(self):
         return self._fwd_tool_use is not None
 
+    def _wire_forwarding(self, handler: EventHandler):
+        """Wire forwarding so events flow through handler to WebSocket."""
+        self._fwd_thinking = handler.on_thinking
+        self._fwd_text_delta = handler.on_text_delta
+        self._fwd_tool_use = handler.on_tool_use
+        self._fwd_tool_result = handler.on_tool_result
+        self._fwd_response_done = handler.on_response_done
+        self._fwd_done = handler.on_done
+        self._fwd_error = handler.on_error
+        self._fwd_compact_call = handler.on_compact_call
+        self._fwd_compact = handler.on_compact
+        self._fwd_snip = handler.on_snip
+        self._fwd_subagent_done = handler.on_subagent_done
+        self._fwd_enqueued = handler.on_enqueued
+        self._fwd_request = handler.on_request
+
+    def _clear_forwarding(self):
+        """Clear all forwarding callbacks."""
+        for attr in ('_fwd_thinking', '_fwd_text_delta', '_fwd_tool_use',
+                     '_fwd_tool_result', '_fwd_response_done', '_fwd_done',
+                     '_fwd_error', '_fwd_compact_call',
+                     '_fwd_compact', '_fwd_snip', '_fwd_subagent_done',
+                     '_fwd_enqueued', '_fwd_request'):
+            setattr(self, attr, None)
+
     def _record(self, prefix: str, message: str, color: str = "#94A3B8",
                 event_data: dict | None = None, group_key: str | None = None):
         """Store event for later replay (only when NOT forwarding to app)."""
@@ -132,7 +157,6 @@ class _SubagentHandler(EventHandler):
     async def on_request(self, text: str, msg_count: int, est_tokens: int,
                          tools_count: int, model: str = ""):
         msg_lines = [
-            f"Model: {model}",
             f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools",
             f"  [new] user: {text[:200]}",
         ]
@@ -226,7 +250,7 @@ class _SubagentHandler(EventHandler):
         tool_blocks = raw.get("_tool_use_blocks", [])
         final_text = raw.get("_text", "")
 
-        resp_lines = [f"Model: {model}  |  Msgs: {len(msgs)}"]
+        resp_lines = [f"Msgs: {len(msgs)}"]
         resp_lines.append(f"prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
         if cache_read:
             pt = prompt_tokens if isinstance(prompt_tokens, int) else 1
@@ -234,18 +258,25 @@ class _SubagentHandler(EventHandler):
         if tool_blocks:
             resp_lines.append("Tool calls: " + ", ".join(t["tool_name"] for t in tool_blocks))
         else:
-            text_preview = final_text[:200].replace("\n", " ")
+            text_preview = final_text[:20].replace("\n", " ")
+            if len(final_text) > 20:
+                text_preview += "..."
             resp_lines.append(f"Text: {text_preview}")
 
         prefix = "[Final Response]" if not has_tools else "[Response]"
         color = "#059669" if not has_tools else "#10B981"
+
+        # Detail dialog shows full text; entry message shows truncated preview
+        detail_lines = list(resp_lines)
+        if final_text and not has_tools:
+            detail_lines[-1] = f"Text:\n{final_text}"
 
         resp_only = {k: v for k, v in raw.items() if k not in ("_request",)}
         event_data = {
             "type": "Response",
             "model": model,
             "raw_json": json.dumps(resp_only, ensure_ascii=False, indent=2),
-            "formatted": "\n".join(resp_lines),
+            "formatted": "\n".join(detail_lines),
             "text": final_text,
         }
         group_key = f"asst:{raw.get('id', '')}" if raw.get("id") else None
@@ -352,6 +383,14 @@ class SubagentManager:
         state.message_queue = queue
         controller.agent._subagent_manager = self
         controller.agent._agent_id = "master"
+
+        # Register Agent tool and SendMessage tool on master
+        from agentcore.tools.agent_tool import AgentTool
+        agent_tool = AgentTool(self, self.user_agents)
+        controller.registry.register(agent_tool)
+        from agentcore.tools.send_message_tool import SendMessageTool
+        send_tool = SendMessageTool(self, "master")
+        controller.registry.register(send_tool)
 
     async def spawn(self, definition: AgentDefinition, prompt: str,
                     background: bool = False, keep_alive: bool = False,

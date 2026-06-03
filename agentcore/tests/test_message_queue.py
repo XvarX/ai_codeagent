@@ -11,6 +11,9 @@ async def test_messages_processed_sequentially():
     controller = MagicMock()
     controller._agent_lock = asyncio.Lock()
     controller.send_message = AsyncMock()
+    controller.handler = MagicMock()
+    controller.handler.on_request = AsyncMock()
+    controller.handler.on_enqueued = AsyncMock()
 
     queue = AgentMessageQueue(controller)
     queue.enqueue("first", source="user")
@@ -37,6 +40,9 @@ async def test_enqueue_while_processing_queues():
     """Messages enqueued during processing wait their turn."""
     controller = MagicMock()
     controller._agent_lock = asyncio.Lock()
+    controller.handler = MagicMock()
+    controller.handler.on_request = AsyncMock()
+    controller.handler.on_enqueued = AsyncMock()
 
     async def slow_send(text):
         if text == "first":
@@ -60,6 +66,9 @@ async def test_cancel_stops_consumer():
     controller = MagicMock()
     controller._agent_lock = asyncio.Lock()
     controller.send_message = AsyncMock()
+    controller.handler = MagicMock()
+    controller.handler.on_request = AsyncMock()
+    controller.handler.on_enqueued = AsyncMock()
 
     queue = AgentMessageQueue(controller)
     queue.enqueue("msg")

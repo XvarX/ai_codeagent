@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
 echo Starting backend...
-python agentcore/main.py --ws --port 18765
+python -m agentcore.main --ws --port 18765 --reload
 pause

@@ -2,13 +2,10 @@
   <div :class="['debug-drawer', { collapsed }]" :style="collapsed ? {} : { width: drawerWidth + 'px', minWidth: drawerWidth + 'px' }">
     <!-- Resize handle -->
     <div class="resize-handle" @mousedown="onResizeStart"></div>
-    <!-- Collapse toggle -->
-    <button class="collapse-toggle" @click="collapsed = !collapsed">
-      {{ collapsed ? '▶' : '◀' }}
-    </button>
     <template v-if="!collapsed">
       <!-- Header -->
       <div class="debug-header">
+        <button class="collapse-toggle" @click="collapsed = !collapsed">◀</button>
         <span class="debug-title">调试面板</span>
         <button class="debug-close" @click="debugStore.open = false">&times;</button>
       </div>
@@ -54,6 +51,7 @@
       </div>
     </template>
     <template v-else>
+      <button class="collapse-toggle" @click="collapsed = !collapsed">▶</button>
       <div class="collapsed-label">调<br>试</div>
     </template>
 
@@ -209,21 +207,19 @@ function toggleRaw() {
   font-size: 14px;
   color: #64748B;
   text-align: center;
-  margin-top: 36px;
+  margin-top: 8px;
 }
 
 .collapse-toggle {
-  position: absolute;
-  left: 4px;
-  top: 8px;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 10px;
-  padding: 1px 3px;
-  z-index: 11;
+  font-size: 12px;
+  padding: 2px 4px;
   color: #64748B;
+  line-height: 1;
 }
+.collapse-toggle:hover { color: #1E1B3A; }
 
 /* Resize handle */
 .resize-handle {

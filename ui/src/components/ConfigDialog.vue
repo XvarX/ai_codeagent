@@ -19,7 +19,10 @@
 
         <label class="field">
           API Key
-          <input v-model="apiKey" type="password" class="input" placeholder="Enter API key" />
+          <div class="key-row">
+            <input v-model="apiKey" :type="showKey ? 'text' : 'password'" class="input" placeholder="Enter API key" />
+            <button class="eye-btn" @click="showKey = !showKey" :title="showKey ? '隐藏' : '显示'">{{ showKey ? '🙈' : '👁' }}</button>
+          </div>
         </label>
 
         <label class="field">
@@ -125,10 +128,10 @@ function persistCustomProviders() {
 
 const customProviders = ref<Array<{ name: string; type: string }>>(loadCustomProviders());
 
-const providerList = computed(() => [
-  ...builtinProviders,
-  ...customProviders.value.map(cp => cp.name),
-]);
+const providerList = computed(() => {
+  const merged = new Set([...builtinProviders, ...allProviders.value, ...customProviders.value.map(cp => cp.name)]);
+  return [...merged];
+});
 
 // --- Per-provider config cache from backend ---
 const providerConfigs = ref<Record<string, any>>({});
@@ -148,6 +151,7 @@ const showAdvanced = ref(false);
 const showAddProvider = ref(false);
 const newProviderName = ref('');
 const newProviderType = ref<string>('openai');
+const showKey = ref(false);
 const confirmDelete = ref(false);
 const saved = ref(false);
 
@@ -168,22 +172,15 @@ function onProviderChange() {
 }
 
 function onConfigReceived(d: any) {
-  // Store per-provider configs
-  if (d.provider) {
-    providerConfigs.value[d.provider] = {
-      model: d.model,
-      api_key: d.api_key,
-      base_url: d.base_url,
-      context_window: d.context_window,
-      compact_threshold: d.compact_threshold,
-      reserved_output: d.reserved_output,
-    };
+  // Store all per-provider configs from backend
+  if (d.provider_configs) {
+    providerConfigs.value = d.provider_configs;
   }
   if (d.providers) {
     allProviders.value = d.providers;
   }
   // Apply current provider's config
-  const cur = agentStore.provider || 'anthropic';
+  const cur = agentStore.provider || d.provider || 'anthropic';
   provider.value = cur;
   applyProviderConfig(cur);
 }
@@ -264,6 +261,10 @@ function onCancel() {
 .input:focus { border-color: #6366F1; }
 .select-input { appearance: auto; background: white; cursor: pointer; }
 .field-hint { display: block; font-size: 12px; color: #94A3B8; margin-top: 2px; }
+.key-row { display: flex; gap: 0; margin-top: 4px; }
+.key-row .input { margin-top: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.eye-btn { padding: 6px 8px; border: 1px solid #E2E6EC; border-left: none; border-radius: 0 6px 6px 0; background: #FAFBFC; cursor: pointer; font-size: 14px; line-height: 1; }
+.eye-btn:hover { background: #EEF0F4; }
 
 /* ---- collapsible sections ---- */
 .section { border-top: 1px solid #EEF0F4; margin-top: 12px; padding-top: 12px; }

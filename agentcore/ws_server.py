@@ -14,7 +14,7 @@ from websockets.asyncio.server import serve, ServerConnection
 
 from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler
-from agentcore.subagent_manager import SubagentManager
+from agentcore.subagent_manager import SubagentManager, _SubagentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
 
@@ -279,7 +279,7 @@ class WsEventHandler(EventHandler):
                 "type": "Tool",
                 "name": name,
                 "input": input_dict,
-                "result": result[:5000],
+                "result": result,
                 "is_error": is_error,
                 "duration_ms": duration_ms,
                 "formatted": (
@@ -290,6 +290,13 @@ class WsEventHandler(EventHandler):
                     f"Duration: {dur_str or 'N/A'}\n"
                     f"Size: {len(result)} chars\n\n{result[:5000]}"
                 ),
+                "raw_json": json.dumps({
+                    "tool": name,
+                    "input": input_dict,
+                    "result": result[:10000],
+                    "is_error": is_error,
+                    "duration_ms": duration_ms,
+                }, ensure_ascii=False, indent=2),
             },
             group_key=tool_gk,
         )
@@ -339,6 +346,14 @@ class WsEventHandler(EventHandler):
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
         })
+        # Backfill raw_json into [Request] entry
+        if self._pending_request_data is not None:
+            req_raw = raw.get("_request", {})
+            if req_raw:
+                self._pending_request_data["raw_json"] = json.dumps(
+                    req_raw, ensure_ascii=False, indent=2)
+            self._pending_request_data = None
+
         await self._send_debug(
             prefix, "\n".join(resp_lines), color,
             event_data={
@@ -383,6 +398,12 @@ class WsEventHandler(EventHandler):
                 "trigger": trigger,
                 "pre_tokens": pre_tokens,
                 "post_tokens": post_tokens,
+                "raw_json": json.dumps({
+                    "trigger": trigger,
+                    "pre_tokens": pre_tokens,
+                    "post_tokens": post_tokens,
+                    "summary": summary[:2000] if summary else "",
+                }, ensure_ascii=False, indent=2),
             })
 
     async def on_snip(self, groups_removed: int, tokens_before: int, tokens_after: int):
@@ -426,6 +447,15 @@ class WsEventHandler(EventHandler):
             "tools_count": tools_count,
             "user_message": text,
             "formatted": "\n".join(msg_lines),
+            "messages": [
+                {"role": m.role, "content": m.content or "",
+                 "tool_use_id": getattr(m, "tool_use_id", ""),
+                 "tool_use_blocks": [
+                    {"tool_name": b.tool_name, "input": b.input}
+                    for b in (getattr(m, "tool_use_blocks", None) or [])
+                 ]}
+                for m in agent.messages
+            ],
         }
         self._pending_request_data = request_data
 
@@ -448,7 +478,8 @@ class WsEventHandler(EventHandler):
                 "from": from_name,
                 "message": message,
                 "formatted": f"From: {from_name}\n\n{message[:2000]}",
-            })
+            },
+            group_key="user")
 
     async def _do_compact(self, agent):
         """Run full LLM compaction, mirroring Flet's _do_compact."""
@@ -486,6 +517,7 @@ class WsEventHandler(EventHandler):
                     summary=result.summary_text,
                 )
                 self._detect_compacted(agent.messages)
+                self._reposition_compact_entries()
                 # Sync full debug state to frontend
                 compacted_entries = [
                     {"prefix": e["prefix"], "message": e["message"],
@@ -557,6 +589,35 @@ class WsEventHandler(EventHandler):
                 if prev.get("opacity", 1.0) >= 1.0:
                     prev["opacity"] = 0.4
 
+    def _reposition_compact_entries(self):
+        """Move non-grayed [Compact Call]/[Compact] entries below the last grayed entry."""
+        compact_prefixes = ("[Compact Call]", "[Compact]")
+        compact_indices = [
+            i for i, e in enumerate(self._debug_entries)
+            if e.get("opacity", 1.0) >= 1.0
+            and e.get("prefix") in compact_prefixes
+        ]
+        if not compact_indices:
+            return
+
+        # Find boundary: position after last grayed entry
+        boundary = 0
+        for i, e in enumerate(self._debug_entries):
+            if e.get("opacity", 1.0) < 1.0:
+                boundary = i + 1
+
+        if boundary == 0 or compact_indices[0] == boundary:
+            return
+
+        # Remove and reinsert at boundary
+        moved = [self._debug_entries[i] for i in compact_indices]
+        for i in reversed(compact_indices):
+            self._debug_entries.pop(i)
+        removed_before = sum(1 for idx in compact_indices if idx < boundary)
+        boundary -= removed_before
+        for j, rec in enumerate(moved):
+            self._debug_entries.insert(boundary + j, rec)
+
 
 async def _send_agent_list(ws: ServerConnection, manager: SubagentManager):
     """Send the full agent list to the frontend."""
@@ -589,8 +650,17 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
     master_state = manager.get_active()
     controller = master_state.controller
     handler = WsEventHandler(websocket, controller)
+    # Save native _SubagentHandler before overwriting with WsEventHandler
+    master_native = controller.handler
+    if isinstance(master_native, _SubagentHandler):
+        master_state._native_handler = master_native
     controller.handler = handler
     manager.master_handler = handler  # ensure subagent_done events reach WebSocket
+
+    # Wire on_change to push agent list updates (AgentTool spawn, kill, etc.)
+    async def _push_agent_list():
+        await _send_agent_list(websocket, manager)
+    manager.on_change = lambda: asyncio.ensure_future(_push_agent_list())
 
     # Send initial debug events
     registry = controller.registry
@@ -611,8 +681,14 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
         for s in mcp_info["servers"]:
             tool_names = ", ".join(t["name"] for t in s.get("tools", []))
             svr_lines.append(f"  {s['name']}: {tool_names}")
+        mcp_json = json.dumps(mcp_info, ensure_ascii=False, indent=2)
         await handler._send_debug("[System]", "\n".join(svr_lines), "#6366F1",
-                                  event_data={"type": "MCP", "servers": mcp_info["servers"]})
+                                  event_data={
+                                      "type": "MCP",
+                                      "servers": mcp_info["servers"],
+                                      "formatted": "\n".join(svr_lines),
+                                      "raw_json": mcp_json,
+                                  })
     else:
         await handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
 
@@ -667,7 +743,24 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
                         cfg = yaml.safe_load(f) or {}
-                # Send current config to frontend
+                # Collect all known providers
+                all_providers = list(
+                    set(list(cfg.get("api_keys", {}).keys()) +
+                        list(cfg.get("base_urls", {}).keys()) +
+                        list(cfg.get("models", {}).keys()) +
+                        ["anthropic", "openai", "glm", "deepseek"])
+                )
+                # Send per-provider configs
+                provider_configs = {}
+                for p in all_providers:
+                    provider_configs[p] = {
+                        "model": cfg.get("models", {}).get(p, "") or cfg.get("model", ""),
+                        "api_key": cfg.get("api_keys", {}).get(p, ""),
+                        "base_url": cfg.get("base_urls", {}).get(p, ""),
+                        "context_window": cfg.get("context_windows", {}).get(p, 128000),
+                        "compact_threshold": cfg.get("compact_thresholds", {}).get(p, 0.85),
+                        "reserved_output": cfg.get("reserved_outputs", {}).get(p, 8000),
+                    }
                 await websocket.send(json.dumps({
                     "type": "config",
                     "provider": cfg.get("provider", "anthropic"),
@@ -677,12 +770,8 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     "context_window": cfg.get("context_windows", {}).get(cfg.get("provider", "anthropic"), 128000),
                     "compact_threshold": cfg.get("compact_thresholds", {}).get(cfg.get("provider", "anthropic"), 0.85),
                     "reserved_output": cfg.get("reserved_outputs", {}).get(cfg.get("provider", "anthropic"), 8000),
-                    "providers": list(
-                        set(list(cfg.get("api_keys", {}).keys()) +
-                            list(cfg.get("base_urls", {}).keys()) +
-                            list(cfg.get("models", {}).keys()) +
-                            ["anthropic", "openai", "glm", "deepseek"])
-                    ),
+                    "providers": all_providers,
+                    "provider_configs": provider_configs,
                 }, ensure_ascii=False))
 
             elif msg_type == "reconfigure":
@@ -704,6 +793,7 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                 cfg["provider"] = provider
                 if config_data.get("model"):
                     cfg["model"] = config_data["model"]
+                    cfg.setdefault("models", {})[provider] = config_data["model"]
                 if config_data.get("api_key"):
                     cfg.setdefault("api_keys", {})[provider] = config_data["api_key"]
                 if config_data.get("base_url"):
@@ -722,6 +812,14 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     "[System]",
                     f"Config updated: {new_config.provider} / {new_config.model}",
                     "#6366F1")
+                # Update frontend title bar
+                await websocket.send(json.dumps({
+                    "type": "status",
+                    "config": {
+                        "provider": new_config.provider,
+                        "model": new_config.model or active_state.controller.provider.model,
+                    },
+                }, ensure_ascii=False))
 
             elif msg_type == "switch_agent":
                 target_id = msg.get("agent_id", "master")
@@ -729,12 +827,22 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     # Save current snapshot to old state
                     old_state = manager.get_active()
                     old_state.debug_events = list(handler._debug_entries)
+                    # Restore old controller's native handler so its events
+                    # (e.g. enqueued messages) are recorded, not forwarded
+                    old_native = getattr(old_state, '_native_handler', None)
+                    if old_native is not None:
+                        old_native._clear_forwarding()
+                        old_state.controller.handler = old_native
 
                     # Switch
                     manager.switch(target_id)
 
-                    # Wire handler to the new active controller
+                    # Wire the new agent's SubagentHandler to forward events through WsEventHandler
                     new_state = manager.get_active()
+                    new_native = new_state.controller.handler
+                    if isinstance(new_native, _SubagentHandler):
+                        new_state._native_handler = new_native
+                        new_native._wire_forwarding(handler)
                     new_state.controller.handler = handler
                     handler.set_controller(new_state.controller)
 

@@ -402,6 +402,7 @@ class Agent:
 
             text_parts: list[str] = []
             tool_use_blocks: list[ToolUseBlock] = []
+            _streaming_asst_added = False
 
             try:
                 call_msgs = self._call_messages()
@@ -431,6 +432,16 @@ class Agent:
                             self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                         _last_response_id = event.raw.get("id")
                         _last_response_usage = event.raw.get("usage", {})
+                        # Add assistant message now so debug grouping can find it
+                        _streaming_asst = Message(
+                            role="assistant",
+                            content="".join(text_parts),
+                            tool_use_blocks=list(tool_use_blocks),
+                            id=_last_response_id,
+                            usage=_last_response_usage,
+                        )
+                        self.messages.append(_streaming_asst)
+                        _streaming_asst_added = True
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
@@ -454,6 +465,7 @@ class Agent:
                     try:
                         text_parts = []
                         tool_use_blocks = []
+                        _streaming_asst_added = False
                         call_msgs = self._call_messages()
                         async for event in self.provider.call_stream(
                             messages=call_msgs,
@@ -480,6 +492,15 @@ class Agent:
                                     self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                                 _last_response_id = event.raw.get("id")
                                 _last_response_usage = event.raw.get("usage", {})
+                                _streaming_asst = Message(
+                                    role="assistant",
+                                    content="".join(text_parts),
+                                    tool_use_blocks=list(tool_use_blocks),
+                                    id=_last_response_id,
+                                    usage=_last_response_usage,
+                                )
+                                self.messages.append(_streaming_asst)
+                                _streaming_asst_added = True
                                 yield event
                             elif isinstance(event, ErrorEvent):
                                 self.messages.append(Message(
@@ -490,15 +511,18 @@ class Agent:
                                 yield DoneEvent(final_text=f"Error after compaction: {event.message}")
                                 return
                         # Retry succeeded — process response
-                        assistant_text = "".join(text_parts)
-                        assistant_msg = Message(
-                            role="assistant",
-                            content=assistant_text,
-                            tool_use_blocks=tool_use_blocks,
-                            id=_last_response_id,
-                            usage=_last_response_usage,
-                        )
-                        self.messages.append(assistant_msg)
+                        if not _streaming_asst_added:
+                            assistant_text = "".join(text_parts)
+                            assistant_msg = Message(
+                                role="assistant",
+                                content=assistant_text,
+                                tool_use_blocks=tool_use_blocks,
+                                id=_last_response_id,
+                                usage=_last_response_usage,
+                            )
+                            self.messages.append(assistant_msg)
+                        else:
+                            assistant_text = "".join(text_parts)
                         if not tool_use_blocks:
                             yield DoneEvent(final_text=assistant_text or "(no response)")
                             return
@@ -553,14 +577,17 @@ class Agent:
                     yield DoneEvent(final_text=error_msg_text)
                     return
 
-            assistant_text = "".join(text_parts)
-            assistant_msg = Message(
-                role="assistant",
-                content=assistant_text,
-                tool_use_blocks=tool_use_blocks,
-                id=_last_response_id,
-            )
-            self.messages.append(assistant_msg)
+            if not _streaming_asst_added:
+                assistant_text = "".join(text_parts)
+                assistant_msg = Message(
+                    role="assistant",
+                    content=assistant_text,
+                    tool_use_blocks=tool_use_blocks,
+                    id=_last_response_id,
+                )
+                self.messages.append(assistant_msg)
+            else:
+                assistant_text = "".join(text_parts)
 
             # Termination check
             if not tool_use_blocks:

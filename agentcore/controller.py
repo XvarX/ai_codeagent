@@ -30,9 +30,7 @@ def _build_registry(cwd: str | None = None) -> tuple[ToolRegistry, str]:
 
     registry = ToolRegistry()
     tools = [BashTool(), FileReadTool(), FileEditTool(),
-             FileWriteTool(), GlobTool(), GrepTool()]
-    if skills:
-        tools.append(skill_tool)
+             FileWriteTool(), GlobTool(), GrepTool(), skill_tool]
     registry.register_all(tools)
     return registry, skills_text
 
