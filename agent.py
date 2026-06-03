@@ -93,7 +93,12 @@ class Agent:
         if self.skills_text:
             inserts.append(Message(
                 role="user",
-                content=f"Available skills (use Skill tool to invoke):\n{self.skills_text}",
+                content=(
+                    f"Skills relevant to your task:\n\n{self.skills_text}\n\n"
+                    f"These skills encode project-specific conventions, preferences, and workflows. "
+                    f"Invoke via Skill(\"<name>\") for the complete instructions. "
+                    f"If none of the listed skills are obviously relevant to your next action, no action is needed."
+                ),
             ))
         if self.agents_text:
             inserts.append(Message(
