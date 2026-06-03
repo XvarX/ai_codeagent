@@ -8,22 +8,22 @@ python main.py -c "message"     单次命令行模式
 import asyncio
 import sys
 
-from config import AgentConfig
-from tools.registry import ToolRegistry
-from tools.bash import BashTool
-from tools.file_read import FileReadTool
-from tools.file_edit import FileEditTool
-from tools.file_write import FileWriteTool
-from tools.glob import GlobTool
-from tools.grep import GrepTool
-from providers.anthropic import AnthropicProvider
-from providers.openai_compat import OpenAICompatProvider
-from agent import Agent
+from agentcore.config import AgentConfig
+from agentcore.tools.registry import ToolRegistry
+from agentcore.tools.bash import BashTool
+from agentcore.tools.file_read import FileReadTool
+from agentcore.tools.file_edit import FileEditTool
+from agentcore.tools.file_write import FileWriteTool
+from agentcore.tools.glob import GlobTool
+from agentcore.tools.grep import GrepTool
+from agentcore.providers.anthropic import AnthropicProvider
+from agentcore.providers.openai_compat import OpenAICompatProvider
+from agentcore.agent import Agent
 
 
 def build_registry() -> tuple[ToolRegistry, str]:
-    from skills.loader import load_skills
-    from skills.skill_tool import SkillTool
+    from agentcore.skills.loader import load_skills
+    from agentcore.skills.skill_tool import SkillTool
 
     skills = load_skills()
     skill_tool = SkillTool(skills)
@@ -149,6 +149,13 @@ async def run_interactive(config: AgentConfig):
 async def main():
     config = AgentConfig.from_yaml()
 
+    if "--ws" in sys.argv:
+        from agentcore.ws_server import run_ws_server
+        port_idx = sys.argv.index("--port") if "--port" in sys.argv else -1
+        port = int(sys.argv[port_idx + 1]) if port_idx != -1 else 18765
+        await run_ws_server(config, port)
+        return
+
     if len(sys.argv) >= 3 and sys.argv[1] == "-c":
         await run_one_shot(config, " ".join(sys.argv[2:]))
     elif len(sys.argv) >= 2 and sys.argv[1] == "-s":
@@ -163,7 +170,7 @@ async def main():
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         # Default: launch Flet GUI
-        from flet_ui.app import launch_flet
+        from agentcore.flet_ui.app import launch_flet
         launch_flet(AgentConfig.from_yaml())
     else:
         asyncio.run(main())
