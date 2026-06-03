@@ -73,6 +73,15 @@ export const useChatStore = defineStore('chat', () => {
     diffs.value.push({ filePath, oldContent, newContent });
   }
 
+  function loadMessages(msgs: Array<{ role: string; content: string }>) {
+    messages.value = msgs.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+    currentAssistantMsg.value = '';
+    thinking.value = false;
+  }
+
   function clear() {
     messages.value = [];
     currentAssistantMsg.value = '';
@@ -84,6 +93,6 @@ export const useChatStore = defineStore('chat', () => {
     messages, thinking, currentAssistantMsg, diffs,
     maxTokens, usageTokens,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
-    addToolResult, addDiff, updateUsage, clear,
+    addToolResult, addDiff, updateUsage, loadMessages, clear,
   };
 });

@@ -47,6 +47,25 @@ export const useDebugStore = defineStore('debug', () => {
     }
   }
 
+  function loadEvents(events: Array<{
+    prefix: string;
+    message: string;
+    color: string;
+    data?: any;
+    group_key?: string;
+  }>) {
+    entries.value = events.map((e) => ({
+      id: _nextId++,
+      prefix: e.prefix,
+      message: e.message,
+      color: e.color,
+      data: e.data,
+      groupKey: e.group_key,
+      groupIdx: null,
+      opacity: 1.0,
+    }));
+  }
+
   function updateContextUsage(tokens: number, max: number = 128000) {
     usageTokens.value = tokens;
     maxTokens.value = max;
@@ -72,6 +91,7 @@ export const useDebugStore = defineStore('debug', () => {
     compacting,
     open,
     addEvent,
+    loadEvents,
     updateContextUsage,
     clear,
     setCompacting,

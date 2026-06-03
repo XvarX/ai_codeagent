@@ -89,6 +89,24 @@ onMounted(() => {
   agentWs.on('done', () => agentStore.setBusy(false));
   agentWs.on('error', () => agentStore.setBusy(false));
 
+  // Agent switching — full state reload
+  agentWs.on('agent_switched', (d: any) => {
+    agentStore.setActiveAgent(d.agent_id);
+    chatStore.loadMessages(d.messages || []);
+    debugStore.loadEvents(d.debug_events || []);
+    chatStore.updateUsage(d.est_tokens || 0);
+  });
+
+  // Agent list updates
+  agentWs.on('agent_list', (d: any) => {
+    agentStore.setAgentList(d.agents);
+  });
+
+  // Agent spawned — refresh status
+  agentWs.on('agent_spawned', () => {
+    agentWs.send({ type: 'get_status' });
+  });
+
   agentWs.connect();
 });
 
