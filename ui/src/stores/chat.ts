@@ -14,6 +14,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   toolCalls?: ToolCallEntry[];
+  toolLabels?: ToolLabel[];
+}
+
+export interface ToolLabel {
+  name: string;
+  input: Record<string, any>;
+  isError?: boolean;
+  resultPreview?: string;
 }
 
 export interface DiffEntry {
@@ -29,6 +37,18 @@ export const useChatStore = defineStore('chat', () => {
   const maxTokens = ref(128000);
   const usageTokens = ref(0);
   const diffs = ref<DiffEntry[]>([]);
+  const toolLabels = ref<ToolLabel[]>([]);
+
+  function addToolCall(name: string, input: Record<string, any>) {
+    toolLabels.value.push({ name, input });
+  }
+
+  function addToolResultPreview(index: number, resultPreview: string, isError: boolean) {
+    if (toolLabels.value[index]) {
+      toolLabels.value[index].resultPreview = resultPreview;
+      toolLabels.value[index].isError = isError;
+    }
+  }
 
   function addUserMessage(text: string) {
     messages.value.push({ role: 'user', content: text });
@@ -46,8 +66,13 @@ export const useChatStore = defineStore('chat', () => {
 
   function finalizeAssistantMessage() {
     if (currentAssistantMsg.value) {
-      messages.value.push({ role: 'assistant', content: currentAssistantMsg.value });
+      messages.value.push({
+        role: 'assistant',
+        content: currentAssistantMsg.value,
+        toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+      } as ChatMessage);
       currentAssistantMsg.value = '';
+      toolLabels.value = [];
     }
     thinking.value = false;
   }
@@ -87,12 +112,13 @@ export const useChatStore = defineStore('chat', () => {
     currentAssistantMsg.value = '';
     thinking.value = false;
     diffs.value = [];
+    toolLabels.value = [];
   }
 
   return {
-    messages, thinking, currentAssistantMsg, diffs,
+    messages, thinking, currentAssistantMsg, diffs, toolLabels,
     maxTokens, usageTokens,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
-    addToolResult, addDiff, updateUsage, loadMessages, clear,
+    addToolResult, addToolCall, addToolResultPreview, addDiff, updateUsage, loadMessages, clear,
   };
 });

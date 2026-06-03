@@ -4,11 +4,11 @@
       <button class="sidebar-toggle" @click="showSidebar = !showSidebar">&#9776;</button>
       <span class="app-title">{{ agentStore.provider }} / {{ agentStore.model }}</span>
       <div class="header-actions">
-        <button @click="showSkill = true" title="Skills">&#9889;</button>
-        <button @click="showMcp = true" title="MCP">&#128268;</button>
-        <button @click="showConfig = true" title="Config">&#9881;</button>
-        <button @click="onClear" title="Clear">&#128465;</button>
-        <button @click="debugStore.open = !debugStore.open" title="Debug">&#128027;</button>
+        <button @click="showSkill = true">技能</button>
+        <button @click="showMcp = true">MCP</button>
+        <button @click="showConfig = true">配置</button>
+        <button @click="onClear">清理</button>
+        <button @click="debugStore.open = !debugStore.open">调试</button>
       </div>
     </header>
     <div class="app-body">
@@ -51,13 +51,32 @@ function onClear() {
   agentWs.send({ type: 'clear_history' });
 }
 
+// Tool call labels for chat stream
+let _toolCallIndex = 0;
+
 onMounted(() => {
   // Chat streaming events
-  agentWs.on('thinking', () => chatStore.startThinking());
+  agentWs.on('thinking', () => {
+    chatStore.startThinking();
+    _toolCallIndex = 0;
+  });
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
     if (!d.reasoning) chatStore.appendToken(d.token);
   });
-  agentWs.on('done', () => chatStore.finalizeAssistantMessage());
+  agentWs.on('done', () => {
+    chatStore.finalizeAssistantMessage();
+    _toolCallIndex = 0;
+  });
+
+  // Tool call labels for chat stream
+  agentWs.on('tool_use', (d: any) => {
+    chatStore.addToolCall(d.name, d.input || {});
+  });
+  agentWs.on('tool_result', (d: any) => {
+    const preview = d.result ? d.result.slice(0, 30).replace(/\n/g, ' ') : '';
+    chatStore.addToolResultPreview(_toolCallIndex, preview, d.is_error);
+    _toolCallIndex++;
+  });
 
   // Tool results — capture diff data for DiffViewer
   agentWs.on('tool_result', (d: any) => {
@@ -68,7 +87,12 @@ onMounted(() => {
 
   // Debug panel — all formatted events come via debug_event
   agentWs.on('debug_event', (d: any) => {
-    debugStore.addEvent(d.prefix, d.message, d.color, d.data, d.group_key);
+    debugStore.addEvent(d.prefix, d.message, d.color, d.data, d.group_key, d.group_idx);
+  });
+
+  // Compact/sync — full debug state refresh
+  agentWs.on('debug_sync', (d: any) => {
+    debugStore.syncEvents(d.entries);
   });
 
   // Context usage from backend
