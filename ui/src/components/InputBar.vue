@@ -37,6 +37,14 @@ function onKeydown(e: KeyboardEvent) {
 function send() {
   const msg = text.value.trim();
   if (!msg) return;
+
+  // Intercept /compact command
+  if (msg === '/compact') {
+    agentWs.send({ type: 'compact' });
+    text.value = '';
+    return;
+  }
+
   chatStore.addUserMessage(msg);
   agentWs.send({ type: 'send_message', text: msg });
   text.value = '';
