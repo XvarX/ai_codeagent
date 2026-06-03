@@ -51,6 +51,7 @@ class AgentWsService {
   }
 
   private dispatch(type: string, data: any): void {
+    console.log('[ws]', type, data);
     const cbs = this.listeners.get(type);
     if (cbs) cbs.forEach(fn => fn(data));
   }
