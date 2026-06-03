@@ -14,18 +14,30 @@
   "build": {
     "appId": "com.ai-codeagent.app",
     "productName": "AI Code Agent",
-    "files": ["dist/**/*", "dist-electron/**/*"],
-    "extraResources": [
-      { "from": "../build/agentcore.exe", "to": "agentcore.exe" }
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
     ],
-    "win": { "target": "nsis" },
-    "directories": { "output": "../build/electron-release" }
+    "extraResources": [
+      {
+        "from": "../build/agentcore.exe",
+        "to": "agentcore.exe"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "directories": {
+      "output": "../build/electron-release"
+    }
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.34"
   },
   "devDependencies": {
+    "@types/diff": "^7.0.2",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",

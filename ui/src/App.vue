@@ -59,6 +59,13 @@ onMounted(() => {
   });
   agentWs.on('done', () => chatStore.finalizeAssistantMessage());
 
+  // Tool results — capture diff data for DiffViewer
+  agentWs.on('tool_result', (d: any) => {
+    if (d.diff) {
+      chatStore.addDiff(d.diff.file_path, d.diff.old_content, d.diff.new_content);
+    }
+  });
+
   // Debug panel — all formatted events come via debug_event
   agentWs.on('debug_event', (d: any) => {
     debugStore.addEvent(d.prefix, d.message, d.color, d.data, d.group_key);

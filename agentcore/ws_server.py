@@ -70,6 +70,19 @@ class WsEventHandler(EventHandler):
             "type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id,
         })
 
+        # Pre-read old file for diff display
+        if name in ("FileEdit", "FileWrite") and input_dict.get("file_path"):
+            fp = Path(input_dict["file_path"])
+            if not fp.is_absolute():
+                fp = Path(self._controller.agent.cwd) / fp
+            old = ""
+            try:
+                old = fp.read_text(encoding="utf-8")
+            except (FileNotFoundError, IOError):
+                pass
+            self._pending_tool_calls[-1]["file_path"] = str(fp)
+            self._pending_tool_calls[-1]["old_content"] = old
+
     async def on_tool_result(self, name: str, result: str, is_error: bool,
                              duration_ms: float = 0, tool_use_id: str = ""):
         color = "#EF4444" if is_error else "#10B981"
@@ -104,9 +117,24 @@ class WsEventHandler(EventHandler):
             f"{preview}"
         )
 
+        # Gather diff data for FileEdit / FileWrite
+        file_path = tc.get("file_path", "") if tc else ""
+        old_content = tc.get("old_content", "") if tc else ""
+        new_content = ""
+        if name in ("FileEdit", "FileWrite") and file_path and not is_error:
+            try:
+                new_content = Path(file_path).read_text(encoding="utf-8")
+            except (FileNotFoundError, IOError):
+                pass
+
         await self._send({
             "type": "tool_result", "name": name, "result": result,
             "is_error": is_error, "duration_ms": duration_ms, "id": tool_use_id,
+            "diff": {
+                "file_path": file_path,
+                "old_content": old_content,
+                "new_content": new_content,
+            } if file_path and old_content != new_content else None,
         })
         await self._send_debug(
             f"[Tool] {name} {status_icon}", message, color,

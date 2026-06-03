@@ -16,12 +16,19 @@ export interface ChatMessage {
   toolCalls?: ToolCallEntry[];
 }
 
+export interface DiffEntry {
+  filePath: string;
+  oldContent: string;
+  newContent: string;
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([]);
   const thinking = ref(false);
   const currentAssistantMsg = ref('');
   const maxTokens = ref(128000);
   const usageTokens = ref(0);
+  const diffs = ref<DiffEntry[]>([]);
 
   function addUserMessage(text: string) {
     messages.value.push({ role: 'user', content: text });
@@ -62,16 +69,21 @@ export const useChatStore = defineStore('chat', () => {
     usageTokens.value = tokens;
   }
 
+  function addDiff(filePath: string, oldContent: string, newContent: string) {
+    diffs.value.push({ filePath, oldContent, newContent });
+  }
+
   function clear() {
     messages.value = [];
     currentAssistantMsg.value = '';
     thinking.value = false;
+    diffs.value = [];
   }
 
   return {
-    messages, thinking, currentAssistantMsg,
+    messages, thinking, currentAssistantMsg, diffs,
     maxTokens, usageTokens,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
-    addToolResult, updateUsage, clear,
+    addToolResult, addDiff, updateUsage, clear,
   };
 });

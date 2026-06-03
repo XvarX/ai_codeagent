@@ -16,12 +16,20 @@
         <div class="bubble-content" v-html="renderMarkdown(chatStore.currentAssistantMsg)"></div>
       </div>
     </div>
+    <div v-for="(diff, di) in chatStore.diffs" :key="'diff-' + di" class="diff-wrapper">
+      <DiffViewer
+        :filePath="diff.filePath"
+        :oldContent="diff.oldContent"
+        :newContent="diff.newContent"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { watch, ref, nextTick } from 'vue';
 import { useChatStore } from '../stores/chat';
+import DiffViewer from './DiffViewer.vue';
 
 const chatStore = useChatStore();
 const container = ref<HTMLElement | null>(null);
@@ -69,4 +77,5 @@ watch(
 .thinking-row { display: flex; gap: 4px; padding: 8px 0; align-items: center; }
 .dot { width: 6px; height: 6px; border-radius: 3px; background: #94A3B8; }
 .thinking-text { font-size: 14px; color: #94A3B8; }
+.diff-wrapper { margin: 8px 0; }
 </style>
