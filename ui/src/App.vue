@@ -53,11 +53,19 @@ function onClear() {
 
 onMounted(() => {
   agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
-  agentWs.on('thinking', () => chatStore.startThinking());
+  agentWs.on('thinking', () => {
+    chatStore.startThinking();
+    debugStore.addEvent('[Think]', 'Agent thinking...', '#6366F1');
+  });
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
     if (!d.reasoning) chatStore.appendToken(d.token);
   });
-  agentWs.on('done', () => chatStore.finalizeAssistantMessage());
+  agentWs.on('done', (d: { final_text?: string }) => {
+    chatStore.finalizeAssistantMessage();
+    debugStore.addEvent('[Done]', 'Response complete', '#22C55E');
+  });
+  agentWs.on('connected', (d: any) => debugStore.addEvent('[System]', `Connected v${d.version || ''}`, '#64748B'));
+  agentWs.on('status', (d: any) => debugStore.addEvent('[Status]', `${d.config?.provider || ''} / ${d.config?.model || ''}`, '#64748B', d));
   agentWs.on('error', (d: { message: string }) => debugStore.addEvent('[Error]', d.message, '#EF4444'));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
   agentWs.on('tool_use', (d: { name: string; [k: string]: any }) => debugStore.addEvent('[Tool]', `${d.name}`, '#6366F1', d));
