@@ -5,6 +5,7 @@ interface AgentInfo {
   id: string;
   name: string;
   status: string;
+  est_tokens?: number;
 }
 
 export const useAgentStore = defineStore('agent', () => {
@@ -33,7 +34,7 @@ export const useAgentStore = defineStore('agent', () => {
     activeAgentId.value = id;
   }
 
-  function setAgentList(list: Array<{ id: string; name: string; status: string; active: boolean }>) {
+  function setAgentList(list: Array<{ id: string; name: string; status: string; active: boolean; est_tokens?: number }>) {
     agents.value = list;
     const active = list.find(a => a.active);
     if (active) activeAgentId.value = active.id;

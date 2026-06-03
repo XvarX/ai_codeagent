@@ -567,6 +567,7 @@ async def _send_agent_list(ws: ServerConnection, manager: SubagentManager):
             "name": s.name,
             "status": s.status,
             "active": aid == manager.active_id,
+            "est_tokens": s.est_tokens,
         })
     await ws.send(json.dumps({"type": "agent_list", "agents": agents}, ensure_ascii=False))
 
