@@ -31,6 +31,7 @@ class WsEventHandler(EventHandler):
         self._controller = controller
         self._pending_request_data = None
         self._pending_tool_calls: list[dict] = []
+        self._has_pending_tool_results = False
 
     async def _send(self, data: dict):
         try:
@@ -56,8 +57,9 @@ class WsEventHandler(EventHandler):
 
     async def on_thinking(self):
         await self._send({"type": "thinking"})
-        await self._send_debug(
-            "[Send Tool Result]", "→ LLM  |  回传工具结果", "#8B5CF6")
+        if self._has_pending_tool_results:
+            await self._send_debug(
+                "[Send Tool Result]", "→ LLM  |  回传工具结果", "#8B5CF6")
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
         await self._send({"type": "text_delta", "token": token, "reasoning": reasoning})
@@ -136,6 +138,7 @@ class WsEventHandler(EventHandler):
                 "new_content": new_content,
             } if file_path and old_content != new_content else None,
         })
+        self._has_pending_tool_results = True
         await self._send_debug(
             f"[Tool] {name} {status_icon}", message, color,
             event_data={
@@ -349,6 +352,7 @@ async def _handle_client(websocket: ServerConnection, controller: AgentControlle
         msg_type = msg.get("type", "")
         try:
             if msg_type == "send_message":
+                handler._has_pending_tool_results = False
                 await controller.send_message(msg.get("text", ""))
             elif msg_type == "cancel":
                 await controller.cancel()
