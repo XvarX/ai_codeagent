@@ -374,6 +374,7 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
     controller = master_state.controller
     handler = WsEventHandler(websocket, controller)
     controller.handler = handler
+    manager.master_handler = handler  # ensure subagent_done events reach WebSocket
 
     # Send initial debug events
     registry = controller.registry

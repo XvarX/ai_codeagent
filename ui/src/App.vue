@@ -97,6 +97,9 @@ onMounted(() => {
     chatStore.updateUsage(d.est_tokens || 0);
   });
 
+  // Subagent completion
+  agentWs.on('subagent_done', () => agentWs.send({ type: 'get_status' }));
+
   // Agent list updates
   agentWs.on('agent_list', (d: any) => {
     agentStore.setAgentList(d.agents);
