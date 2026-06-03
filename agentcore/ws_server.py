@@ -660,11 +660,64 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                 agent = active_state.controller.agent
                 await handler._do_compact(agent)
 
+            elif msg_type == "get_config":
+                import yaml
+                config_path = Path("config.yaml")
+                cfg = {}
+                if config_path.exists():
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        cfg = yaml.safe_load(f) or {}
+                # Send current config to frontend
+                await websocket.send(json.dumps({
+                    "type": "config",
+                    "provider": cfg.get("provider", "anthropic"),
+                    "model": cfg.get("model", ""),
+                    "api_key": cfg.get("api_keys", {}).get(cfg.get("provider", "anthropic"), ""),
+                    "base_url": cfg.get("base_urls", {}).get(cfg.get("provider", "anthropic"), ""),
+                    "context_window": cfg.get("context_windows", {}).get(cfg.get("provider", "anthropic"), 128000),
+                    "compact_threshold": cfg.get("compact_thresholds", {}).get(cfg.get("provider", "anthropic"), 0.85),
+                    "reserved_output": cfg.get("reserved_outputs", {}).get(cfg.get("provider", "anthropic"), 8000),
+                    "providers": list(
+                        set(list(cfg.get("api_keys", {}).keys()) +
+                            list(cfg.get("base_urls", {}).keys()) +
+                            list(cfg.get("models", {}).keys()) +
+                            ["anthropic", "openai", "glm", "deepseek"])
+                    ),
+                }, ensure_ascii=False))
+
             elif msg_type == "reconfigure":
                 from agentcore.config import AgentConfig as AC
-                new_config = AC(**msg.get("config", {}))
+                config_data = msg.get("config", {})
+                new_config = AC(**config_data)
                 active_state = manager.get_active()
                 active_state.controller.reconfigure(new_config)
+
+                # Write back to config.yaml
+                import yaml
+                config_path = Path("config.yaml")
+                cfg = {}
+                if config_path.exists():
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        cfg = yaml.safe_load(f) or {}
+
+                provider = config_data.get("provider", cfg.get("provider", "anthropic"))
+                cfg["provider"] = provider
+                if config_data.get("model"):
+                    cfg["model"] = config_data["model"]
+                if config_data.get("api_key"):
+                    cfg.setdefault("api_keys", {})[provider] = config_data["api_key"]
+                if config_data.get("base_url"):
+                    cfg.setdefault("base_urls", {})[provider] = config_data["base_url"]
+                if config_data.get("context_window"):
+                    cfg.setdefault("context_windows", {})[provider] = config_data["context_window"]
+                if config_data.get("compact_threshold"):
+                    cfg.setdefault("compact_thresholds", {})[provider] = config_data["compact_threshold"]
+                if config_data.get("reserved_output"):
+                    cfg.setdefault("reserved_outputs", {})[provider] = config_data["reserved_output"]
+
+                with open(config_path, "w", encoding="utf-8") as f:
+                    yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
+
                 await handler._send_debug(
                     "[System]",
                     f"Config updated: {new_config.provider} / {new_config.model}",

@@ -7,7 +7,7 @@
         <!-- Provider dropdown -->
         <label class="field">
           Provider
-          <select v-model="provider" class="input select-input">
+          <select v-model="provider" @change="onProviderChange" class="input select-input">
             <option v-for="p in providerList" :key="p" :value="p">{{ p }}</option>
           </select>
         </label>
@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { agentWs } from '../services/agentWs';
 import { useAgentStore } from '../stores/agent';
 
@@ -130,19 +130,15 @@ const providerList = computed(() => [
   ...customProviders.value.map(cp => cp.name),
 ]);
 
-// --- Form state ---
-const defaultProvider = computed(() => {
-  const storeVal = agentStore.provider;
-  if (storeVal && providerList.value.includes(storeVal)) return storeVal;
-  return 'anthropic';
-});
+// --- Per-provider config cache from backend ---
+const providerConfigs = ref<Record<string, any>>({});
+const allProviders = ref<string[]>([...builtinProviders]);
 
-const provider = ref(defaultProvider.value);
-const model = ref(agentStore.model || '');
+// --- Form state ---
+const provider = ref('anthropic');
+const model = ref('');
 const apiKey = ref('');
 const baseUrl = ref('');
-
-// Advanced settings
 const contextWindow = ref(128000);
 const compactThreshold = ref(0.85);
 const reservedOutput = ref(8000);
@@ -155,8 +151,51 @@ const newProviderType = ref<string>('openai');
 const confirmDelete = ref(false);
 const saved = ref(false);
 
-// --- Computed ---
 const isBuiltinProvider = computed(() => builtinProviders.includes(provider.value as any));
+
+function applyProviderConfig(p: string) {
+  const pc = providerConfigs.value[p] || {};
+  model.value = pc.model || '';
+  apiKey.value = pc.api_key || '';
+  baseUrl.value = pc.base_url || '';
+  contextWindow.value = pc.context_window || 128000;
+  compactThreshold.value = pc.compact_threshold || 0.85;
+  reservedOutput.value = pc.reserved_output || 8000;
+}
+
+function onProviderChange() {
+  applyProviderConfig(provider.value);
+}
+
+function onConfigReceived(d: any) {
+  // Store per-provider configs
+  if (d.provider) {
+    providerConfigs.value[d.provider] = {
+      model: d.model,
+      api_key: d.api_key,
+      base_url: d.base_url,
+      context_window: d.context_window,
+      compact_threshold: d.compact_threshold,
+      reserved_output: d.reserved_output,
+    };
+  }
+  if (d.providers) {
+    allProviders.value = d.providers;
+  }
+  // Apply current provider's config
+  const cur = agentStore.provider || 'anthropic';
+  provider.value = cur;
+  applyProviderConfig(cur);
+}
+
+onMounted(() => {
+  agentWs.on('config', onConfigReceived);
+  agentWs.send({ type: 'get_config' });
+});
+
+onUnmounted(() => {
+  agentWs.off('config', onConfigReceived);
+});
 
 // --- Methods ---
 function addCustomProvider() {
