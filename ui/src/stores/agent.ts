@@ -15,6 +15,7 @@ export const useAgentStore = defineStore('agent', () => {
   const mcpInfo = ref<any>(null);
   const skills = ref<string>('');
   const activeAgentId = ref('master');
+  const compacting = ref(false);
 
   function setFromStatus(data: any) {
     busy.value = data.busy ?? false;
@@ -43,7 +44,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   return {
-    busy, provider, model, agents, mcpInfo, skills, activeAgentId,
+    busy, compacting, provider, model, agents, mcpInfo, skills, activeAgentId,
     setFromStatus, setActiveAgent, setAgentList, setBusy,
   };
 });

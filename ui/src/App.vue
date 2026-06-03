@@ -121,8 +121,22 @@ onMounted(() => {
     chatStore.updateUsage(d.est_tokens || 0);
   });
 
-  // Subagent completion
-  agentWs.on('subagent_done', () => agentWs.send({ type: 'get_status' }));
+  // Compacting state
+  agentWs.on('compact_call', () => { agentStore.compacting = true; });
+  agentWs.on('compact', () => { agentStore.compacting = false; });
+  agentWs.on('compact_done', () => { agentStore.compacting = false; });
+
+  // Inter-agent messages in chat
+  agentWs.on('enqueued', (d: any) => {
+    chatStore.messages.push({ role: 'assistant', content: `**[Msg from ${d.from_name}]**\n${(d.message || '').slice(0, 200)}` } as any);
+  });
+
+  // Subagent completion + notifications in chat
+  agentWs.on('subagent_done', (d: any) => {
+    const icon = d.status === 'completed' ? '✓' : '✗';
+    chatStore.messages.push({ role: 'assistant', content: `**[Agent] ${d.agent_id} ${icon}**` } as any);
+    agentWs.send({ type: 'get_status' });
+  });
 
   // Agent list updates
   agentWs.on('agent_list', (d: any) => {

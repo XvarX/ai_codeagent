@@ -5,14 +5,14 @@
         v-model="text"
         class="input-field"
         rows="1"
-        :placeholder="agentStore.busy ? 'Working...' : '输入消息... (Ctrl+Enter 发送)'"
-        :disabled="agentStore.busy"
+        :placeholder="agentStore.compacting ? 'Compacting...' : (agentStore.busy ? 'Working...' : '输入消息... (Ctrl+Enter 发送)')"
+        :disabled="agentStore.busy || agentStore.compacting"
         @keydown="onKeydown"
       ></textarea>
     </div>
     <div class="input-buttons">
       <button v-if="agentStore.busy" class="btn-stop" @click="stop" title="Stop">■</button>
-      <button class="btn-send" :disabled="agentStore.busy || !text.trim()" @click="send" title="Send">↑</button>
+      <button class="btn-send" :disabled="agentStore.busy || agentStore.compacting || !text.trim()" @click="send" title="Send">↑</button>
     </div>
   </div>
 </template>
