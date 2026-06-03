@@ -187,7 +187,7 @@ class DebugDrawer(ft.Container):
         Group IDs are persistent: surviving entries keep their original
         number after snip; new groups get the next available ID.
         """
-        from compact.grouping import group_by_api_round
+        from agentcore.compact.grouping import group_by_api_round
 
         groups = group_by_api_round(messages)
 
@@ -312,7 +312,7 @@ class DebugDrawer(ft.Container):
 
     def detect_compacted(self, messages: list):
         """Gray entries whose messages were removed by compaction."""
-        from compact.grouping import group_by_api_round
+        from agentcore.compact.grouping import group_by_api_round
 
         groups = group_by_api_round(messages)
         asst_ids = set()

@@ -1,7 +1,7 @@
 """AgentMessageQueue — per-agent sequential message queue."""
 
 import asyncio
-from controller import AgentController
+from agentcore.controller import AgentController
 
 
 class AgentMessageQueue:

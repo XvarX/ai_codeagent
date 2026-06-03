@@ -1,7 +1,7 @@
 """Tests for agent definitions."""
 import tempfile
 from pathlib import Path
-from agent_definitions import (
+from agentcore.agent_definitions import (
     AgentDefinition, BUILTIN_AGENTS, resolve_agent,
     load_user_agents, _parse_agent_md,
 )

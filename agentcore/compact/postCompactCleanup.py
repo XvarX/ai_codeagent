@@ -17,7 +17,7 @@ async def re_read_recent_files(
 
     Returns a list of file paths that were re-read (for logging).
     """
-    from tools.file_read import FileReadTool
+    from agentcore.tools.file_read import FileReadTool
 
     file_tool = None
     if hasattr(tools, 'get'):
@@ -37,7 +37,7 @@ async def re_read_recent_files(
                     seen_files.add(block.input["file_path"])
 
     re_read: list[str] = []
-    from tools.base import ToolContext
+    from agentcore.tools.base import ToolContext
 
     ctx = ToolContext(cwd=Path(cwd) if cwd else Path.cwd())
 
@@ -61,7 +61,7 @@ def add_compact_boundary(
 
     This is inserted before the compacted context starts.
     """
-    from core_types import Message
+    from agentcore.core_types import Message
 
     boundary = Message(
         role="user",

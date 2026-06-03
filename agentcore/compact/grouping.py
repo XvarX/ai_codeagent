@@ -5,7 +5,7 @@ Two grouping modes:
 - by_user_round: splits at each user message (per-send, excludes tool_results)
 """
 
-from core_types import Message
+from agentcore.core_types import Message
 
 
 def group_by_api_round(messages: list[Message]) -> list[list[Message]]:

@@ -3,8 +3,8 @@
 import json
 import os
 from openai import AsyncOpenAI
-from core_types import Message, ToolUseBlock
-from events import TextDeltaEvent, ToolUseEvent, ResponseDoneEvent, ErrorEvent
+from agentcore.core_types import Message, ToolUseBlock
+from agentcore.events import TextDeltaEvent, ToolUseEvent, ResponseDoneEvent, ErrorEvent
 from .base import BaseProvider
 
 

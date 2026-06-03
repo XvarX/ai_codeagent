@@ -1,6 +1,6 @@
 """SendMessageTool — inter-agent messaging."""
 
-from tools.base import Tool, ToolContext
+from agentcore.tools.base import Tool, ToolContext
 
 
 class SendMessageTool(Tool):

@@ -4,8 +4,8 @@ import asyncio
 import logging
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from tools.base import Tool, ToolContext
-from mcp_integration.config import MCPServerConfig
+from agentcore.tools.base import Tool, ToolContext
+from agentcore.mcp_integration.config import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 

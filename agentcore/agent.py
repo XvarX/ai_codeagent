@@ -3,16 +3,16 @@
 import json
 from pathlib import Path
 from typing import Callable, Awaitable
-from core_types import Message, ToolUseBlock
-from tools.base import ToolContext
-from tools.registry import ToolRegistry
-from tools.tool_result_storage import (
+from agentcore.core_types import Message, ToolUseBlock
+from agentcore.tools.base import ToolContext
+from agentcore.tools.registry import ToolRegistry
+from agentcore.tools.tool_result_storage import (
     process_tool_result_block,
     apply_tool_result_budget,
     ContentReplacementState,
 )
-from providers.base import BaseProvider
-from prompts import build_system_prompt
+from agentcore.providers.base import BaseProvider
+from agentcore.prompts import build_system_prompt
 
 # Callback types
 OnThinking = Callable[[], Awaitable[None]]
@@ -69,7 +69,7 @@ class Agent:
 
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
         """Snip: keep only the last keep_groups API-rounds. Returns (before, after, removed)."""
-        from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+        from agentcore.compact.grouping import estimate_tokens_with_usage, group_by_api_round
         groups = group_by_api_round(self.messages)
         pre = len(self.messages)
         pre_tok = estimate_tokens_with_usage(self.messages)
@@ -129,7 +129,7 @@ class Agent:
             # ── Compaction Pipeline (mirrors query.ts) ──────────
 
             # Auto-compact — use actual tokens from last API call as base
-            from compact.autoCompact import should_auto_compact
+            from agentcore.compact.autoCompact import should_auto_compact
             if should_auto_compact(
                 self.messages,
                 getattr(self.provider, 'model', None),
@@ -138,8 +138,8 @@ class Agent:
                 context_window=self.context_window,
                 reserved_output=self.reserved_output,
             ):
-                from compact.compact import compact_conversation
-                from events import CompactCallEvent
+                from agentcore.compact.compact import compact_conversation
+                from agentcore.events import CompactCallEvent
                 pre_tokens = self.est_tokens()
                 pre_count = len(self.messages)
                 try:
@@ -166,7 +166,7 @@ class Agent:
                 self.messages, self._replacement_state, self.cwd)
 
             # Snip: drop oldest API-round groups until within context window
-            from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+            from agentcore.compact.grouping import estimate_tokens_with_usage, group_by_api_round
             limit = self.context_window - self.reserved_output
             groups = group_by_api_round(self.messages)
             orig_count = len(groups)
@@ -297,11 +297,11 @@ class Agent:
         return "Agent: max turns reached without completing the task."
 
     def est_tokens(self) -> int:
-        from compact.grouping import estimate_tokens
+        from agentcore.compact.grouping import estimate_tokens
         return estimate_tokens(self.messages)
 
     def _reactive_compact(self):
-        from compact.grouping import group_by_api_round
+        from agentcore.compact.grouping import group_by_api_round
         groups = group_by_api_round(self.messages)
         if len(groups) <= 2:
             return
@@ -310,7 +310,7 @@ class Agent:
 
     async def run_stream(self, user_message: str):
         """Streaming version of run(). Yields events instead of returning text."""
-        from events import (
+        from agentcore.events import (
             ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
             ResponseDoneEvent, DoneEvent, ErrorEvent, CompactEvent, SnipEvent,
         )
@@ -323,7 +323,7 @@ class Agent:
 
             # ── Compaction Pipeline (mirrors run()) ──────────
 
-            from compact.autoCompact import should_auto_compact
+            from agentcore.compact.autoCompact import should_auto_compact
             if should_auto_compact(
                 self.messages,
                 getattr(self.provider, 'model', None),
@@ -332,8 +332,8 @@ class Agent:
                 context_window=self.context_window,
                 reserved_output=self.reserved_output,
             ):
-                from compact.compact import compact_conversation
-                from events import CompactCallEvent
+                from agentcore.compact.compact import compact_conversation
+                from agentcore.events import CompactCallEvent
                 pre_tokens = self.est_tokens()
                 pre_count = len(self.messages)
                 yield CompactCallEvent(
@@ -368,7 +368,7 @@ class Agent:
                 self.messages, self._replacement_state, self.cwd)
 
             # Snip: drop oldest API-round groups until within context window
-            from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+            from agentcore.compact.grouping import estimate_tokens_with_usage, group_by_api_round
             limit = self.context_window - self.reserved_output
             groups = group_by_api_round(self.messages)
             orig_count = len(groups)

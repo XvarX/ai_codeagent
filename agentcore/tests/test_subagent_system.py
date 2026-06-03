@@ -1,10 +1,10 @@
 """End-to-end tests for subagent system."""
 import pytest
-from config import AgentConfig
-from agent_definitions import (
+from agentcore.config import AgentConfig
+from agentcore.agent_definitions import (
     BUILTIN_AGENTS, resolve_agent, list_all_agents, AgentDefinition,
 )
-from controller import EventHandler
+from agentcore.controller import EventHandler
 
 
 class TestHandler(EventHandler):
@@ -43,7 +43,7 @@ def test_general_purpose_has_all_tools():
 
 def test_subagent_manager_creates_master(monkeypatch):
     """Test SubagentManager with mocked provider creation."""
-    from subagent_manager import SubagentManager
+    from agentcore.subagent_manager import SubagentManager
 
     # Mock _build_provider to avoid needing API keys
     def mock_build_provider(config):
@@ -52,8 +52,8 @@ def test_subagent_manager_creates_master(monkeypatch):
         m.model = "test-model"
         return m
 
-    monkeypatch.setattr("subagent_manager._build_provider", mock_build_provider)
-    monkeypatch.setattr("controller._build_provider", mock_build_provider)
+    monkeypatch.setattr("agentcore.subagent_manager._build_provider", mock_build_provider)
+    monkeypatch.setattr("agentcore.controller._build_provider", mock_build_provider)
 
     config = AgentConfig(provider="glm")
     mgr = SubagentManager(config)
@@ -90,15 +90,15 @@ def test_config_agent_presets():
 
 
 def test_agent_tool_import():
-    from tools.agent_tool import AgentTool
+    from agentcore.tools.agent_tool import AgentTool
     assert AgentTool.__name__ == "AgentTool"
 
 
 def test_send_message_tool_import():
-    from tools.send_message_tool import SendMessageTool
+    from agentcore.tools.send_message_tool import SendMessageTool
     assert SendMessageTool.__name__ == "SendMessageTool"
 
 
 def test_agent_sidebar_import():
-    from flet_ui.agent_sidebar import AgentSidebar
+    from agentcore.flet_ui.agent_sidebar import AgentSidebar
     assert AgentSidebar.__name__ == "AgentSidebar"

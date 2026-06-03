@@ -1,7 +1,7 @@
 """Agent preset configuration for the config dialog."""
 
 import flet as ft
-from agent_definitions import BUILTIN_AGENTS
+from agentcore.agent_definitions import BUILTIN_AGENTS
 
 ALL_TOOL_NAMES = ["Bash", "FileRead", "FileEdit", "FileWrite", "Glob", "Grep", "Agent", "Skill"]
 

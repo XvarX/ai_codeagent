@@ -1,7 +1,7 @@
 """Base provider abstraction — mirrors services/api/claude.ts callModel interface."""
 
 from abc import ABC, abstractmethod
-from core_types import Message, ToolUseBlock
+from agentcore.core_types import Message, ToolUseBlock
 
 
 class BaseProvider(ABC):

@@ -4,9 +4,9 @@ Sends old conversation to LLM for summarization, replaces old messages
 with a structured summary + compact boundary marker.
 """
 
-from core_types import Message, ToolUseBlock
-from compact.grouping import group_by_api_round, estimate_tokens
-from compact.prompt import (
+from agentcore.core_types import Message, ToolUseBlock
+from agentcore.compact.grouping import group_by_api_round, estimate_tokens
+from agentcore.compact.prompt import (
     COMPACT_SYSTEM_PROMPT,
     build_compact_user_message,
     format_summary,

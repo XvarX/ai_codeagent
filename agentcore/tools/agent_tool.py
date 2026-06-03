@@ -1,7 +1,7 @@
 """AgentTool — lets LLM spawn subagents."""
 
-from tools.base import Tool, ToolContext
-from agent_definitions import resolve_agent, list_all_agents
+from agentcore.tools.base import Tool, ToolContext
+from agentcore.agent_definitions import resolve_agent, list_all_agents
 
 
 class AgentTool(Tool):

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from dataclasses import dataclass, field
 
-from core_types import Message
+from agentcore.core_types import Message
 
 
 # --- Constants ---

@@ -15,17 +15,17 @@ _MD_STYLE = ft.MarkdownStyleSheet(
     strong_text_style=ft.TextStyle(size=16, weight=ft.FontWeight.W_700),
 )
 
-from config import AgentConfig
-from controller import AgentController
-from flet_ui.chat_view import ChatView, flatten_headings
-from flet_ui.input_bar import InputBar
-from flet_ui.debug_drawer import DebugDrawer
-from flet_ui.config_dialog import show_config_dialog
-from flet_ui.mcp_dialog import show_mcp_dialog
-from flet_ui.skill_dialog import show_skill_dialog
-from flet_ui.agent_sidebar import AgentSidebar
-from subagent_manager import SubagentManager
-from agent_definitions import load_user_agents
+from agentcore.config import AgentConfig
+from agentcore.controller import AgentController
+from agentcore.flet_ui.chat_view import ChatView, flatten_headings
+from agentcore.flet_ui.input_bar import InputBar
+from agentcore.flet_ui.debug_drawer import DebugDrawer
+from agentcore.flet_ui.config_dialog import show_config_dialog
+from agentcore.flet_ui.mcp_dialog import show_mcp_dialog
+from agentcore.flet_ui.skill_dialog import show_skill_dialog
+from agentcore.flet_ui.agent_sidebar import AgentSidebar
+from agentcore.subagent_manager import SubagentManager
+from agentcore.agent_definitions import load_user_agents
 
 
 class FletApp:
@@ -77,12 +77,12 @@ class FletApp:
         # ── Register Agent + SendMessage tools on master ──
         if self.controller and self.subagent_manager:
             try:
-                from tools.agent_tool import AgentTool
+                from agentcore.tools.agent_tool import AgentTool
                 self.controller.registry.register(AgentTool(self.subagent_manager, self.user_agents))
             except Exception:
                 pass
             try:
-                from tools.send_message_tool import SendMessageTool
+                from agentcore.tools.send_message_tool import SendMessageTool
                 self.controller.registry.register(SendMessageTool(self.subagent_manager, "master"))
             except Exception:
                 pass
@@ -387,7 +387,7 @@ class FletApp:
         # Check if result was persisted — show original + compacted sizes
         import re
         size_line = f"size: {len(result)} chars"
-        from tools.tool_result_storage import is_content_already_compacted
+        from agentcore.tools.tool_result_storage import is_content_already_compacted
         if is_content_already_compacted(result):
             m = re.search(r'\[(\d+) chars saved', result)
             if m:
@@ -815,8 +815,8 @@ class FletApp:
 
     def _handle_test_command(self, cmd: str):
         """Handle /test debug commands."""
-        from tools.tool_result_storage import set_test_single_truncation, set_test_total_budget
-        from compact.grouping import estimate_tokens_with_usage, group_by_api_round
+        from agentcore.tools.tool_result_storage import set_test_single_truncation, set_test_total_budget
+        from agentcore.compact.grouping import estimate_tokens_with_usage, group_by_api_round
 
         parts = cmd.split()
         if len(parts) < 2:
@@ -921,8 +921,8 @@ class FletApp:
             self.page.run_task(self._do_compact)
 
     async def _do_compact(self):
-        from compact.compact import compact_conversation
-        from compact.grouping import estimate_tokens
+        from agentcore.compact.compact import compact_conversation
+        from agentcore.compact.grouping import estimate_tokens
 
         pre = estimate_tokens(self.controller.agent.messages)
         await self.handler.on_compact_call(

@@ -2,18 +2,18 @@
 
 import asyncio
 
-from config import AgentConfig
-from tools.registry import ToolRegistry
-from tools.bash import BashTool
-from tools.file_read import FileReadTool
-from tools.file_edit import FileEditTool
-from tools.file_write import FileWriteTool
-from tools.glob import GlobTool
-from tools.grep import GrepTool
-from providers.anthropic import AnthropicProvider
-from providers.openai_compat import OpenAICompatProvider
-from agent import Agent
-from events import (
+from agentcore.config import AgentConfig
+from agentcore.tools.registry import ToolRegistry
+from agentcore.tools.bash import BashTool
+from agentcore.tools.file_read import FileReadTool
+from agentcore.tools.file_edit import FileEditTool
+from agentcore.tools.file_write import FileWriteTool
+from agentcore.tools.glob import GlobTool
+from agentcore.tools.grep import GrepTool
+from agentcore.providers.anthropic import AnthropicProvider
+from agentcore.providers.openai_compat import OpenAICompatProvider
+from agentcore.agent import Agent
+from agentcore.events import (
     ThinkingEvent, TextDeltaEvent, ToolUseEvent, ToolDoneEvent,
     ResponseDoneEvent, DoneEvent, ErrorEvent, CompactCallEvent, CompactEvent, SnipEvent,
     SubagentDoneEvent,
@@ -21,8 +21,8 @@ from events import (
 
 
 def _build_registry(cwd: str | None = None) -> tuple[ToolRegistry, str]:
-    from skills.loader import load_skills
-    from skills.skill_tool import SkillTool
+    from agentcore.skills.loader import load_skills
+    from agentcore.skills.skill_tool import SkillTool
 
     skills = load_skills(cwd)
     skill_tool = SkillTool(skills)
@@ -41,7 +41,7 @@ def _load_provider_type(provider_name: str) -> str:
     """Check config.yaml for provider type (anthropic vs openai)."""
     import yaml
     from pathlib import Path
-    config_path = Path("config.yaml")
+    config_path = Path(__file__).parent.parent / "config.yaml"
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}

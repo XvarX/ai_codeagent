@@ -1,7 +1,7 @@
 """Skill management dialog."""
 
 import flet as ft
-from skills.loader import load_skills
+from agentcore.skills.loader import load_skills
 
 
 def show_skill_dialog(page: ft.Page, cwd: str | None = None):

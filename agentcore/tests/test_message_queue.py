@@ -2,7 +2,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from agent_message_queue import AgentMessageQueue
+from agentcore.agent_message_queue import AgentMessageQueue
 
 
 @pytest.mark.asyncio

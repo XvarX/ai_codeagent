@@ -1,7 +1,7 @@
 """Skill tool — lets LLM invoke skills by name."""
 
-from tools.base import Tool, ToolContext
-from skills.loader import SkillDef
+from agentcore.tools.base import Tool, ToolContext
+from agentcore.skills.loader import SkillDef
 
 
 class SkillTool(Tool):

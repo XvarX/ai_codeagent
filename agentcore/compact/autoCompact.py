@@ -4,8 +4,8 @@ Decides when to trigger compaction based on token estimates
 and model context window limits.
 """
 
-from core_types import Message
-from compact.grouping import estimate_tokens, group_by_api_round
+from agentcore.core_types import Message
+from agentcore.compact.grouping import estimate_tokens, group_by_api_round
 
 
 # Model context window sizes (input tokens)

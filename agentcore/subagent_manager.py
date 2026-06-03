@@ -5,9 +5,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from config import AgentConfig
-from controller import AgentController, EventHandler, _build_registry, _build_provider
-from agent_definitions import AgentDefinition
+from agentcore.config import AgentConfig
+from agentcore.controller import AgentController, EventHandler, _build_registry, _build_provider
+from agentcore.agent_definitions import AgentDefinition
 
 
 @dataclass
@@ -37,7 +37,7 @@ def _build_provider_for_agent(config: AgentConfig, definition: AgentDefinition):
         provider_name = definition.provider.lower()
         # Check config.yaml for provider type
         import yaml
-        config_path = Path("config.yaml")
+        config_path = Path(__file__).parent.parent / "config.yaml"
         if not config_path.exists():
             return _build_provider(config)
 
@@ -50,10 +50,10 @@ def _build_provider_for_agent(config: AgentConfig, definition: AgentDefinition):
         model = definition.model or cfg.get("models", {}).get(provider_name, config.model or "")
 
         if provider_type == "anthropic" or (not provider_type and provider_name == "anthropic"):
-            from providers.anthropic import AnthropicProvider
+            from agentcore.providers.anthropic import AnthropicProvider
             return AnthropicProvider(model=model, api_key=api_key, base_url=base_url)
         else:
-            from providers.openai_compat import OpenAICompatProvider
+            from agentcore.providers.openai_compat import OpenAICompatProvider
             return OpenAICompatProvider(
                 provider=provider_name, model=model,
                 api_key=api_key, base_url=base_url,
@@ -73,7 +73,7 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
     if definition.tools is None:
         return base_registry, skills_text
 
-    from tools.registry import ToolRegistry
+    from agentcore.tools.registry import ToolRegistry
     filtered = ToolRegistry()
     allowed = set(definition.tools)
     disallowed = set(definition.disallowed_tools or [])
@@ -347,7 +347,7 @@ class SubagentManager:
             status="running",
         )
         self.agents["master"] = state
-        from agent_message_queue import AgentMessageQueue
+        from agentcore.agent_message_queue import AgentMessageQueue
         queue = AgentMessageQueue(controller)
         state.message_queue = queue
         controller.agent._subagent_manager = self
@@ -381,7 +381,7 @@ class SubagentManager:
         controller.agent.provider = provider
         controller.agent.registry = registry
         controller.agent.skills_text = skills_text
-        from agent_message_queue import AgentMessageQueue
+        from agentcore.agent_message_queue import AgentMessageQueue
         queue = AgentMessageQueue(controller)
         state.message_queue = queue
         controller.agent._subagent_manager = self
@@ -392,7 +392,7 @@ class SubagentManager:
         self.agents[agent_id] = state
 
         # Register SendMessage tool on this agent
-        from tools.send_message_tool import SendMessageTool
+        from agentcore.tools.send_message_tool import SendMessageTool
         send_tool = SendMessageTool(self, agent_id)
         controller.registry.register(send_tool)
 

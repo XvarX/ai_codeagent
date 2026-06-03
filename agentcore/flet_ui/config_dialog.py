@@ -239,7 +239,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         # Write immediately to config
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
-        from config import AgentConfig
+        from agentcore.config import AgentConfig
         updated = AgentConfig.from_yaml()
         if on_save:
             on_save(updated)
@@ -316,7 +316,7 @@ def show_config_dialog(page: ft.Page, on_save=None):
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
-            from config import AgentConfig
+            from agentcore.config import AgentConfig
             updated_config = AgentConfig.from_yaml()
             if on_save:
                 on_save(updated_config)
