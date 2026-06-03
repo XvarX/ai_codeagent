@@ -65,6 +65,7 @@ onMounted(() => {
   });
   agentWs.on('done', () => {
     chatStore.finalizeAssistantMessage();
+    agentStore.setBusy(false);
     _toolCallIndex = 0;
   });
 
@@ -76,10 +77,6 @@ onMounted(() => {
     const preview = d.result ? d.result.slice(0, 30).replace(/\n/g, ' ') : '';
     chatStore.addToolResultPreview(_toolCallIndex, preview, d.is_error);
     _toolCallIndex++;
-  });
-
-  // Tool results — capture diff data for DiffViewer
-  agentWs.on('tool_result', (d: any) => {
     if (d.diff) {
       chatStore.addDiff(d.diff.file_path, d.diff.old_content, d.diff.new_content);
     }
@@ -110,7 +107,6 @@ onMounted(() => {
   // Agent state
   agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
-  agentWs.on('done', () => agentStore.setBusy(false));
   agentWs.on('error', () => agentStore.setBusy(false));
 
   // Agent switching — full state reload

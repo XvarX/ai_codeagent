@@ -42,7 +42,7 @@
 
 <script setup lang="ts">
 import { watch, ref, nextTick } from 'vue';
-import { useChatStore, ToolLabel } from '../stores/chat';
+import { useChatStore } from '../stores/chat';
 import DiffViewer from './DiffViewer.vue';
 import { marked } from 'marked';
 
