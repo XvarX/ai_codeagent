@@ -2,12 +2,14 @@
   <div class="input-bar">
     <div class="input-wrapper">
       <textarea
+        ref="textareaRef"
         v-model="text"
         class="input-field"
         rows="1"
         :placeholder="agentStore.compacting ? 'Compacting...' : (agentStore.busy ? 'Working...' : '输入消息... (Ctrl+Enter 发送)')"
         :disabled="agentStore.busy || agentStore.compacting"
         @keydown="onKeydown"
+        @input="autoResize"
       ></textarea>
     </div>
     <div class="input-buttons">
@@ -18,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import { useAgentStore } from '../stores/agent';
 import { useChatStore } from '../stores/chat';
 import { agentWs } from '../services/agentWs';
@@ -26,6 +28,14 @@ import { agentWs } from '../services/agentWs';
 const agentStore = useAgentStore();
 const chatStore = useChatStore();
 const text = ref('');
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+
+function autoResize() {
+  const el = textareaRef.value;
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -42,12 +52,23 @@ function send() {
   if (msg === '/compact') {
     agentWs.send({ type: 'compact' });
     text.value = '';
+    resetTextareaHeight();
     return;
   }
 
   chatStore.addUserMessage(msg);
   agentWs.send({ type: 'send_message', text: msg });
   text.value = '';
+  resetTextareaHeight();
+}
+
+function resetTextareaHeight() {
+  nextTick(() => {
+    const el = textareaRef.value;
+    if (el) {
+      el.style.height = 'auto';
+    }
+  });
 }
 
 function stop() {

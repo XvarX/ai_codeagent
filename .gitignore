@@ -18,4 +18,4 @@ logs/
 offline_deps/
 build/
 dist/
-*.spec
+dist-electron/

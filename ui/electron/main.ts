@@ -1,6 +1,10 @@
 import { app, BrowserWindow, dialog, Menu } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
@@ -11,7 +15,7 @@ const PYTHON_PORT = 18765;
 
 function getPythonExe(): string {
   // In production, use bundled agentcore.exe
-  if (!isDev) return path.join(process.resourcesPath!, 'agentcore.exe');
+  if (!isDev) return path.join(process.resourcesPath!, 'agentcore', 'agentcore.exe');
   return 'python';
 }
 
