@@ -29,7 +29,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../build/agentcore/*": "agentcore/"
+      "../../build/agentcore/**": "agentcore/"
     }
   }
 }
