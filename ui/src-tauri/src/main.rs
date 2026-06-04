@@ -148,11 +148,7 @@ fn main() {
                     }
                     "devtools" => {
                         if let Some(w) = app.get_webview_window("main") {
-                            if w.is_devtools_open() {
-                                w.close_devtools();
-                            } else {
-                                w.open_devtools();
-                            }
+                            w.open_devtools();
                         }
                     }
                     _ => {}
