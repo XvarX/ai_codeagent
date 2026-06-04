@@ -19,4 +19,5 @@ offline_deps/
 build/
 dist/
 # Tauri
-src-tauri/target/
+ui/src-tauri/target/
+ui/src-tauri/gen/
