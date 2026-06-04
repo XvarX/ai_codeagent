@@ -40,10 +40,17 @@ class AgentConfig:
         if path:
             config_path = Path(path)
         else:
-            # PyInstaller: look next to exe first
+            # PyInstaller: look next to exe first, then _MEIPASS
             if getattr(sys, 'frozen', False):
                 exe_dir = Path(sys.executable).parent
                 config_path = exe_dir / "config.yaml"
+                if not config_path.exists():
+                    # --onedir mode: data files go in _MEIPASS/_internal
+                    meipass = getattr(sys, '_MEIPASS', '')
+                    if meipass:
+                        meipass_path = Path(meipass) / "config.yaml"
+                        if meipass_path.exists():
+                            config_path = meipass_path
             else:
                 config_path = Path("config.yaml")
         if not config_path.exists():

@@ -1,6 +1,10 @@
 import { app, BrowserWindow, dialog, Menu } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
