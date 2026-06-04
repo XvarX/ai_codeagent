@@ -858,6 +858,7 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     messages_data = [
                         {"role": m.role, "content": m.content or ""}
                         for m in agent.messages
+                        if not m.is_tool_result
                     ]
                     await websocket.send(json.dumps({
                         "type": "agent_switched",
