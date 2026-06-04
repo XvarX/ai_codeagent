@@ -11,7 +11,7 @@ const PYTHON_PORT = 18765;
 
 function getPythonExe(): string {
   // In production, use bundled agentcore.exe
-  if (!isDev) return path.join(process.resourcesPath!, 'agentcore.exe');
+  if (!isDev) return path.join(process.resourcesPath!, 'agentcore', 'agentcore.exe');
   return 'python';
 }
 

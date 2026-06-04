@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useDebugStore, type DebugEntry } from '../stores/debug';
 import { agentWs } from '../services/agentWs';
 
