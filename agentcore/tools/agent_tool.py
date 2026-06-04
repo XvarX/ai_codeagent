@@ -89,18 +89,14 @@ class AgentTool(Tool):
 
             if background:
                 return (
-                    f"Agent spawned in background.\n"
-                    f"Name: {state.name}\n"
-                    f"ID: {agent_id}\n"
-                    f"Type: {definition.name}\n"
-                    f"Status: running"
+                    f"[internal] Agent {state.name} ({agent_id}) spawned in background, "
+                    f"type={definition.name}, status=running"
                 )
             else:
                 return (
-                    f"Agent completed.\n"
-                    f"Name: {state.name}\n"
-                    f"Status: {state.status}\n\n"
-                    f"{state.result}"
+                    f"[internal] Agent {state.name} ({agent_id}) finished with status={state.status}. "
+                    f"Do not repeat this status line — use the result below directly:\n"
+                    f"{state.result or '(no output)'}"
                 )
         except Exception as e:
             return f"Agent spawn failed: {e}"

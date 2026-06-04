@@ -1,16 +1,19 @@
 <template>
   <div class="chat-view" ref="container">
-    <div v-for="(msg, i) in chatStore.messages" :key="i" :class="['bubble-row', msg.role]">
-      <div v-if="msg.role === 'assistant'" class="avatar">AI</div>
-      <div :class="['bubble', msg.role]">
-        <div v-if="msg.toolLabels && msg.toolLabels.length" class="tool-labels">
-          <div v-for="(tl, ti) in msg.toolLabels" :key="'tl-' + ti" class="tool-label">
-            <span class="tl-icon">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
-            <span class="tl-name">{{ tl.name }}</span>
-            <span v-if="tl.resultPreview" class="tl-result">{{ tl.resultPreview }}</span>
+    <div v-for="(msg, i) in chatStore.messages" :key="i">
+      <div v-if="!msg.content || !msg.content.trim()" />
+      <div v-else :class="['bubble-row', msg.role]">
+        <div v-if="msg.role === 'assistant'" class="avatar">AI</div>
+        <div :class="['bubble', msg.role]">
+          <div v-if="msg.toolLabels && msg.toolLabels.length" class="tool-labels">
+            <div v-for="(tl, ti) in msg.toolLabels" :key="'tl-' + ti" class="tool-label">
+              <span class="tl-icon">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
+              <span class="tl-name">{{ tl.name }}</span>
+              <span v-if="tl.resultPreview" class="tl-result">{{ tl.resultPreview }}</span>
+            </div>
           </div>
+          <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
         </div>
-        <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
       </div>
     </div>
     <div v-if="chatStore.thinking" class="thinking-row">
