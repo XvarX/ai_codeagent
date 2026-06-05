@@ -1,5 +1,4 @@
 # tests/test_data_dir.py
-import json
 import tempfile
 from pathlib import Path
 from agentcore.data_dir import DataDir

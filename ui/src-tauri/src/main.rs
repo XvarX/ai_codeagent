@@ -8,16 +8,16 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 struct PythonBackend(Mutex<Option<Child>>);
 
 fn get_backend_cmd(app: &tauri::AppHandle) -> Option<(String, Vec<String>)> {
-    let resource_dir = app.path().resource_dir().ok()?;
-    let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
-
-    if bundled_exe.exists() {
-        // Packaged mode: data dir in AppData
-        let app_data = app.path().app_data_dir().ok()?;
-        let data_dir = app_data.join(".ai-code-agent");
+    // Dev mode: always use python + project root, regardless of bundled exe
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.join("..").join("..");
+        let data_dir = project_root.join(".ai-code-agent");
         return Some((
-            bundled_exe.to_string_lossy().to_string(),
+            "python".to_string(),
             vec![
+                "-m".to_string(),
+                "agentcore.main".to_string(),
                 "--ws".to_string(),
                 "--port".to_string(), "18765".to_string(),
                 "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
@@ -25,15 +25,15 @@ fn get_backend_cmd(app: &tauri::AppHandle) -> Option<(String, Vec<String>)> {
         ));
     }
 
-    // Dev mode: data dir in project root
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = manifest_dir.join("..").join("..");
-    let data_dir = project_root.join(".ai-code-agent");
-    let main_py = project_root.join("agentcore").join("main.py");
+    // Release mode: use bundled exe + AppData
+    let resource_dir = app.path().resource_dir().ok()?;
+    let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
+
+    let app_data = app.path().app_data_dir().ok()?;
+    let data_dir = app_data.join(".ai-code-agent");
     Some((
-        "python".to_string(),
+        bundled_exe.to_string_lossy().to_string(),
         vec![
-            main_py.to_string_lossy().to_string(),
             "--ws".to_string(),
             "--port".to_string(), "18765".to_string(),
             "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
@@ -45,8 +45,17 @@ fn start_python(app: &tauri::AppHandle) -> Option<Child> {
     let (cmd, args) = get_backend_cmd(app)?;
     println!("[tauri] Starting backend: {} {:?}", cmd, args);
 
-    match Command::new(&cmd)
-        .args(&args)
+    let mut command = Command::new(&cmd);
+    command.args(&args);
+
+    // In dev mode, run from project root so python can find agentcore package
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.join("..").join("..");
+        command.current_dir(project_root);
+    }
+
+    match command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

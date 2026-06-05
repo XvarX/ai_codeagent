@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
+set CARGO_TARGET_DIR=build\tauri
 echo ============================================
 echo   AI Code Agent - One-Click Build
 echo ============================================
@@ -11,7 +12,7 @@ if %ERRORLEVEL% neq 0 (
     echo [FAIL] Python build failed
     exit /b 1
 )
-echo   -^> build\agentcore.exe OK
+echo   -^> build\agentcore\ OK
 echo.
 
 echo [2/2] Building Tauri app...
@@ -22,11 +23,12 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 cd ..
-echo   -^> src-tauri\target\release\ OK
+echo   -^> build\tauri\release\ OK
 echo.
 
 echo ============================================
 echo   Build complete!
-echo   Backend : build\agentcore.exe
-echo   Installer : ui\src-tauri\target\release\bundle\
+echo   Backend   : build\agentcore\
+echo   App       : build\tauri\release\ai-code-agent.exe
+echo   Installer : build\tauri\release\bundle\
 echo ============================================

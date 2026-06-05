@@ -54,7 +54,7 @@ def test_list_sessions():
     with tempfile.TemporaryDirectory() as tmp:
         store, _ = _make_store(tmp)
         store.register_project(r"D:\space\myproject")
-        s1 = store.create_session(r"D:\space\myproject", title="First")
+        store.create_session(r"D:\space\myproject", title="First")
         s2 = store.create_session(r"D:\space\myproject", title="Second")
         sessions = store.list_sessions(r"D:\space\myproject")
         assert len(sessions) == 2

@@ -14,6 +14,8 @@ from websockets.asyncio.server import serve, ServerConnection
 
 from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler
+from agentcore.data_dir import DataDir
+from agentcore.session_store import SessionStore
 from agentcore.subagent_manager import SubagentManager, _SubagentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
@@ -1015,9 +1017,6 @@ async def _watch_files(root: Path, interval: float = 1.0) -> None:
 async def run_ws_server(config: AgentConfig, port: int = 18765,
                          reload: bool = False, data_dir: str | None = None):
     """Start WebSocket server. Called from main.py --ws mode."""
-
-    from agentcore.data_dir import DataDir
-    from agentcore.session_store import SessionStore
 
     # Initialize data directory
     effective_data_dir = data_dir or str(Path(__file__).parent.parent / ".ai-code-agent")
