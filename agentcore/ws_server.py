@@ -44,6 +44,7 @@ class WsEventHandler(EventHandler):
         self._store: "SessionStore | None" = None
         self._session_project: str = ""
         self._session_id: str = ""
+        self._session_manager: "SessionManager | None" = None
 
     def set_controller(self, controller: AgentController):
         """Update the controller reference (used when switching agents)."""
@@ -72,6 +73,10 @@ class WsEventHandler(EventHandler):
         self._entry_id = 0
 
     async def _send(self, data: dict):
+        """Send to frontend only if this handler's session is active."""
+        if self._session_manager and self._session_id:
+            if self._session_manager.active_session_id != self._session_id:
+                return  # Background session — don't stream to frontend
         try:
             payload = json.dumps(data, ensure_ascii=False)
             await self._ws.send(payload)
@@ -184,6 +189,18 @@ class WsEventHandler(EventHandler):
                     self._session_project, self._session_id, entry)
             except Exception:
                 pass
+        # Notify frontend about background session status changes
+        if self._session_manager and self._session_id:
+            if self._session_manager.active_session_id != self._session_id:
+                status = self._session_manager.get_aggregate_status(self._session_id)
+                try:
+                    await self._ws.send(json.dumps({
+                        "type": "session_status",
+                        "session_id": self._session_id,
+                        "status": status,
+                    }, ensure_ascii=False))
+                except Exception:
+                    pass
         # Send to frontend
         await self._send({
             "type": "debug_event",
