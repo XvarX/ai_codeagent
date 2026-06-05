@@ -12,26 +12,31 @@ fn get_backend_cmd(app: &tauri::AppHandle) -> Option<(String, Vec<String>)> {
     let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
 
     if bundled_exe.exists() {
+        // Packaged mode: data dir in AppData
+        let app_data = app.path().app_data_dir().ok()?;
+        let data_dir = app_data.join(".ai-code-agent");
         return Some((
             bundled_exe.to_string_lossy().to_string(),
-            vec!["--ws".to_string(), "--port".to_string(), "18765".to_string()],
+            vec![
+                "--ws".to_string(),
+                "--port".to_string(), "18765".to_string(),
+                "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
+            ],
         ));
     }
 
-    // Dev mode: resolve python + main.py relative to Cargo manifest
+    // Dev mode: data dir in project root
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let main_py = manifest_dir
-        .join("..")
-        .join("..")
-        .join("agentcore")
-        .join("main.py");
+    let project_root = manifest_dir.join("..").join("..");
+    let data_dir = project_root.join(".ai-code-agent");
+    let main_py = project_root.join("agentcore").join("main.py");
     Some((
         "python".to_string(),
         vec![
             main_py.to_string_lossy().to_string(),
             "--ws".to_string(),
-            "--port".to_string(),
-            "18765".to_string(),
+            "--port".to_string(), "18765".to_string(),
+            "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
         ],
     ))
 }
