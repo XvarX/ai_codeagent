@@ -45,6 +45,10 @@ class Agent:
         context_window: int = 128000,
         compact_threshold: float = 0.85,
         reserved_output: int = 8000,
+        # Session persistence
+        session_store=None,            # SessionStore instance
+        session_project: str | None = None,
+        session_id: str | None = None,
     ):
         self.provider = provider
         self.registry = registry
@@ -66,6 +70,10 @@ class Agent:
         self.reserved_output = reserved_output
         self._last_actual_tokens = 0
         self._replacement_state = ContentReplacementState()
+        # Session persistence
+        self._session_store = session_store
+        self._session_project = session_project
+        self._session_id = session_id
 
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
         """Snip: keep only the last keep_groups API-rounds. Returns (before, after, removed)."""
@@ -121,6 +129,7 @@ class Agent:
     async def run(self, user_message: str) -> str:
         """Process one user message. May involve multiple LLM↔tool rounds."""
         self.messages.append(Message(role="user", content=user_message))
+        self._persist_message(self.messages[-1])
 
         turn_count = 0
         while turn_count < self.max_turns:
@@ -228,6 +237,7 @@ class Agent:
                             content=f"Error calling LLM after compaction: {e2}",
                         )
                         self.messages.append(error_msg)
+                        self._persist_message(self.messages[-1])
                         return error_msg.content
                 else:
                     error_msg = Message(
@@ -235,9 +245,11 @@ class Agent:
                         content=f"Error calling LLM: {e}",
                     )
                     self.messages.append(error_msg)
+                    self._persist_message(self.messages[-1])
                     return error_msg.content
 
             self.messages.append(assistant_msg)
+            self._persist_message(self.messages[-1])
 
             # Track actual token usage from API response
             usage = raw_response.get("usage", {})
@@ -293,6 +305,7 @@ class Agent:
                     content=result_text,
                     tool_use_id=block.tool_use_id,
                 ))
+                self._persist_message(self.messages[-1])
 
         return "Agent: max turns reached without completing the task."
 
@@ -308,6 +321,37 @@ class Agent:
         keep = max(2, len(groups) // 2)
         self.messages = [m for g in groups[-keep:] for m in g]
 
+    def _persist_message(self, message):
+        """Append a message to the session store if configured."""
+        if not self._session_store or not self._session_id:
+            return
+        msg_dict = {
+            "role": message.role,
+            "content": message.content or "",
+        }
+        if message.tool_use_id:
+            msg_dict["tool_use_id"] = message.tool_use_id
+        if message.tool_use_blocks:
+            msg_dict["tool_use_blocks"] = [
+                {"tool_use_id": b.tool_use_id, "tool_name": b.tool_name, "input": b.input}
+                for b in message.tool_use_blocks
+            ]
+        if message.id:
+            msg_dict["id"] = message.id
+        if message.usage:
+            msg_dict["usage"] = message.usage
+        self._session_store.append_message(
+            self._session_project, self._session_id, msg_dict
+        )
+
+    def _persist_llm_log(self, raw_response: dict):
+        """Log LLM request/response details."""
+        if not self._session_store or not self._session_id:
+            return
+        self._session_store.append_llm_log(
+            self._session_project, self._session_id, raw_response
+        )
+
     async def run_stream(self, user_message: str):
         """Streaming version of run(). Yields events instead of returning text."""
         from agentcore.events import (
@@ -316,6 +360,7 @@ class Agent:
         )
 
         self.messages.append(Message(role="user", content=user_message))
+        self._persist_message(self.messages[-1])
 
         turn_count = 0
         while turn_count < self.max_turns:
@@ -442,12 +487,15 @@ class Agent:
                         )
                         self.messages.append(_streaming_asst)
                         _streaming_asst_added = True
+                        self._persist_message(self.messages[-1])
+                        self._persist_llm_log(event.raw)
                         yield event
                     elif isinstance(event, ErrorEvent):
                         self.messages.append(Message(
                             role="assistant",
                             content=f"Error: {event.message}",
                         ))
+                        self._persist_message(self.messages[-1])
                         yield event
                         yield DoneEvent(final_text=f"Error: {event.message}")
                         return
@@ -501,12 +549,15 @@ class Agent:
                                 )
                                 self.messages.append(_streaming_asst)
                                 _streaming_asst_added = True
+                                self._persist_message(self.messages[-1])
+                                self._persist_llm_log(event.raw)
                                 yield event
                             elif isinstance(event, ErrorEvent):
                                 self.messages.append(Message(
                                     role="assistant",
                                     content=f"Error after compaction: {event.message}",
                                 ))
+                                self._persist_message(self.messages[-1])
                                 yield event
                                 yield DoneEvent(final_text=f"Error after compaction: {event.message}")
                                 return
@@ -521,6 +572,7 @@ class Agent:
                                 usage=_last_response_usage,
                             )
                             self.messages.append(assistant_msg)
+                            self._persist_message(self.messages[-1])
                         else:
                             assistant_text = "".join(text_parts)
                         if not tool_use_blocks:
@@ -557,6 +609,7 @@ class Agent:
                                 content=result_text,
                                 tool_use_id=block.tool_use_id,
                             ))
+                            self._persist_message(self.messages[-1])
                         continue  # back to while loop top
                     except Exception as e2:
                         error_msg_text = f"Error calling LLM after compaction: {e2}"
@@ -564,6 +617,7 @@ class Agent:
                             role="assistant",
                             content=error_msg_text,
                         ))
+                        self._persist_message(self.messages[-1])
                         yield ErrorEvent(message=error_msg_text)
                         yield DoneEvent(final_text=error_msg_text)
                         return
@@ -573,6 +627,7 @@ class Agent:
                         role="assistant",
                         content=error_msg_text,
                     ))
+                    self._persist_message(self.messages[-1])
                     yield ErrorEvent(message=error_msg_text)
                     yield DoneEvent(final_text=error_msg_text)
                     return
@@ -586,6 +641,7 @@ class Agent:
                     id=_last_response_id,
                 )
                 self.messages.append(assistant_msg)
+                self._persist_message(self.messages[-1])
             else:
                 assistant_text = "".join(text_parts)
 
@@ -628,5 +684,6 @@ class Agent:
                     content=result_text,
                     tool_use_id=block.tool_use_id,
                 ))
+                self._persist_message(self.messages[-1])
 
         yield DoneEvent(final_text="Agent: max turns reached without completing the task.")
