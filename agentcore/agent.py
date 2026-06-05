@@ -144,10 +144,10 @@ class Agent:
         return list(self.messages)
 
     def _refresh_agents_text(self):
-        """Update agents_text from the SubagentManager if available."""
-        if not hasattr(self, '_subagent_manager') or not self._subagent_manager:
+        """Update agents_text from the AgentManager if available."""
+        if not hasattr(self, '_agent_manager') or not self._agent_manager:
             return
-        text = self._subagent_manager.get_alive_agents_text(
+        text = self._agent_manager.get_alive_agents_text(
             for_agent_id=self._agent_id or "master"
         )
         self.agents_text = text

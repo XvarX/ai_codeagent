@@ -71,7 +71,7 @@ class AgentSidebar(ft.Container):
         self.update()
 
     def refresh(self):
-        """Rebuild the agent list from current SubagentManager state."""
+        """Rebuild the agent list from current AgentManager state."""
         self._agent_list.controls.clear()
 
         master_state = self.manager.agents.get("master")

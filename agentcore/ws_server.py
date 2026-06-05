@@ -1,4 +1,4 @@
-"""WebSocket server — bridges frontend <-> SubagentManager.
+"""WebSocket server — bridges frontend <-> AgentManager.
 
 Start: python main.py --ws --port 18765
 """
@@ -16,7 +16,7 @@ from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler
 from agentcore.data_dir import DataDir
 from agentcore.session_store import SessionStore
-from agentcore.subagent_manager import SubagentManager, _SubagentHandler
+from agentcore.subagent_manager import AgentManager, _AgentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
 
@@ -631,7 +631,7 @@ class WsEventHandler(EventHandler):
             self._debug_entries.insert(boundary + j, rec)
 
 
-async def _send_agent_list(ws: ServerConnection, manager: SubagentManager):
+async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     """Send the full agent list to the frontend."""
     agents = []
     for aid, s in manager.agents.items():
@@ -645,7 +645,7 @@ async def _send_agent_list(ws: ServerConnection, manager: SubagentManager):
     await ws.send(json.dumps({"type": "agent_list", "agents": agents}, ensure_ascii=False))
 
 
-async def _send_mcp_info(ws: ServerConnection, manager: SubagentManager):
+async def _send_mcp_info(ws: ServerConnection, manager: AgentManager):
     """Send MCP server info to the frontend."""
     active = manager.get_active()
     controller = active.controller
@@ -656,16 +656,16 @@ async def _send_mcp_info(ws: ServerConnection, manager: SubagentManager):
     }, ensure_ascii=False))
 
 
-async def _handle_client(websocket: ServerConnection, manager: SubagentManager,
+async def _handle_client(websocket: ServerConnection, manager: AgentManager,
                           store: "SessionStore", dd: "DataDir"):
     """Handle a single WebSocket client connection."""
     # Create handler wired to the active (master) controller
     master_state = manager.get_active()
     controller = master_state.controller
     handler = WsEventHandler(websocket, controller)
-    # Save native _SubagentHandler before overwriting with WsEventHandler
+    # Save native _AgentHandler before overwriting with WsEventHandler
     master_native = controller.handler
-    if isinstance(master_native, _SubagentHandler):
+    if isinstance(master_native, _AgentHandler):
         master_state._native_handler = master_native
     controller.handler = handler
     manager.master_handler = handler  # ensure subagent_done events reach WebSocket
@@ -853,7 +853,7 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager,
                     # Wire the new agent's SubagentHandler to forward events through WsEventHandler
                     new_state = manager.get_active()
                     new_native = new_state.controller.handler
-                    if isinstance(new_native, _SubagentHandler):
+                    if isinstance(new_native, _AgentHandler):
                         new_state._native_handler = new_native
                         new_native._wire_forwarding(handler)
                     new_state.controller.handler = handler
@@ -1058,7 +1058,7 @@ async def run_ws_server(config: AgentConfig, port: int = 18765,
 
     while True:
         user_agents = load_user_agents(config.cwd)
-        manager = SubagentManager(config, user_agents)
+        manager = AgentManager(config, user_agents)
 
         # Connect MCP for master
         master_state = manager.agents["master"]
