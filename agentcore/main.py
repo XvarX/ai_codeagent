@@ -7,6 +7,7 @@ python main.py -c "message"     单次命令行模式
 
 import asyncio
 import sys
+from pathlib import Path
 
 from agentcore.config import AgentConfig
 from agentcore.tools.registry import ToolRegistry
@@ -146,15 +147,34 @@ async def run_interactive(config: AgentConfig):
             print(f"\n[Error] {e}\n")
 
 
+def _parse_data_dir() -> str | None:
+    """Parse --data-dir from sys.argv."""
+    if "--data-dir" in sys.argv:
+        idx = sys.argv.index("--data-dir")
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return None
+
+
+def _resolve_data_dir() -> str:
+    """Resolve data directory: --data-dir arg > default .ai-code-agent/."""
+    explicit = _parse_data_dir()
+    if explicit:
+        return explicit
+    # Default: project root / .ai-code-agent/
+    return str(Path(__file__).parent.parent / ".ai-code-agent")
+
+
 async def main():
-    config = AgentConfig.from_yaml()
+    data_dir = _resolve_data_dir()
+    config = AgentConfig.from_yaml(data_dir=data_dir)
 
     if "--ws" in sys.argv:
         from agentcore.ws_server import run_ws_server
         port_idx = sys.argv.index("--port") if "--port" in sys.argv else -1
         port = int(sys.argv[port_idx + 1]) if port_idx != -1 else 18765
         _reload = "--reload" in sys.argv
-        await run_ws_server(config, port, reload=_reload)
+        await run_ws_server(config, port, reload=_reload, data_dir=data_dir)
         return
 
     if len(sys.argv) >= 3 and sys.argv[1] == "-c":
