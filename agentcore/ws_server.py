@@ -644,7 +644,8 @@ async def _send_mcp_info(ws: ServerConnection, manager: SubagentManager):
     }, ensure_ascii=False))
 
 
-async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
+async def _handle_client(websocket: ServerConnection, manager: SubagentManager,
+                          store: "SessionStore", dd: "DataDir"):
     """Handle a single WebSocket client connection."""
     # Create handler wired to the active (master) controller
     master_state = manager.get_active()
@@ -934,6 +935,59 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     await controller.mcp_manager.restart_server(server_name)
                 await _send_mcp_info(websocket, manager)
 
+            elif msg_type == "list_projects":
+                projects = store.list_projects()
+                await websocket.send(json.dumps({
+                    "type": "projects", "projects": projects,
+                }, ensure_ascii=False))
+
+            elif msg_type == "open_project":
+                project_path = msg.get("path", "")
+                store.register_project(project_path)
+                store.touch_project(project_path)
+                sessions = store.list_sessions(project_path)
+                await websocket.send(json.dumps({
+                    "type": "project_opened",
+                    "path": project_path,
+                    "sessions": sessions,
+                }, ensure_ascii=False))
+
+            elif msg_type == "create_session":
+                project_path = msg.get("project_path", "")
+                title = msg.get("title", "New Chat")
+                session_id = store.create_session(project_path, title=title)
+                await websocket.send(json.dumps({
+                    "type": "session_created",
+                    "session_id": session_id,
+                    "title": title,
+                }, ensure_ascii=False))
+
+            elif msg_type == "load_session":
+                project_path = msg.get("project_path", "")
+                session_id = msg.get("session_id", "")
+                messages = store.load_messages(project_path, session_id)
+                meta = store.get_session_meta(project_path, session_id)
+                await websocket.send(json.dumps({
+                    "type": "session_loaded",
+                    "session_id": session_id,
+                    "messages": messages,
+                    "meta": meta,
+                }, ensure_ascii=False))
+
+            elif msg_type == "list_all_sessions":
+                projects = store.list_projects()
+                all_sessions = []
+                for p in projects:
+                    sessions = store.list_sessions(p["path"])
+                    for s in sessions:
+                        s["project_path"] = p["path"]
+                        s["project_name"] = p.get("name", "")
+                    all_sessions.extend(sessions)
+                all_sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+                await websocket.send(json.dumps({
+                    "type": "all_sessions", "sessions": all_sessions,
+                }, ensure_ascii=False))
+
             elif msg_type == "shutdown":
                 break
         except Exception as e:
@@ -958,8 +1012,18 @@ async def _watch_files(root: Path, interval: float = 1.0) -> None:
         await asyncio.sleep(interval)
 
 
-async def run_ws_server(config: AgentConfig, port: int = 18765, reload: bool = False):
+async def run_ws_server(config: AgentConfig, port: int = 18765,
+                         reload: bool = False, data_dir: str | None = None):
     """Start WebSocket server. Called from main.py --ws mode."""
+
+    from agentcore.data_dir import DataDir
+    from agentcore.session_store import SessionStore
+
+    # Initialize data directory
+    effective_data_dir = data_dir or str(Path(__file__).parent.parent / ".ai-code-agent")
+    dd = DataDir(Path(effective_data_dir))
+    dd.init()
+    store = SessionStore(dd)
 
     watch_root = Path(__file__).parent
 
@@ -972,7 +1036,7 @@ async def run_ws_server(config: AgentConfig, port: int = 18765, reload: bool = F
         await master_state.controller.connect_mcp()
 
         async def handler(websocket):
-            await _handle_client(websocket, manager)
+            await _handle_client(websocket, manager, store, dd)
 
         logger.info(f"WebSocket server listening on ws://127.0.0.1:{port}")
         print(f"WebSocket server listening on ws://127.0.0.1:{port}")
