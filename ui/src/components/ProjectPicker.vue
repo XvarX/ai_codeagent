@@ -4,6 +4,7 @@
       <h3>选择项目</h3>
       <div class="picker-search">
         <input v-model="search" placeholder="输入项目路径..." class="picker-input" />
+        <button class="btn-browse" @click="browseFolder">浏览</button>
         <button class="btn-open" @click="openPath" :disabled="!search.trim()">打开</button>
       </div>
       <div class="picker-list">
@@ -22,6 +23,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useSessionStore } from '../stores/session';
 
 defineEmits(['close']);
@@ -45,6 +47,13 @@ function openPath() {
     sessionStore.openProject(search.value.trim());
   }
 }
+
+async function browseFolder() {
+  const selected = await open({ directory: true, multiple: false, title: '选择项目目录' });
+  if (selected) {
+    search.value = selected;
+  }
+}
 </script>
 
 <style scoped>
@@ -55,6 +64,8 @@ function openPath() {
 .picker-input { flex: 1; padding: 6px 10px; border: 1px solid #E2E6EC; border-radius: 6px; font-size: 14px; outline: none; }
 .picker-input:focus { border-color: #6366F1; }
 .btn-open { padding: 6px 16px; border: none; border-radius: 6px; background: #6366F1; color: white; cursor: pointer; font-size: 13px; }
+.btn-browse { padding: 6px 12px; border: 1px solid #E2E6EC; border-radius: 6px; background: white; color: #374151; cursor: pointer; font-size: 13px; }
+.btn-browse:hover { background: #F1F3F6; }
 .btn-open:disabled { background: #A5B4FC; cursor: not-allowed; }
 .picker-list { overflow-y: auto; flex: 1; }
 .picker-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }

@@ -122,6 +122,7 @@ fn restart_python(app: &tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(PythonBackend(Mutex::new(None)))
         .setup(|app| {
             // Build native menu
