@@ -18,4 +18,6 @@ logs/
 offline_deps/
 build/
 dist/
-dist-electron/
+# Tauri
+ui/src-tauri/target/
+ui/src-tauri/gen/

@@ -14,19 +14,19 @@ if %ERRORLEVEL% neq 0 (
 echo   -^> build\agentcore.exe OK
 echo.
 
-echo [2/2] Building Electron app...
+echo [2/2] Building Tauri app...
 cd ui
-call npm run electron:build
+call npm run tauri build
 if %ERRORLEVEL% neq 0 (
-    echo [FAIL] Electron build failed
+    echo [FAIL] Tauri build failed
     exit /b 1
 )
 cd ..
-echo   -^> build\electron-release\ OK
+echo   -^> src-tauri\target\release\ OK
 echo.
 
 echo ============================================
 echo   Build complete!
 echo   Backend : build\agentcore.exe
-echo   Installer : build\electron-release\
+echo   Installer : ui\src-tauri\target\release\bundle\
 echo ============================================
