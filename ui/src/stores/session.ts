@@ -27,6 +27,7 @@ export const useSessionStore = defineStore('session', () => {
   const currentProjectName = ref<string>('');
   const sessions = ref<SessionInfo[]>([]);
   const currentSessionId = ref<string>('');
+  const sessionStatuses = ref<Record<string, string>>({});
 
   function setProjects(list: ProjectInfo[]) {
     projects.value = list;
@@ -84,10 +85,28 @@ export const useSessionStore = defineStore('session', () => {
     agentWs.send({ type: 'list_all_sessions' });
   }
 
+  function switchSession(id: string) {
+    if (id === currentSessionId.value) return;
+    agentWs.send({ type: 'switch_session', session_id: id });
+  }
+
+  function setSessionStatus(sessionId: string, status: string) {
+    sessionStatuses.value[sessionId] = status;
+  }
+
+  function removeSession(sessionId: string) {
+    const idx = sessions.value.findIndex(s => s.session_id === sessionId);
+    if (idx >= 0) sessions.value.splice(idx, 1);
+    delete sessionStatuses.value[sessionId];
+    if (currentSessionId.value === sessionId) {
+      currentSessionId.value = '';
+    }
+  }
+
   return {
     projects, currentProjectPath, currentProjectName,
-    sessions, currentSessionId,
+    sessions, currentSessionId, sessionStatuses,
     setProjects, setProjectOpened, setSessionCreated, setCurrentSession,
-    openProject, createSession, loadSession, listProjects, listAllSessions,
+    openProject, createSession, loadSession, switchSession, setSessionStatus, removeSession, listProjects, listAllSessions,
   };
 });

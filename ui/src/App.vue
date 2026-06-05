@@ -154,6 +154,31 @@ onMounted(() => {
     }
   });
 
+  // Background session status updates
+  agentWs.on('session_status', (d: any) => {
+    sessionStore.setSessionStatus(d.session_id, d.status);
+  });
+
+  // Active session switched (from switch_session message)
+  agentWs.on('active_session_switched', (d: any) => {
+    sessionStore.setCurrentSession(d.session_id);
+    chatStore.loadMessages(
+      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
+    );
+    if (d.debug_entries) {
+      debugStore.loadEvents(d.debug_entries);
+    } else {
+      debugStore.clear();
+    }
+  });
+
+  // Session destroyed
+  agentWs.on('session_destroyed', (d: any) => {
+    sessionStore.removeSession(d.session_id);
+    chatStore.clear();
+    debugStore.clear();
+  });
+
   // Agent switching — full state reload
   agentWs.on('agent_switched', (d: any) => {
     agentStore.setActiveAgent(d.agent_id);

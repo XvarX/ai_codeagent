@@ -32,7 +32,8 @@ function newChat() {
 }
 
 function switchSession(id: string) {
-  sessionStore.loadSession(id);
+  if (id === sessionStore.currentSessionId) return;
+  sessionStore.switchSession(id);
 }
 
 function formatTime(iso: string): string {
