@@ -11,7 +11,10 @@
       <div v-for="s in sessionStore.sessions" :key="s.session_id"
            :class="['session-item', { active: s.session_id === sessionStore.currentSessionId }]"
            @click="switchSession(s.session_id)">
-        <span class="session-title">{{ s.title }}</span>
+        <div class="session-row">
+          <span class="status-dot" :class="statusClass(s.session_id)"></span>
+          <span class="session-title">{{ s.title }}</span>
+        </div>
         <span class="session-meta">{{ s.msg_count }}条 · {{ formatTime(s.updated_at) }}</span>
       </div>
       <div v-if="!sessionStore.sessions.length" class="session-empty">
@@ -34,6 +37,11 @@ function newChat() {
 function switchSession(id: string) {
   if (id === sessionStore.currentSessionId) return;
   sessionStore.switchSession(id);
+}
+
+function statusClass(sessionId: string): string {
+  const status = sessionStore.sessionStatuses[sessionId] || 'idle';
+  return `dot-${status}`;
 }
 
 function formatTime(iso: string): string {
@@ -60,6 +68,12 @@ function formatTime(iso: string): string {
 .session-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 .session-item:hover { background: #F1F3F6; }
 .session-item.active { background: #EBF5FF; }
+.session-row { display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-running { background: #22C55E; animation: pulse 1.5s infinite; }
+.dot-idle { background: #D1D5DB; }
+.dot-error { background: #EF4444; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .session-title { font-size: 13px; font-weight: 500; color: #1E1B3A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .session-meta { font-size: 11px; color: #94A3B8; }
 .session-empty { color: #94A3B8; font-size: 13px; padding: 16px 0; text-align: center; }
