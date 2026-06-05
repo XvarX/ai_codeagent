@@ -75,6 +75,32 @@ class Agent:
         self._session_project = session_project
         self._session_id = session_id
 
+    def bind_session(self, store, project: str, session_id: str):
+        """Attach session store for message persistence."""
+        self._session_store = store
+        self._session_project = project
+        self._session_id = session_id
+
+    def restore_messages(self, msg_dicts: list[dict]):
+        """Restore messages from persisted dicts. Clears existing messages."""
+        self.messages = []
+        for m in msg_dicts:
+            tool_use_blocks = None
+            if m.get("tool_use_blocks"):
+                from agentcore.core_types import ToolUseBlock
+                tool_use_blocks = [
+                    ToolUseBlock(tool_use_id=b["tool_use_id"],
+                                tool_name=b["tool_name"],
+                                input=b["input"])
+                    for b in m["tool_use_blocks"]
+                ]
+            self.messages.append(Message(
+                role=m["role"],
+                content=m.get("content", ""),
+                tool_use_blocks=tool_use_blocks,
+                tool_use_id=m.get("tool_use_id"),
+            ))
+
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
         """Snip: keep only the last keep_groups API-rounds. Returns (before, after, removed)."""
         from agentcore.compact.grouping import estimate_tokens_with_usage, group_by_api_round

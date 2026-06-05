@@ -162,6 +162,25 @@ class SessionStore:
         logs.append(entry)
         log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # ── Debug Log ───────────────────────────────────
+
+    def append_debug_entry(self, project_path: str, session_id: str, entry: dict):
+        """Append a debug event entry."""
+        log_path = self._dd.debug_log_path(project_path, session_id)
+        if log_path.exists():
+            logs = json.loads(log_path.read_text(encoding="utf-8"))
+        else:
+            logs = []
+        logs.append(entry)
+        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_debug_log(self, project_path: str, session_id: str) -> list[dict]:
+        """Load all debug entries for a session."""
+        log_path = self._dd.debug_log_path(project_path, session_id)
+        if not log_path.exists():
+            return []
+        return json.loads(log_path.read_text(encoding="utf-8"))
+
     # ── Subagents ───────────────────────────────────
 
     def append_subagent_message(self, project_path: str, session_id: str,

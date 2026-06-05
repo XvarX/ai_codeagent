@@ -30,6 +30,10 @@ export const useSessionStore = defineStore('session', () => {
 
   function setProjects(list: ProjectInfo[]) {
     projects.value = list;
+    // Auto-restore last opened project
+    if (!currentProjectPath.value && list.length > 0) {
+      openProject(list[0].path);
+    }
   }
 
   function setProjectOpened(path: string, sessionList: SessionInfo[]) {
@@ -37,6 +41,10 @@ export const useSessionStore = defineStore('session', () => {
     const p = projects.value.find(p => p.path === path);
     currentProjectName.value = p?.name || path.split(/[\\/]/).pop() || '';
     sessions.value = sessionList;
+    // Auto-restore last session
+    if (!currentSessionId.value && sessionList.length > 0) {
+      loadSession(sessionList[0].session_id);
+    }
   }
 
   function setSessionCreated(sessionId: string, title: string) {
@@ -56,6 +64,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function openProject(path: string) {
+    currentSessionId.value = '';
     agentWs.send({ type: 'open_project', path });
   }
 

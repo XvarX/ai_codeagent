@@ -132,13 +132,26 @@ onMounted(() => {
 
   // Session events
   agentWs.on('projects', (d: any) => sessionStore.setProjects(d.projects));
-  agentWs.on('project_opened', (d: any) => sessionStore.setProjectOpened(d.path, d.sessions));
-  agentWs.on('session_created', (d: any) => sessionStore.setSessionCreated(d.session_id, d.title));
+  agentWs.on('project_opened', (d: any) => {
+    sessionStore.setProjectOpened(d.path, d.sessions);
+    chatStore.clear();
+    debugStore.clear();
+  });
+  agentWs.on('session_created', (d: any) => {
+    sessionStore.setSessionCreated(d.session_id, d.title);
+    chatStore.clear();
+    debugStore.clear();
+  });
   agentWs.on('session_loaded', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
     chatStore.loadMessages(
       (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
     );
+    if (d.debug_entries) {
+      debugStore.loadEvents(d.debug_entries);
+    } else {
+      debugStore.clear();
+    }
   });
 
   // Agent switching — full state reload

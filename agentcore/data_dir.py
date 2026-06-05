@@ -81,6 +81,9 @@ class DataDir:
     def llm_log_path(self, project_path: str, session_id: str) -> Path:
         return self.session_dir(project_path, session_id) / "llm_log.json"
 
+    def debug_log_path(self, project_path: str, session_id: str) -> Path:
+        return self.session_dir(project_path, session_id) / "debug_log.json"
+
     def subagent_dir(self, project_path: str, session_id: str, sub_id: str) -> Path:
         return self.session_dir(project_path, session_id) / "subagents" / sub_id
 

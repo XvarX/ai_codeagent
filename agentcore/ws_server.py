@@ -41,6 +41,9 @@ class WsEventHandler(EventHandler):
         self._has_pending_tool_results = False
         self._debug_entries: list[dict] = []
         self._entry_id = 0
+        self._store: "SessionStore | None" = None
+        self._session_project: str = ""
+        self._session_id: str = ""
 
     def set_controller(self, controller: AgentController):
         """Update the controller reference (used when switching agents)."""
@@ -174,6 +177,13 @@ class WsEventHandler(EventHandler):
         }
         self._debug_entries.append(entry)
         self._entry_id += 1
+        # Persist debug entry to disk
+        if self._store and self._session_id:
+            try:
+                self._store.append_debug_entry(
+                    self._session_project, self._session_id, entry)
+            except Exception:
+                pass
         # Send to frontend
         await self._send({
             "type": "debug_event",
@@ -958,6 +968,15 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager,
                 project_path = msg.get("project_path", "")
                 title = msg.get("title", "New Chat")
                 session_id = store.create_session(project_path, title=title)
+                # Bind session to active agent for message persistence
+                agent = manager.get_active().controller.agent
+                agent.bind_session(store, project_path, session_id)
+                agent.messages = []  # fresh session
+                # Bind to handler for debug persistence
+                handler._store = store
+                handler._session_project = project_path
+                handler._session_id = session_id
+                handler._debug_entries = []
                 await websocket.send(json.dumps({
                     "type": "session_created",
                     "session_id": session_id,
@@ -969,11 +988,22 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager,
                 session_id = msg.get("session_id", "")
                 messages = store.load_messages(project_path, session_id)
                 meta = store.get_session_meta(project_path, session_id)
+                debug_entries = store.load_debug_log(project_path, session_id)
+                # Restore messages into active agent
+                agent = manager.get_active().controller.agent
+                agent.bind_session(store, project_path, session_id)
+                agent.restore_messages(messages)
+                # Restore debug entries in handler
+                handler._store = store
+                handler._session_project = project_path
+                handler._session_id = session_id
+                handler._debug_entries = list(debug_entries)
                 await websocket.send(json.dumps({
                     "type": "session_loaded",
                     "session_id": session_id,
                     "messages": messages,
                     "meta": meta,
+                    "debug_entries": debug_entries,
                 }, ensure_ascii=False))
 
             elif msg_type == "list_all_sessions":
