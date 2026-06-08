@@ -140,7 +140,11 @@ onMounted(() => {
   agentWs.on('session_created', (d: any) => {
     sessionStore.setSessionCreated(d.session_id, d.title);
     chatStore.clear();
-    debugStore.clear();
+    if (d.debug_entries) {
+      debugStore.loadEvents(d.debug_entries);
+    } else {
+      debugStore.clear();
+    }
     debugStore.updateContextUsage(0);
   });
   agentWs.on('session_loaded', (d: any) => {

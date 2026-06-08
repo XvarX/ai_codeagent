@@ -747,7 +747,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
 
             elif msg_type == "get_config":
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -791,9 +791,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.agent_manager.get_active().controller.reconfigure(new_config)
 
-                # Write back to config.yaml
+                # Write back to .ai-code-agent/config.yaml
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -995,6 +995,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     "type": "session_created",
                     "session_id": session_id,
                     "title": title,
+                    "debug_entries": slot.handler._debug_entries if slot else [],
                 }, ensure_ascii=False))
 
             elif msg_type == "load_session":
@@ -1009,7 +1010,6 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.handler._session_manager = session_mgr
                     est_tokens = slot.agent_manager.get_active().controller.agent.est_tokens()
-                    # Send agent list for the new session
                     await _send_agent_list(websocket, slot.agent_manager)
                 await websocket.send(json.dumps({
                     "type": "session_loaded",

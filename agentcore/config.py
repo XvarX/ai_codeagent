@@ -57,11 +57,12 @@ class AgentConfig:
             else:
                 config_path = Path("config.yaml")
         if not config_path.exists():
+            # Initialize config at target path from example or defaults
             example = Path("config.example.yaml")
             if example.exists():
-                config_path = example
+                with open(example, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
             else:
-                # Auto-generate config with defaults
                 cfg = {
                     "provider": "anthropic",
                     "model": "claude-sonnet-4-6-20250514",
@@ -75,9 +76,9 @@ class AgentConfig:
                     "compact_thresholds": {},
                     "reserved_outputs": {},
                 }
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(config_path, "w", encoding="utf-8") as f:
-                    yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}

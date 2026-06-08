@@ -84,6 +84,7 @@ fn start_python(app: &tauri::AppHandle) -> Option<Child> {
     match command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env("PYTHONUNBUFFERED", "1")
         .spawn()
     {
         Ok(mut child) => {
