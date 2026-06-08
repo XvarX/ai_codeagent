@@ -286,7 +286,7 @@ class FletApp:
             recs = self.debug_drawer._entry_records
             send_gid = recs[-1].get("group_idx") if recs else None
             self.debug_drawer.add_event(
-                "[Send Tool Result]", "→ LLM  |  回传工具结果",
+                "[Send Tool Result]", "-> LLM  |  回传工具结果",
                 "#8B5CF6",
                 group_idx=send_gid,
             )
@@ -393,7 +393,7 @@ class FletApp:
             if m:
                 size_line = f"size: {len(result)} chars (original: {m.group(1)} chars)"
         self.debug_drawer.add_event(
-            f"[Tool] {name} ✓",
+            f"[Tool] {name} OK",
             f"{call_detail}\n---\n"
             f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
             f"{'  |  ' + dur_str if dur_str else ''}\n"
@@ -623,7 +623,7 @@ class FletApp:
         self.debug_drawer.add_event(
             "[SnipCompact]",
             f"Snip removed {groups_removed} groups\n"
-            f"tokens: ~{tokens_before} → ~{tokens_after}",
+            f"tokens: ~{tokens_before} -> ~{tokens_after}",
             "#94A3B8",
             group_key="snip",
         )
@@ -642,7 +642,7 @@ class FletApp:
         self.debug_drawer.set_compacting(True)
         self.input_bar.set_compacting(True)
         self.debug_drawer.add_event(
-            "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
+            "[Compact Call]", f"-> LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
             "#F59E0B",
             group_key="compact_call",
         )
@@ -843,8 +843,8 @@ class FletApp:
             if len(groups) > 1:
                 self.debug_drawer.mark_groups_gray(len(groups) - 2)
             self.chat_view.add_assistant_message(
-                f"**Snip done**: {len(groups)} → 1 group, {len(agent.messages)} msgs\n"
-                f"tokens: ~{pre_tok} → ~{post_tok}")
+                f"**Snip done**: {len(groups)} -> 1 group, {len(agent.messages)} msgs\n"
+                f"tokens: ~{pre_tok} -> ~{post_tok}")
 
         elif sub == "setsingletrshort":
             val = int(parts[2]) if len(parts) > 2 else 0
@@ -991,7 +991,7 @@ class FletApp:
         if not state:
             return
         old_id = self.agent_manager.active_id
-        print(f"[AgentSwitch] {old_id} → {agent_id}", flush=True)
+        print(f"[AgentSwitch] {old_id} -> {agent_id}", flush=True)
 
         # ── Save current debug state (under OLD id) ──
         if not hasattr(self, '_debug_snapshots'):
@@ -1075,7 +1075,7 @@ class FletApp:
             return
         state = self.agent_manager.agents.get(agent_id)
         name = state.name if state else agent_id
-        icon = "✓" if status == "completed" else "✗"
+        icon = "OK" if status == "completed" else "X"
         color = "#22C55E" if status == "completed" else "#EF4444"
         self.chat_view.add_tool_label(
             f"[Agent] {name} {icon}",

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -71,6 +72,27 @@ class SessionManager:
             await _send_agent_list(self._ws, mgr)
         mgr.on_change = lambda: asyncio.ensure_future(_push_agent_list())
 
+        # Wire subagent persistence — called after every AgentManager.spawn
+        store_ref = self._store
+        proj_ref = project_path
+        sess_ref = session_id
+        async def _on_spawn(agent_id: str, state):
+            sub_sess = f"{sess_ref}/subagents/{agent_id}"
+            state.controller.agent.bind_session(store_ref, proj_ref, sub_sess)
+            store_ref.save_subagent_meta(proj_ref, sess_ref, agent_id, {
+                "id": agent_id, "name": state.name,
+                "definition": {
+                    "name": state.definition.name,
+                    "description": state.definition.description,
+                    "agent_type": state.definition.agent_type,
+                    "system_prompt": state.definition.system_prompt,
+                    "tools": state.definition.tools,
+                    "source": state.definition.source,
+                },
+                "status": state.status, "keep_alive": state.keep_alive,
+            })
+        mgr.on_spawn = _on_spawn
+
         slot = SessionSlot(
             session_id=session_id,
             project_path=project_path,
@@ -83,7 +105,12 @@ class SessionManager:
         return session_id
 
     async def load_session(self, project_path: str, session_id: str):
-        """Create slot and restore messages + debug entries from disk."""
+        """Create slot and restore messages + debug entries from disk.
+        If slot already exists, just switch to it without rebuilding."""
+        if session_id in self.slots:
+            self.active_session_id = session_id
+            return
+
         from agentcore.agent_definitions import load_user_agents
         from agentcore.ws_server import WsEventHandler
         import asyncio
@@ -116,6 +143,27 @@ class SessionManager:
             await _send_agent_list(self._ws, mgr)
         mgr.on_change = lambda: asyncio.ensure_future(_push_agent_list())
 
+        # Wire subagent persistence — called after every AgentManager.spawn
+        store_ref = self._store
+        proj_ref = project_path
+        sess_ref = session_id
+        async def _on_spawn(agent_id: str, state):
+            sub_sess = f"{sess_ref}/subagents/{agent_id}"
+            state.controller.agent.bind_session(store_ref, proj_ref, sub_sess)
+            store_ref.save_subagent_meta(proj_ref, sess_ref, agent_id, {
+                "id": agent_id, "name": state.name,
+                "definition": {
+                    "name": state.definition.name,
+                    "description": state.definition.description,
+                    "agent_type": state.definition.agent_type,
+                    "system_prompt": state.definition.system_prompt,
+                    "tools": state.definition.tools,
+                    "source": state.definition.source,
+                },
+                "status": state.status, "keep_alive": state.keep_alive,
+            })
+        mgr.on_spawn = _on_spawn
+
         slot = SessionSlot(
             session_id=session_id,
             project_path=project_path,
@@ -125,6 +173,75 @@ class SessionManager:
         )
         self.slots[session_id] = slot
         self.active_session_id = session_id
+
+        # Restore persisted subagents
+        await self._restore_subagents(slot)
+
+    async def _restore_subagents(self, slot: SessionSlot):
+        """Recreate subagents from persisted metadata."""
+        from agentcore.subagent_manager import _AgentHandler, SubagentState
+        from agentcore.agent_definitions import AgentDefinition
+        from agentcore.agent_message_queue import AgentMessageQueue
+        from agentcore.controller import AgentController
+
+        subagents = self._store.list_subagents(slot.project_path, slot.session_id)
+        for meta in subagents:
+            sub_id = meta["id"]
+            defn_data = meta.get("definition", {})
+            definition = AgentDefinition(
+                name=defn_data.get("name", meta["name"]),
+                description=defn_data.get("description", ""),
+                agent_type=defn_data.get("agent_type", "user"),
+                system_prompt=defn_data.get("system_prompt", ""),
+                tools=defn_data.get("tools"),
+                source=defn_data.get("source", "user"),
+            )
+
+            handler = _AgentHandler(slot.agent_manager, sub_id)
+            controller = AgentController(self._config, handler)
+            queue = AgentMessageQueue(controller)
+            controller.agent._agent_manager = slot.agent_manager
+            controller.agent._agent_id = sub_id
+
+            # Bind session store for auto message persistence
+            sub_session_id = f"{slot.session_id}/subagents/{sub_id}"
+            controller.agent.bind_session(
+                self._store, slot.project_path, sub_session_id)
+
+            # Restore subagent messages
+            msgs_path = self._dd.session_dir(
+                slot.project_path, slot.session_id) / "subagents" / sub_id / "messages.json"
+            if msgs_path.exists():
+                sub_msgs = json.loads(msgs_path.read_text(encoding="utf-8"))
+                if sub_msgs:
+                    controller.agent.restore_messages(sub_msgs)
+
+            state = SubagentState(
+                id=sub_id,
+                name=meta["name"],
+                definition=definition,
+                controller=controller,
+                message_queue=queue,
+                status=meta.get("status", "completed"),
+                result=meta.get("result", ""),
+                error=meta.get("error", ""),
+                est_tokens=meta.get("est_tokens", 0),
+                keep_alive=meta.get("keep_alive", False),
+            )
+            # Wire debug events from disk
+            debug_path = self._dd.session_dir(
+                slot.project_path, slot.session_id) / "subagents" / sub_id / "debug_log.json"
+            if debug_path.exists():
+                state.debug_events = json.loads(debug_path.read_text(encoding="utf-8"))
+            else:
+                state.debug_events = []
+
+            # Register SendMessage tool
+            from agentcore.tools.send_message_tool import SendMessageTool
+            send_tool = SendMessageTool(slot.agent_manager, sub_id)
+            controller.registry.register(send_tool)
+
+            slot.agent_manager.agents[sub_id] = state
 
     async def destroy_session(self, session_id: str):
         """Kill all agents in slot, remove slot."""

@@ -216,7 +216,7 @@ class WsEventHandler(EventHandler):
         await self._send({"type": "thinking"})
         if self._has_pending_tool_results:
             await self._send_debug(
-                "[Send Tool Result]", "→ LLM  |  回传工具结果", "#8B5CF6",
+                "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
@@ -272,7 +272,7 @@ class WsEventHandler(EventHandler):
         except ImportError:
             pass
 
-        status_icon = "✗" if is_error else "✓"
+        status_icon = "X" if is_error else "OK"
         message = (
             f"{call_detail}\n---\n"
             f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
@@ -407,12 +407,12 @@ class WsEventHandler(EventHandler):
             "type": "compact_call", "old_msg_count": old_msg_count, "pre_tokens": pre_tokens,
         })
         await self._send_debug(
-            "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
+            "[Compact Call]", f"-> LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
             "#F59E0B", group_key="compact_call")
 
     async def on_compact(self, pre_tokens: int, post_tokens: int,
                          trigger: str, summary: str = ""):
-        info = f"{trigger}  |  ~{pre_tokens} → ~{post_tokens} tokens"
+        info = f"{trigger}  |  ~{pre_tokens} -> ~{post_tokens} tokens"
         if summary:
             info += f"\n---\n{summary[:800]}"
         await self._send({
@@ -443,10 +443,19 @@ class WsEventHandler(EventHandler):
         await self._send_debug(
             "[SnipCompact]",
             f"Snip removed {groups_removed} groups\n"
-            f"tokens: ~{tokens_before} → ~{tokens_after}",
+            f"tokens: ~{tokens_before} -> ~{tokens_after}",
             "#94A3B8", group_key="snip")
 
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
+        # Update persisted subagent status
+        if self._store and self._session_project and self._session_id:
+            meta = self._store.load_subagent_meta(
+                self._session_project, self._session_id, agent_id)
+            if meta:
+                meta["status"] = status
+                meta["result"] = result
+                self._store.save_subagent_meta(
+                    self._session_project, self._session_id, agent_id, meta)
         await self._send({
             "type": "subagent_done", "agent_id": agent_id,
             "status": status, "result": result,
@@ -950,6 +959,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 projects = store.list_projects()
                 await websocket.send(json.dumps({
                     "type": "projects", "projects": projects,
+                    "default_cwd": str(session_mgr._config.cwd or Path.cwd()),
                 }, ensure_ascii=False))
 
             elif msg_type == "open_project":
@@ -977,7 +987,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         "[System]",
                         f"Provider: {session_mgr._config.provider}  |  Model: {session_mgr._config.model or 'default'}\n"
                         f"Tools: {', '.join(registry.get_tool_names())}\n"
-                        f"CWD: {session_mgr._config.cwd or Path.cwd()}",
+                        f"CWD: {session_mgr._config.cwd or Path.cwd()}\n"
+                        f"Hash: {dd.project_hash(str(session_mgr._config.cwd or Path.cwd()))}",
                         "#569cd6")
                     await slot.handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
                 await websocket.send(json.dumps({
@@ -994,20 +1005,19 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 debug_entries = store.load_debug_log(project_path, session_id)
                 await session_mgr.load_session(project_path, session_id)
                 slot = session_mgr.get_active()
+                est_tokens = 0
                 if slot:
                     slot.handler._session_manager = session_mgr
-                    registry = slot.agent_manager.agents["master"].controller.registry
-                    await slot.handler._send_debug(
-                        "[System]",
-                        f"Provider: {session_mgr._config.provider}  |  Model: {session_mgr._config.model or 'default'}\n"
-                        f"Tools: {', '.join(registry.get_tool_names())}",
-                        "#569cd6")
+                    est_tokens = slot.agent_manager.get_active().controller.agent.est_tokens()
+                    # Send agent list for the new session
+                    await _send_agent_list(websocket, slot.agent_manager)
                 await websocket.send(json.dumps({
                     "type": "session_loaded",
                     "session_id": session_id,
                     "messages": messages,
                     "meta": meta,
                     "debug_entries": debug_entries,
+                    "est_tokens": est_tokens,
                 }, ensure_ascii=False))
 
             elif msg_type == "switch_session":
@@ -1033,6 +1043,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                                 for m in agent.messages if not m.is_tool_result
                             ],
                             "debug_entries": debug_evts,
+                            "est_tokens": agent.est_tokens(),
                         }, ensure_ascii=False))
 
             elif msg_type == "destroy_session":
@@ -1041,6 +1052,31 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 await websocket.send(json.dumps({
                     "type": "session_destroyed",
                     "session_id": session_id,
+                }, ensure_ascii=False))
+
+            elif msg_type == "delete_session":
+                project_path = msg.get("project_path", "")
+                session_id = msg.get("session_id", "")
+                # Stop running session first
+                if session_id in session_mgr.slots:
+                    await session_mgr.destroy_session(session_id)
+                store.delete_session(project_path, session_id)
+                await websocket.send(json.dumps({
+                    "type": "session_deleted",
+                    "session_id": session_id,
+                    "project_path": project_path,
+                }, ensure_ascii=False))
+
+            elif msg_type == "delete_project":
+                project_path = msg.get("project_path", "")
+                # Stop all sessions belonging to this project
+                for sid in list(session_mgr.slots):
+                    if session_mgr.slots[sid].project_path == project_path:
+                        await session_mgr.destroy_session(sid)
+                store.delete_project(project_path)
+                await websocket.send(json.dumps({
+                    "type": "project_deleted",
+                    "project_path": project_path,
                 }, ensure_ascii=False))
 
             elif msg_type == "list_all_sessions":

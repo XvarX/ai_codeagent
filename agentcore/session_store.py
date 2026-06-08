@@ -60,6 +60,19 @@ class SessionStore:
         """Update last_opened timestamp for a project."""
         self.register_project(project_path)
 
+    def delete_project(self, project_path: str):
+        """Delete project directory and remove from projects.json index."""
+        import shutil
+        pdir = self._dd.project_dir(project_path)
+        if pdir.exists():
+            shutil.rmtree(pdir, ignore_errors=True)
+        # Remove from index
+        index_path = self._dd.projects_index_path
+        if index_path.exists():
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            index = [p for p in index if p.get("path") != project_path]
+            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+
     # ── Sessions ────────────────────────────────────
 
     def create_session(self, project_path: str, title: str = "New Chat") -> str:
@@ -150,6 +163,13 @@ class SessionStore:
         msgs_path.write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
         self.update_session_meta(project_path, session_id, msg_count=len(messages))
 
+    def delete_session(self, project_path: str, session_id: str):
+        """Delete a session directory and all its data."""
+        import shutil
+        sdir = self._dd.session_dir(project_path, session_id)
+        if sdir.exists():
+            shutil.rmtree(sdir, ignore_errors=True)
+
     # ── LLM Log ─────────────────────────────────────
 
     def append_llm_log(self, project_path: str, session_id: str, entry: dict):
@@ -182,6 +202,35 @@ class SessionStore:
         return json.loads(log_path.read_text(encoding="utf-8"))
 
     # ── Subagents ───────────────────────────────────
+
+    def save_subagent_meta(self, project_path: str, session_id: str,
+                           sub_id: str, meta: dict):
+        """Save or update subagent metadata."""
+        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
+        sdir.mkdir(parents=True, exist_ok=True)
+        meta_path = sdir / "meta.json"
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_subagent_meta(self, project_path: str, session_id: str,
+                           sub_id: str) -> dict | None:
+        """Load subagent metadata."""
+        meta_path = self._dd.subagent_dir(project_path, session_id, sub_id) / "meta.json"
+        if not meta_path.exists():
+            return None
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+
+    def list_subagents(self, project_path: str, session_id: str) -> list[dict]:
+        """List all subagents for a session."""
+        subs_dir = self._dd.session_dir(project_path, session_id) / "subagents"
+        if not subs_dir.exists():
+            return []
+        result = []
+        for sdir in subs_dir.iterdir():
+            if sdir.is_dir():
+                meta_path = sdir / "meta.json"
+                if meta_path.exists():
+                    result.append(json.loads(meta_path.read_text(encoding="utf-8")))
+        return result
 
     def append_subagent_message(self, project_path: str, session_id: str,
                                  sub_id: str, message: dict):

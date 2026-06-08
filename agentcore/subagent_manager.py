@@ -345,6 +345,7 @@ class AgentManager:
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self.on_change = None  # set by UI to refresh sidebar
+        self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
         self._create_master()
         # master_handler exposed for _run_background notifications
@@ -435,6 +436,15 @@ class AgentManager:
         send_tool = SendMessageTool(self, agent_id)
         controller.registry.register(send_tool)
 
+        # Persist subagent BEFORE execution — so bind_session is active during run
+        if self.on_spawn:
+            try:
+                await self.on_spawn(agent_id, state)
+            except Exception:
+                import sys, traceback
+                print(f"[AgentMgr] on_spawn failed for {agent_id}: {traceback.format_exc()}",
+                      file=sys.stderr, flush=True)
+
         if background:
             state.background_task = asyncio.create_task(
                 self._run_background(agent_id, prompt)
@@ -459,7 +469,12 @@ class AgentManager:
             if not keep_alive:
                 await self._cleanup_agent(agent_id)
 
-        self._update_est_tokens(agent_id)
+            # Notify master of completion (updates persisted meta + frontend)
+            try:
+                await self.master_handler.on_subagent_done(
+                    agent_id, state.status, state.result)
+            except Exception:
+                pass
         if self.on_change:
             try:
                 self.on_change()

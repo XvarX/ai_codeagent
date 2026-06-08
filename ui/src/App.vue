@@ -131,7 +131,7 @@ onMounted(() => {
   agentWs.on('error', () => agentStore.setBusy(false));
 
   // Session events
-  agentWs.on('projects', (d: any) => sessionStore.setProjects(d.projects));
+  agentWs.on('projects', (d: any) => sessionStore.setProjects(d.projects, d.default_cwd));
   agentWs.on('project_opened', (d: any) => {
     sessionStore.setProjectOpened(d.path, d.sessions);
     chatStore.clear();
@@ -141,6 +141,7 @@ onMounted(() => {
     sessionStore.setSessionCreated(d.session_id, d.title);
     chatStore.clear();
     debugStore.clear();
+    debugStore.updateContextUsage(0);
   });
   agentWs.on('session_loaded', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
@@ -152,6 +153,8 @@ onMounted(() => {
     } else {
       debugStore.clear();
     }
+    chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
   });
 
   // Background session status updates
@@ -170,13 +173,30 @@ onMounted(() => {
     } else {
       debugStore.clear();
     }
+    chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
   });
 
-  // Session destroyed
+  // Session destroyed (close)
   agentWs.on('session_destroyed', (d: any) => {
     sessionStore.removeSession(d.session_id);
     chatStore.clear();
     debugStore.clear();
+  });
+
+  // Session deleted (permanent)
+  agentWs.on('session_deleted', (d: any) => {
+    sessionStore.removeSession(d.session_id);
+    if (sessionStore.currentSessionId === d.session_id) {
+      chatStore.clear();
+      debugStore.clear();
+    }
+  });
+
+  // Project deleted (permanent)
+  agentWs.on('project_deleted', (_d: any) => {
+    // Refresh projects list
+    sessionStore.listProjects();
   });
 
   // Agent switching — full state reload
@@ -185,6 +205,7 @@ onMounted(() => {
     chatStore.loadMessages(d.messages || []);
     debugStore.loadEvents(d.debug_events || []);
     chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
   });
 
   // Compacting state

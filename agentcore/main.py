@@ -6,6 +6,7 @@ python main.py -c "message"     单次命令行模式
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -84,7 +85,7 @@ async def _on_tool_call(name: str, input: dict):
 
 async def _on_tool_result(name: str, result: str, is_error: bool):
     preview = result[:100].replace("\n", " ")
-    print(f"\r  → {preview}")
+    print(f"\r  -> {preview}")
 
 
 async def run_one_shot(config: AgentConfig, user_message: str):
@@ -165,8 +166,21 @@ def _resolve_data_dir() -> str:
     return str(Path(__file__).parent.parent / ".ai-code-agent")
 
 
+def _parse_cwd() -> str | None:
+    """Parse --cwd from sys.argv."""
+    if "--cwd" in sys.argv:
+        idx = sys.argv.index("--cwd")
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return None
+
+
 async def main():
     data_dir = _resolve_data_dir()
+    # --cwd arg overrides default working directory
+    explicit_cwd = _parse_cwd()
+    if explicit_cwd:
+        os.environ["AGENT_CWD"] = explicit_cwd
     config = AgentConfig.from_yaml(data_dir=data_dir)
 
     if "--ws" in sys.argv:

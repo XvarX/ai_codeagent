@@ -25,18 +25,44 @@ fn get_backend_cmd(app: &tauri::AppHandle) -> Option<(String, Vec<String>)> {
         ));
     }
 
-    // Release mode: use bundled exe + AppData
+    // Release mode: use bundled exe + ~/.ai-code-agent
     let resource_dir = app.path().resource_dir().ok()?;
     let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
 
-    let app_data = app.path().app_data_dir().ok()?;
-    let data_dir = app_data.join(".ai-code-agent");
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let data_dir = PathBuf::from(&home).join(".ai-code-agent");
+
+    // Default CWD: last opened project, or home
+    let cwd = {
+        let projects_json = data_dir.join("store").join("projects.json");
+        let last_project = std::fs::read_to_string(&projects_json)
+            .ok()
+            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+            .and_then(|list| {
+                let mut sorted = list;
+                sorted.sort_by(|a, b| {
+                    let ta = a.get("last_opened").and_then(|v| v.as_str()).unwrap_or("");
+                    let tb = b.get("last_opened").and_then(|v| v.as_str()).unwrap_or("");
+                    tb.cmp(ta)
+                });
+                sorted.first()
+                    .and_then(|p| p.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| home.clone());
+        last_project
+    };
+
     Some((
         bundled_exe.to_string_lossy().to_string(),
         vec![
             "--ws".to_string(),
             "--port".to_string(), "18765".to_string(),
             "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
+            "--cwd".to_string(), cwd.to_string(),
         ],
     ))
 }
@@ -48,7 +74,7 @@ fn start_python(app: &tauri::AppHandle) -> Option<Child> {
     let mut command = Command::new(&cmd);
     command.args(&args);
 
-    // In dev mode, run from project root so python can find agentcore package
+    // In dev mode, run from project root
     if cfg!(debug_assertions) {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let project_root = manifest_dir.join("..").join("..");
