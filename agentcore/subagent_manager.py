@@ -1,4 +1,4 @@
-"""SubagentManager — manages multiple AgentController instances."""
+"""AgentManager — manages multiple AgentController instances."""
 
 import asyncio
 import json
@@ -85,7 +85,7 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
     return filtered, skills_text
 
 
-class _SubagentHandler(EventHandler):
+class _AgentHandler(EventHandler):
     """EventHandler that captures subagent events and optionally forwards to app pipeline.
 
     When forwarding IS wired (active agent): events go through app._on_* methods
@@ -94,7 +94,7 @@ class _SubagentHandler(EventHandler):
     for replay when the user switches to this agent.
     """
 
-    def __init__(self, manager: "SubagentManager", agent_id: str):
+    def __init__(self, manager: "AgentManager", agent_id: str):
         super().__init__()
         self.manager = manager
         self.agent_id = agent_id
@@ -335,7 +335,7 @@ class _SubagentHandler(EventHandler):
             self._fwd_enqueued(from_name, message, source)
 
 
-class SubagentManager:
+class AgentManager:
     """Manages the lifecycle of all agents (master + subagents)."""
 
     def __init__(self, config: AgentConfig,
@@ -345,6 +345,7 @@ class SubagentManager:
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self.on_change = None  # set by UI to refresh sidebar
+        self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
         self._create_master()
         # master_handler exposed for _run_background notifications
@@ -363,7 +364,7 @@ class SubagentManager:
 
     def _create_master(self):
         """Create the master agent controller."""
-        handler = _SubagentHandler(self, "master")
+        handler = _AgentHandler(self, "master")
         controller = AgentController(self.config, handler)
         state = SubagentState(
             id="master",
@@ -381,7 +382,7 @@ class SubagentManager:
         from agentcore.agent_message_queue import AgentMessageQueue
         queue = AgentMessageQueue(controller)
         state.message_queue = queue
-        controller.agent._subagent_manager = self
+        controller.agent._agent_manager = self
         controller.agent._agent_id = "master"
 
         # Register Agent tool and SendMessage tool on master
@@ -413,7 +414,7 @@ class SubagentManager:
         provider = _build_provider_for_agent(self.config, definition)
         registry, skills_text = _build_tool_registry_for_agent(self.config, definition)
 
-        handler = _SubagentHandler(self, agent_id)
+        handler = _AgentHandler(self, agent_id)
         controller = AgentController(self.config, handler)
         controller.provider = provider
         controller.registry = registry
@@ -423,7 +424,7 @@ class SubagentManager:
         from agentcore.agent_message_queue import AgentMessageQueue
         queue = AgentMessageQueue(controller)
         state.message_queue = queue
-        controller.agent._subagent_manager = self
+        controller.agent._agent_manager = self
         controller.agent._agent_id = agent_id
 
         # Wire controller back to state
@@ -434,6 +435,15 @@ class SubagentManager:
         from agentcore.tools.send_message_tool import SendMessageTool
         send_tool = SendMessageTool(self, agent_id)
         controller.registry.register(send_tool)
+
+        # Persist subagent BEFORE execution — so bind_session is active during run
+        if self.on_spawn:
+            try:
+                await self.on_spawn(agent_id, state)
+            except Exception:
+                import sys, traceback
+                print(f"[AgentMgr] on_spawn failed for {agent_id}: {traceback.format_exc()}",
+                      file=sys.stderr, flush=True)
 
         if background:
             state.background_task = asyncio.create_task(
@@ -459,7 +469,12 @@ class SubagentManager:
             if not keep_alive:
                 await self._cleanup_agent(agent_id)
 
-        self._update_est_tokens(agent_id)
+            # Notify master of completion (updates persisted meta + frontend)
+            try:
+                await self.master_handler.on_subagent_done(
+                    agent_id, state.status, state.result)
+            except Exception:
+                pass
         if self.on_change:
             try:
                 self.on_change()
@@ -471,7 +486,7 @@ class SubagentManager:
         """Run a subagent in the background."""
         import sys
         state = self.agents[agent_id]
-        print(f"[SubagentMgr] {agent_id} background starting", file=sys.stderr, flush=True)
+        print(f"[AgentMgr] {agent_id} background starting", file=sys.stderr, flush=True)
         try:
             state.status = "running"
             await self._emit_request(state.controller, prompt)
@@ -483,15 +498,15 @@ class SubagentManager:
             ]
             state.result = "\n".join(assistant_msgs) if assistant_msgs else "(no response)"
             state.status = "completed"
-            print(f"[SubagentMgr] {agent_id} done: {state.result[:80]}", file=sys.stderr, flush=True)
+            print(f"[AgentMgr] {agent_id} done: {state.result[:80]}", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             state.status = "killed"
-            print(f"[SubagentMgr] {agent_id} killed", file=sys.stderr, flush=True)
+            print(f"[AgentMgr] {agent_id} killed", file=sys.stderr, flush=True)
         except Exception as e:
             state.error = str(e)
             state.status = "failed"
             import traceback
-            print(f"[SubagentMgr] {agent_id} FAILED: {e}\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+            print(f"[AgentMgr] {agent_id} FAILED: {e}\n{traceback.format_exc()}", file=sys.stderr, flush=True)
         finally:
             state.background_task = None
             self._update_est_tokens(agent_id)

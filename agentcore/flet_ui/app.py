@@ -24,7 +24,7 @@ from agentcore.flet_ui.config_dialog import show_config_dialog
 from agentcore.flet_ui.mcp_dialog import show_mcp_dialog
 from agentcore.flet_ui.skill_dialog import show_skill_dialog
 from agentcore.flet_ui.agent_sidebar import AgentSidebar
-from agentcore.subagent_manager import SubagentManager
+from agentcore.agent_manager import AgentManager
 from agentcore.agent_definitions import load_user_agents
 
 
@@ -37,14 +37,14 @@ class FletApp:
 
         self._init_error: str | None = None
 
-        # ── Subagent support (all agents use unified _SubagentHandler) ──
+        # ── Subagent support (all agents use unified _AgentHandler) ──
         self.user_agents = load_user_agents(config.cwd)
         try:
-            self.subagent_manager = SubagentManager(config, self.user_agents)
-            self.controller = self.subagent_manager.agents["master"].controller
+            self.agent_manager = AgentManager(config, self.user_agents)
+            self.controller = self.agent_manager.agents["master"].controller
             self.handler = self.controller.handler
         except Exception as e:
-            self.subagent_manager = None
+            self.agent_manager = None
             self.controller = None
             self.handler = None
             self._init_error = str(e)
@@ -65,25 +65,25 @@ class FletApp:
         self._mcp_ready = False
 
         # ── Agent sidebar ──
-        if self.subagent_manager:
+        if self.agent_manager:
             self.agent_sidebar = AgentSidebar(
-                self.subagent_manager,
+                self.agent_manager,
                 on_switch=self._on_agent_switch,
             )
-            self.subagent_manager.on_change = self.agent_sidebar.refresh
+            self.agent_manager.on_change = self.agent_sidebar.refresh
         else:
             self.agent_sidebar = None
 
         # ── Register Agent + SendMessage tools on master ──
-        if self.controller and self.subagent_manager:
+        if self.controller and self.agent_manager:
             try:
                 from agentcore.tools.agent_tool import AgentTool
-                self.controller.registry.register(AgentTool(self.subagent_manager, self.user_agents))
+                self.controller.registry.register(AgentTool(self.agent_manager, self.user_agents))
             except Exception:
                 pass
             try:
                 from agentcore.tools.send_message_tool import SendMessageTool
-                self.controller.registry.register(SendMessageTool(self.subagent_manager, "master"))
+                self.controller.registry.register(SendMessageTool(self.agent_manager, "master"))
             except Exception:
                 pass
 
@@ -286,7 +286,7 @@ class FletApp:
             recs = self.debug_drawer._entry_records
             send_gid = recs[-1].get("group_idx") if recs else None
             self.debug_drawer.add_event(
-                "[Send Tool Result]", "→ LLM  |  回传工具结果",
+                "[Send Tool Result]", "-> LLM  |  回传工具结果",
                 "#8B5CF6",
                 group_idx=send_gid,
             )
@@ -393,7 +393,7 @@ class FletApp:
             if m:
                 size_line = f"size: {len(result)} chars (original: {m.group(1)} chars)"
         self.debug_drawer.add_event(
-            f"[Tool] {name} ✓",
+            f"[Tool] {name} OK",
             f"{call_detail}\n---\n"
             f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
             f"{'  |  ' + dur_str if dur_str else ''}\n"
@@ -623,7 +623,7 @@ class FletApp:
         self.debug_drawer.add_event(
             "[SnipCompact]",
             f"Snip removed {groups_removed} groups\n"
-            f"tokens: ~{tokens_before} → ~{tokens_after}",
+            f"tokens: ~{tokens_before} -> ~{tokens_after}",
             "#94A3B8",
             group_key="snip",
         )
@@ -642,7 +642,7 @@ class FletApp:
         self.debug_drawer.set_compacting(True)
         self.input_bar.set_compacting(True)
         self.debug_drawer.add_event(
-            "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
+            "[Compact Call]", f"-> LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
             "#F59E0B",
             group_key="compact_call",
         )
@@ -808,9 +808,9 @@ class FletApp:
         self.debug_drawer.add_event("[Stopped]", "用户中止了当前任务", "#EF4444")
 
     def _get_active_queue(self):
-        if not self.subagent_manager:
+        if not self.agent_manager:
             return None
-        state = self.subagent_manager.agents.get(self.subagent_manager.active_id)
+        state = self.agent_manager.agents.get(self.agent_manager.active_id)
         return state.message_queue if state else None
 
     def _handle_test_command(self, cmd: str):
@@ -843,8 +843,8 @@ class FletApp:
             if len(groups) > 1:
                 self.debug_drawer.mark_groups_gray(len(groups) - 2)
             self.chat_view.add_assistant_message(
-                f"**Snip done**: {len(groups)} → 1 group, {len(agent.messages)} msgs\n"
-                f"tokens: ~{pre_tok} → ~{post_tok}")
+                f"**Snip done**: {len(groups)} -> 1 group, {len(agent.messages)} msgs\n"
+                f"tokens: ~{pre_tok} -> ~{post_tok}")
 
         elif sub == "setsingletrshort":
             val = int(parts[2]) if len(parts) > 2 else 0
@@ -873,18 +873,18 @@ class FletApp:
         self._provider_label.update()
         if self.controller:
             self.controller.reconfigure(new_config)
-        elif self.subagent_manager is None:
-            # Initial SubagentManager creation failed — retry with new config
+        elif self.agent_manager is None:
+            # Initial AgentManager creation failed — retry with new config
             try:
-                self.subagent_manager = SubagentManager(new_config, self.user_agents)
-                self.controller = self.subagent_manager.agents["master"].controller
+                self.agent_manager = AgentManager(new_config, self.user_agents)
+                self.controller = self.agent_manager.agents["master"].controller
                 self.handler = self.controller.handler
                 FletApp._wire_handler_forwarding(self, self.handler)
                 self.agent_sidebar = AgentSidebar(
-                    self.subagent_manager,
+                    self.agent_manager,
                     on_switch=self._on_agent_switch,
                 )
-                self.subagent_manager.on_change = self.agent_sidebar.refresh
+                self.agent_manager.on_change = self.agent_sidebar.refresh
                 # Rebuild UI to include sidebar
                 self.page.clean()
                 self._build_ui()
@@ -985,13 +985,13 @@ class FletApp:
 
     def _on_agent_switch(self, agent_id: str):
         """Handle agent switch from sidebar."""
-        if not self.subagent_manager or agent_id == self.subagent_manager.active_id:
+        if not self.agent_manager or agent_id == self.agent_manager.active_id:
             return
-        state = self.subagent_manager.agents.get(agent_id)
+        state = self.agent_manager.agents.get(agent_id)
         if not state:
             return
-        old_id = self.subagent_manager.active_id
-        print(f"[AgentSwitch] {old_id} → {agent_id}", flush=True)
+        old_id = self.agent_manager.active_id
+        print(f"[AgentSwitch] {old_id} -> {agent_id}", flush=True)
 
         # ── Save current debug state (under OLD id) ──
         if not hasattr(self, '_debug_snapshots'):
@@ -999,13 +999,13 @@ class FletApp:
         self._debug_snapshots[old_id] = self.debug_drawer.save_snapshot()
 
         # ── Unwire old handler ──
-        old_state = self.subagent_manager.agents.get(old_id)
+        old_state = self.agent_manager.agents.get(old_id)
         if old_state:
             FletApp._clear_handler_forwarding(old_state.controller.handler)
 
         # ── Switch controller ──
         self.controller = state.controller
-        self.subagent_manager.active_id = agent_id
+        self.agent_manager.active_id = agent_id
 
         # ── Wire new handler — route events through app._on_* methods ──
         FletApp._wire_handler_forwarding(self, state.controller.handler)
@@ -1071,11 +1071,11 @@ class FletApp:
 
     def _on_subagent_done(self, agent_id: str, status: str, result: str):
         """Background subagent completed — update UI."""
-        if not self.subagent_manager:
+        if not self.agent_manager:
             return
-        state = self.subagent_manager.agents.get(agent_id)
+        state = self.agent_manager.agents.get(agent_id)
         name = state.name if state else agent_id
-        icon = "✓" if status == "completed" else "✗"
+        icon = "OK" if status == "completed" else "X"
         color = "#22C55E" if status == "completed" else "#EF4444"
         self.chat_view.add_tool_label(
             f"[Agent] {name} {icon}",

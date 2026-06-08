@@ -78,13 +78,13 @@ def show_mcp_dialog(page: ft.Page, controller):
                 nonlocal expanded
                 expanded = not expanded
                 tool_col.visible = expanded
-                toggle_btn.text = "▾" if expanded else "▸"
+                toggle_btn.text = "v" if expanded else ">"
                 toggle_btn.update()
                 tool_col.update()
             return toggle
 
         toggle_btn = ft.TextButton(
-            content=ft.Text("▸", size=15, color="#64748B"),
+            content=ft.Text(">", size=15, color="#64748B"),
             style=ft.ButtonStyle(padding=ft.Padding.all(2)),
         )
         toggle_btn.on_click = make_toggle(0)

@@ -3,6 +3,7 @@ config.yaml
 
 # Local config
 .claude/
+.ai-code-agent/
 
 # Generated
 __pycache__/

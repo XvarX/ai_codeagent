@@ -2,6 +2,9 @@
   <div class="app-layout">
     <header class="app-header">
       <button class="sidebar-toggle" @click="showSidebar = !showSidebar">&#9776;</button>
+      <button class="project-btn" @click="showProjectPicker = true">
+        {{ sessionStore.currentProjectName || '选择项目' }}
+      </button>
       <span class="app-title">{{ agentStore.provider }} / {{ agentStore.model }}</span>
       <div class="header-actions">
         <button @click="showSkill = true">技能</button>
@@ -12,7 +15,10 @@
       </div>
     </header>
     <div class="app-body">
-      <AgentSidebar v-if="showSidebar" />
+      <div v-if="showSidebar" class="left-sidebar">
+        <SessionList @showMore="showAllSessions = true" />
+        <AgentSidebar />
+      </div>
       <ChatView class="chat-main" />
       <DebugDrawer v-if="debugStore.open" />
     </div>
@@ -20,6 +26,8 @@
     <ConfigDialog v-if="showConfig" @close="showConfig = false" />
     <McpDialog v-if="showMcp" @close="showMcp = false" />
     <SkillDialog v-if="showSkill" @close="showSkill = false" />
+    <ProjectPicker v-if="showProjectPicker" @close="showProjectPicker = false" />
+    <AllSessionsDialog v-if="showAllSessions" @close="showAllSessions = false" />
   </div>
 </template>
 
@@ -28,7 +36,11 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useChatStore } from './stores/chat';
 import { useAgentStore } from './stores/agent';
 import { useDebugStore } from './stores/debug';
+import { useSessionStore } from './stores/session';
 import { agentWs } from './services/agentWs';
+import ProjectPicker from './components/ProjectPicker.vue';
+import SessionList from './components/SessionList.vue';
+import AllSessionsDialog from './components/AllSessionsDialog.vue';
 import ChatView from './components/ChatView.vue';
 import InputBar from './components/InputBar.vue';
 import DebugDrawer from './components/DebugDrawer.vue';
@@ -40,8 +52,11 @@ import SkillDialog from './components/SkillDialog.vue';
 const chatStore = useChatStore();
 const agentStore = useAgentStore();
 const debugStore = useDebugStore();
+const sessionStore = useSessionStore();
 
 const showSidebar = ref(false);
+const showProjectPicker = ref(false);
+const showAllSessions = ref(false);
 const showConfig = ref(false);
 const showMcp = ref(false);
 const showSkill = ref(false);
@@ -105,12 +120,84 @@ onMounted(() => {
   });
 
   // Agent state
-  agentWs.on('connected', () => agentWs.send({ type: 'get_status' }));
+  agentWs.on('connected', () => {
+    agentWs.send({ type: 'get_status' });
+    sessionStore.listProjects();
+  });
   agentWs.on('status', (d: any) => agentStore.setFromStatus(d));
   agentWs.on('mcp_info', (d: any) => {
     if (d.mcp) agentStore.mcpInfo = d.mcp;
   });
   agentWs.on('error', () => agentStore.setBusy(false));
+
+  // Session events
+  agentWs.on('projects', (d: any) => sessionStore.setProjects(d.projects, d.default_cwd));
+  agentWs.on('project_opened', (d: any) => {
+    sessionStore.setProjectOpened(d.path, d.sessions);
+    chatStore.clear();
+    debugStore.clear();
+  });
+  agentWs.on('session_created', (d: any) => {
+    sessionStore.setSessionCreated(d.session_id, d.title);
+    chatStore.clear();
+    debugStore.clear();
+    debugStore.updateContextUsage(0);
+  });
+  agentWs.on('session_loaded', (d: any) => {
+    sessionStore.setCurrentSession(d.session_id);
+    chatStore.loadMessages(
+      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
+    );
+    if (d.debug_entries) {
+      debugStore.loadEvents(d.debug_entries);
+    } else {
+      debugStore.clear();
+    }
+    chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
+  });
+
+  // Background session status updates
+  agentWs.on('session_status', (d: any) => {
+    sessionStore.setSessionStatus(d.session_id, d.status);
+  });
+
+  // Active session switched (from switch_session message)
+  agentWs.on('active_session_switched', (d: any) => {
+    sessionStore.setCurrentSession(d.session_id);
+    chatStore.loadMessages(
+      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
+    );
+    if (d.debug_entries) {
+      debugStore.loadEvents(d.debug_entries);
+    } else {
+      debugStore.clear();
+    }
+    chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
+  });
+
+  // Session destroyed (close)
+  agentWs.on('session_destroyed', (d: any) => {
+    sessionStore.removeSession(d.session_id);
+    chatStore.clear();
+    debugStore.clear();
+  });
+
+  // Session deleted (permanent)
+  agentWs.on('session_deleted', (d: any) => {
+    sessionStore.removeSession(d.session_id);
+    if (sessionStore.currentSessionId === d.session_id) {
+      chatStore.clear();
+      debugStore.clear();
+    }
+  });
+
+  // Project deleted (permanent)
+  agentWs.on('project_deleted', (_d: any) => {
+    // Refresh projects list
+    sessionStore.listProjects();
+  });
 
   // Agent switching — full state reload
   agentWs.on('agent_switched', (d: any) => {
@@ -118,6 +205,7 @@ onMounted(() => {
     chatStore.loadMessages(d.messages || []);
     debugStore.loadEvents(d.debug_events || []);
     chatStore.updateUsage(d.est_tokens || 0);
+    debugStore.updateContextUsage(d.est_tokens || 0);
   });
 
   // Compacting state
@@ -152,4 +240,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; c
 .header-actions button { background: none; border: 1px solid #E2E6EC; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 14px; }
 .app-body { display: flex; flex: 1; overflow: hidden; }
 .chat-main { flex: 1; }
+.project-btn { background: none; border: 1px solid #E2E6EC; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 14px; color: #6366F1; }
+.project-btn:hover { background: #F1F3F6; }
+.left-sidebar { display: flex; flex-direction: column; border-right: 1px solid #F1F3F6; background: #FAFBFC; min-width: 200px; max-width: 260px; }
 </style>

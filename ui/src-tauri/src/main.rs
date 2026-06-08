@@ -8,30 +8,61 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 struct PythonBackend(Mutex<Option<Child>>);
 
 fn get_backend_cmd(app: &tauri::AppHandle) -> Option<(String, Vec<String>)> {
-    let resource_dir = app.path().resource_dir().ok()?;
-    let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
-
-    if bundled_exe.exists() {
+    // Dev mode: always use python + project root, regardless of bundled exe
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.join("..").join("..");
+        let data_dir = project_root.join(".ai-code-agent");
         return Some((
-            bundled_exe.to_string_lossy().to_string(),
-            vec!["--ws".to_string(), "--port".to_string(), "18765".to_string()],
+            "python".to_string(),
+            vec![
+                "-m".to_string(),
+                "agentcore.main".to_string(),
+                "--ws".to_string(),
+                "--port".to_string(), "18765".to_string(),
+                "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
+            ],
         ));
     }
 
-    // Dev mode: resolve python + main.py relative to Cargo manifest
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let main_py = manifest_dir
-        .join("..")
-        .join("..")
-        .join("agentcore")
-        .join("main.py");
+    // Release mode: use bundled exe + ~/.ai-code-agent
+    let resource_dir = app.path().resource_dir().ok()?;
+    let bundled_exe = resource_dir.join("agentcore").join("agentcore.exe");
+
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let data_dir = PathBuf::from(&home).join(".ai-code-agent");
+
+    // Default CWD: last opened project, or home
+    let cwd = {
+        let projects_json = data_dir.join("store").join("projects.json");
+        let last_project = std::fs::read_to_string(&projects_json)
+            .ok()
+            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+            .and_then(|list| {
+                let mut sorted = list;
+                sorted.sort_by(|a, b| {
+                    let ta = a.get("last_opened").and_then(|v| v.as_str()).unwrap_or("");
+                    let tb = b.get("last_opened").and_then(|v| v.as_str()).unwrap_or("");
+                    tb.cmp(ta)
+                });
+                sorted.first()
+                    .and_then(|p| p.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| home.clone());
+        last_project
+    };
+
     Some((
-        "python".to_string(),
+        bundled_exe.to_string_lossy().to_string(),
         vec![
-            main_py.to_string_lossy().to_string(),
             "--ws".to_string(),
-            "--port".to_string(),
-            "18765".to_string(),
+            "--port".to_string(), "18765".to_string(),
+            "--data-dir".to_string(), data_dir.to_string_lossy().to_string(),
+            "--cwd".to_string(), cwd.to_string(),
         ],
     ))
 }
@@ -40,8 +71,17 @@ fn start_python(app: &tauri::AppHandle) -> Option<Child> {
     let (cmd, args) = get_backend_cmd(app)?;
     println!("[tauri] Starting backend: {} {:?}", cmd, args);
 
-    match Command::new(&cmd)
-        .args(&args)
+    let mut command = Command::new(&cmd);
+    command.args(&args);
+
+    // In dev mode, run from project root
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.join("..").join("..");
+        command.current_dir(project_root);
+    }
+
+    match command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -108,6 +148,7 @@ fn restart_python(app: &tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(PythonBackend(Mutex::new(None)))
         .setup(|app| {
             // Build native menu

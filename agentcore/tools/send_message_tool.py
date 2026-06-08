@@ -35,7 +35,7 @@ class SendMessageTool(Tool):
     async def call(self, input: dict, context: ToolContext) -> str:
         to = input["to"]
         message = input["message"]
-        print(f"[SendMessage] {self._from_id} → {to}: {message[:100]}", flush=True)
+        print(f"[SendMessage] {self._from_id} -> {to}: {message[:100]}", flush=True)
         try:
             await self._manager.send_message_to_agent(self._from_id, to, message)
             print(f"[SendMessage] delivered to {to}", flush=True)
