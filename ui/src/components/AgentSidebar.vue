@@ -1,42 +1,47 @@
 <template>
-  <div :class="['agent-sidebar', { collapsed }]">
-    <button class="toggle-btn" @click="collapsed = !collapsed" :title="collapsed ? 'Expand' : 'Collapse'">
+  <div class="border-r border-t border-border-default bg-surface-1 flex flex-col transition-[width,min-width] duration-200 ease-in-out overflow-hidden"
+       :class="collapsed ? 'w-[36px] min-w-[36px] p-[12px_0] items-center' : 'w-[160px] min-w-[160px]'">
+    <button class="bg-transparent border-none cursor-pointer text-xs text-text-muted p-1 flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-surface-2 hover:text-accent"
+            @click="collapsed = !collapsed" :title="collapsed ? 'Expand' : 'Collapse'">
       {{ collapsed ? '▶' : '◀' }}
     </button>
 
     <template v-if="!collapsed">
-      <div class="sidebar-header">
-        <h3>Agents</h3>
-        <button class="btn-spawn" @click="showSpawn = true" title="Spawn">+</button>
-      </div>
-      <div class="agent-list">
-        <div v-for="agent in agentStore.agents" :key="agent.id"
-             :class="['agent-item', { active: agent.id === agentStore.activeAgentId }]"
-             @click="switchTo(agent.id)">
-          <div class="agent-info">
-            <span class="agent-name">{{ agent.name }}</span>
-            <div class="agent-meta">
-              <span v-if="agent.id === 'master'" class="agent-subtitle">主 Agent</span>
-              <span v-if="agent.est_tokens" class="agent-tokens">~{{ agent.est_tokens }}t</span>
+      <div class="p-[12px] flex flex-col flex-1 overflow-y-auto">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-sm text-text-primary font-semibold">Agents</h3>
+          <button class="w-[22px] h-[22px] rounded-[5px] border border-border-default bg-transparent cursor-pointer text-sm text-accent flex-shrink-0 hover:bg-surface-2" @click="showSpawn = true" title="Spawn">+</button>
+        </div>
+        <div class="flex-1">
+          <div v-for="agent in agentStore.agents" :key="agent.id"
+               class="flex justify-between items-center p-[6px_8px] rounded-md cursor-pointer text-[13px] hover:bg-surface-2"
+               :class="{ 'bg-accent-subtle': agent.id === agentStore.activeAgentId }"
+               @click="switchTo(agent.id)">
+            <div class="flex flex-col min-w-0">
+              <span class="font-medium text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.name }}</span>
+              <div class="flex items-center gap-[6px] mt-px">
+                <span v-if="agent.id === 'master'" class="text-[11px] text-text-muted">主 Agent</span>
+                <span v-if="agent.est_tokens" class="text-[11px] text-accent">~{{ agent.est_tokens }}t</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <span class="w-2 h-2 rounded flex-shrink-0" :style="{ backgroundColor: statusColor(agent.status) }"></span>
+              <button v-if="agent.id !== 'master'" class="bg-transparent border-none text-text-muted cursor-pointer text-sm px-0.5 hover:text-danger" @click.stop="kill(agent.id)" title="Kill">&times;</button>
             </div>
           </div>
-          <div class="agent-right">
-            <span class="agent-status" :style="{ backgroundColor: statusColor(agent.status) }"></span>
-            <button v-if="agent.id !== 'master'" class="btn-kill" @click.stop="kill(agent.id)" title="Kill">&times;</button>
-          </div>
         </div>
+        <div v-if="!agentStore.agents.length" class="text-text-muted text-[13px] p-2">No agents</div>
       </div>
-      <div v-if="!agentStore.agents.length" class="agent-empty">No agents</div>
 
       <!-- Spawn dialog -->
-      <div v-if="showSpawn" class="spawn-overlay" @click.self="showSpawn = false">
-        <div class="spawn-dialog">
-          <h4>Spawn Agent</h4>
-          <input v-model="spawnName" placeholder="Agent name" class="spawn-input" />
-          <textarea v-model="spawnPrompt" placeholder="Task prompt..." class="spawn-textarea" rows="3"></textarea>
-          <div class="spawn-actions">
-            <button class="btn-go" @click="spawn" :disabled="!spawnName.trim() || !spawnPrompt.trim()">Go</button>
-            <button class="btn-cancel" @click="showSpawn = false">Cancel</button>
+      <div v-if="showSpawn" class="fixed inset-0 bg-black/20 flex items-center justify-center z-[200]" @click.self="showSpawn = false">
+        <div class="bg-surface-1 rounded-[10px] p-5 min-w-[300px] shadow-dialog">
+          <h4 class="text-sm font-semibold mb-3 text-text-primary">Spawn Agent</h4>
+          <input v-model="spawnName" placeholder="Agent name" class="w-full p-[6px_10px] border border-border-default rounded-md text-sm mb-2 outline-none font-sans box-border bg-surface-2 text-text-primary placeholder:text-text-muted focus:border-accent" />
+          <textarea v-model="spawnPrompt" placeholder="Task prompt..." class="w-full p-[6px_10px] border border-border-default rounded-md text-sm mb-2 outline-none font-sans box-border bg-surface-2 text-text-primary placeholder:text-text-muted focus:border-accent resize-none" rows="3"></textarea>
+          <div class="flex gap-2 justify-end">
+            <button class="px-4 py-[6px] border-none rounded-md bg-accent text-white cursor-pointer text-[13px] disabled:bg-accent-muted disabled:cursor-not-allowed" @click="spawn" :disabled="!spawnName.trim() || !spawnPrompt.trim()">Go</button>
+            <button class="px-4 py-[6px] border border-border-default rounded-md bg-transparent cursor-pointer text-[13px] text-text-primary hover:bg-surface-2" @click="showSpawn = false">Cancel</button>
           </div>
         </div>
       </div>
@@ -85,62 +90,3 @@ function kill(id: string) {
   agentWs.send({ type: 'kill_agent', agent_id: id });
 }
 </script>
-
-<style scoped>
-.agent-sidebar {
-  width: 160px; min-width: 160px;
-  border-right: 1px solid #F1F3F6; background: #FAFBFC;
-  padding: 12px; display: flex; flex-direction: column;
-  transition: width 0.2s ease, min-width 0.2s ease;
-  overflow: hidden;
-}
-.agent-sidebar.collapsed {
-  width: 36px; min-width: 36px;
-  padding: 12px 0;
-  align-items: center;
-}
-
-.toggle-btn {
-  background: none; border: none; cursor: pointer;
-  font-size: 12px; color: #94A3B8; padding: 4px;
-  flex-shrink: 0;
-  width: 20px; height: 20px; display: flex;
-  align-items: center; justify-content: center;
-  border-radius: 4px;
-}
-.toggle-btn:hover { background: #F1F3F6; color: #6366F1; }
-
-.sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.sidebar-header h3 { font-size: 14px; color: #1E1B3A; }
-.btn-spawn { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #E2E6EC; background: white; cursor: pointer; font-size: 14px; color: #6366F1; flex-shrink: 0; }
-
-.agent-item {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px;
-}
-.agent-item:hover { background: #F1F3F6; }
-.agent-item.active { background: #EBF5FF; }
-
-.agent-info { display: flex; flex-direction: column; min-width: 0; }
-.agent-name { font-weight: 500; color: #1E1B3A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agent-meta { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
-.agent-subtitle { font-size: 11px; color: #94A3B8; }
-.agent-tokens { font-size: 11px; color: #A5B4FC; }
-
-.agent-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.agent-status { width: 8px; height: 8px; border-radius: 4px; flex-shrink: 0; }
-
-.btn-kill { background: none; border: none; color: #94A3B8; cursor: pointer; font-size: 14px; padding: 0 2px; }
-.btn-kill:hover { color: #EF4444; }
-.agent-empty { color: #94A3B8; font-size: 13px; padding: 8px; }
-
-.spawn-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.spawn-dialog { background: white; border-radius: 10px; padding: 20px; min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-.spawn-dialog h4 { font-size: 15px; margin-bottom: 12px; }
-.spawn-input, .spawn-textarea { width: 100%; padding: 6px 10px; border: 1px solid #E2E6EC; border-radius: 6px; font-size: 14px; margin-bottom: 8px; outline: none; font-family: inherit; box-sizing: border-box; }
-.spawn-input:focus, .spawn-textarea:focus { border-color: #6366F1; }
-.spawn-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.btn-go { padding: 6px 16px; border: none; border-radius: 6px; background: #6366F1; color: white; cursor: pointer; font-size: 13px; }
-.btn-go:disabled { background: #A5B4FC; cursor: not-allowed; }
-.btn-cancel { padding: 6px 16px; border: 1px solid #E2E6EC; border-radius: 6px; background: white; cursor: pointer; font-size: 13px; }
-</style>

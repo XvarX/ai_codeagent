@@ -1,25 +1,27 @@
 <template>
-  <div class="app-layout">
-    <header class="app-header">
-      <button class="sidebar-toggle" @click="showSidebar = !showSidebar">&#9776;</button>
-      <button class="project-btn" @click="showProjectPicker = true">
+  <div class="flex flex-col h-screen bg-surface-0">
+    <header class="flex items-center h-10 px-3 border-b border-border-default bg-surface-1 gap-2">
+      <button class="bg-transparent border-none text-lg cursor-pointer p-1 text-text-primary" @click="showSidebar = !showSidebar">&#9776;</button>
+      <button class="bg-transparent border border-border-default rounded-md px-[10px] py-1 cursor-pointer text-sm text-accent hover:bg-surface-2" @click="showProjectPicker = true">
         {{ sessionStore.currentProjectName || '选择项目' }}
       </button>
-      <span class="app-title">{{ agentStore.provider }} / {{ agentStore.model }}</span>
-      <div class="header-actions">
-        <button @click="showSkill = true">技能</button>
-        <button @click="showMcp = true">MCP</button>
-        <button @click="showConfig = true">配置</button>
-        <button @click="onClear">清理</button>
-        <button @click="debugStore.open = !debugStore.open">调试</button>
+      <span class="text-sm text-text-secondary flex-1">{{ agentStore.provider }} / {{ agentStore.model }}</span>
+      <div class="flex gap-1">
+        <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="showSkill = true">技能</button>
+        <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="showMcp = true">MCP</button>
+        <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="showConfig = true">配置</button>
+        <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="onClear">清理</button>
+        <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="debugStore.open = !debugStore.open">调试</button>
       </div>
     </header>
-    <div class="app-body">
-      <div v-if="showSidebar" class="left-sidebar">
+    <div class="flex flex-1 overflow-hidden">
+      <div v-if="showSidebar" class="flex flex-col border-r border-border-default bg-surface-1 min-w-[200px] max-w-[260px]">
         <SessionList @showMore="showAllSessions = true" />
-        <AgentSidebar />
       </div>
-      <ChatView class="chat-main" />
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <ChatView class="flex-1" />
+        <AgentPanel />
+      </div>
       <DebugDrawer v-if="debugStore.open" />
     </div>
     <InputBar />
@@ -44,7 +46,7 @@ import AllSessionsDialog from './components/AllSessionsDialog.vue';
 import ChatView from './components/ChatView.vue';
 import InputBar from './components/InputBar.vue';
 import DebugDrawer from './components/DebugDrawer.vue';
-import AgentSidebar from './components/AgentSidebar.vue';
+import AgentPanel from './components/AgentPanel.vue';
 import ConfigDialog from './components/ConfigDialog.vue';
 import McpDialog from './components/McpDialog.vue';
 import SkillDialog from './components/SkillDialog.vue';
@@ -231,20 +233,3 @@ onMounted(() => {
 
 onUnmounted(() => agentWs.disconnect());
 </script>
-
-<style>
-/* Global styles */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1E1B3A; background: #FAFBFC; }
-.app-layout { display: flex; flex-direction: column; height: 100vh; }
-.app-header { display: flex; align-items: center; padding: 0 12px; height: 40px; border-bottom: 1px solid #F1F3F6; background: white; gap: 8px; }
-.sidebar-toggle { background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px; }
-.app-title { font-size: 15px; color: #64748B; flex: 1; }
-.header-actions { display: flex; gap: 4px; }
-.header-actions button { background: none; border: 1px solid #E2E6EC; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 14px; }
-.app-body { display: flex; flex: 1; overflow: hidden; }
-.chat-main { flex: 1; }
-.project-btn { background: none; border: 1px solid #E2E6EC; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 14px; color: #6366F1; }
-.project-btn:hover { background: #F1F3F6; }
-.left-sidebar { display: flex; flex-direction: column; border-right: 1px solid #F1F3F6; background: #FAFBFC; min-width: 200px; max-width: 260px; }
-</style>

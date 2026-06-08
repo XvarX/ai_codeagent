@@ -1,15 +1,67 @@
-/* Base reset — app layout handles its own styling */
-:root {
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@import "tailwindcss";
+
+/* ===== Light Theme Design Tokens ===== */
+@theme {
+  /* Surface stack (lightest -> darkest) */
+  --color-surface-0: #FFFFFF;
+  --color-surface-1: #F8F9FA;
+  --color-surface-2: #F1F3F5;
+  --color-surface-3: #E9ECEF;
+  --color-surface-4: #DEE2E6;
+
+  /* Accent (indigo) */
+  --color-accent: #6366F1;
+  --color-accent-hover: #5558E8;
+  --color-accent-muted: #A5B4FC;
+  --color-accent-subtle: #EEF2FF;
+  --color-accent-glow: rgba(99, 102, 241, 0.15);
+
+  /* Success */
+  --color-success: #22C55E;
+  --color-success-subtle: #DCFCE7;
+
+  /* Danger */
+  --color-danger: #EF4444;
+  --color-danger-subtle: #FEE2E2;
+
+  /* Warning */
+  --color-warning: #F59E0B;
+  --color-warning-subtle: #FEF3C7;
+
+  /* Info */
+  --color-info: #3B82F6;
+
+  /* Text hierarchy */
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #495057;
+  --color-text-muted: #868E96;
+
+  /* Border */
+  --color-border-default: #DEE2E6;
+  --color-border-subtle: #E9ECEF;
+
+  /* Typography */
+  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+
+  /* Shadows */
+  --shadow-dialog: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ===== Global Base ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font: 18px/145% var(--sans);
+  font: 18px/145% var(--font-sans);
   letter-spacing: 0.18px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-surface-0);
+  color: var(--color-text-primary);
 }
 
 #app {
@@ -19,5 +71,16 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
+}
+
+/* Scrollbar (WebKit) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--color-surface-1); }
+::-webkit-scrollbar-thumb { background: var(--color-surface-4); border-radius: 12px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* Selection color */
+::selection {
+  background: var(--color-accent-glow);
+  color: var(--color-text-primary);
 }
