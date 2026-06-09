@@ -302,6 +302,7 @@ class Agent:
 
             # 2. Termination check — mirrors query.ts:1062
             if not tool_use_blocks:
+                self._flush_messages()
                 return assistant_msg.content or "(no response)"
 
             # 3. Execute tools — mirrors query.ts:1366
@@ -342,6 +343,7 @@ class Agent:
                 ))
                 self._persist_message(self.messages[-1])
 
+        self._flush_messages()
         return "Agent: max turns reached without completing the task."
 
     def est_tokens(self) -> int:
@@ -360,6 +362,21 @@ class Agent:
         """Append a message to the session store if configured."""
         if not self._session_store or not self._session_id:
             return
+        msg_dict = self._message_to_dict(message)
+        self._session_store.append_message(
+            self._session_project, self._session_id, msg_dict
+        )
+
+    def _flush_messages(self):
+        """Overwrite all persisted messages with current state (includes diffs)."""
+        if not self._session_store or not self._session_id:
+            return
+        all_dicts = [self._message_to_dict(m) for m in self.messages]
+        self._session_store.overwrite_messages(
+            self._session_project, self._session_id, all_dicts
+        )
+
+    def _message_to_dict(self, message) -> dict:
         msg_dict = {
             "role": message.role,
             "content": message.content or "",
@@ -377,9 +394,7 @@ class Agent:
             msg_dict["usage"] = message.usage
         if message.diffs:
             msg_dict["diffs"] = message.diffs
-        self._session_store.append_message(
-            self._session_project, self._session_id, msg_dict
-        )
+        return msg_dict
 
     def _persist_llm_log(self, raw_response: dict):
         """Log LLM request/response details."""
