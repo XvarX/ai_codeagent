@@ -756,6 +756,7 @@ class Agent:
                 if tool is None:
                     result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                     is_error = True
+                    duration_ms = 0
                 else:
                     import time
                     t0 = time.time()
