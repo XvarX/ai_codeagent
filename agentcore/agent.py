@@ -1,5 +1,6 @@
 """Agent core loop — mirrors query.ts while(true) with needsFollowUp termination."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Callable, Awaitable
@@ -20,6 +21,51 @@ OnToolCall = Callable[[str, dict], Awaitable[None]]
 OnToolResult = Callable[[str, str, bool], Awaitable[None]]
 OnResponse = Callable[[str, list, dict], Awaitable[None]]  # text, tool_use_blocks, raw_response
 OnCompact = Callable[[int, int, str], Awaitable[None]]  # pre_tokens, post_tokens, trigger
+
+
+async def _execute_single_tool(block, registry, context, cwd):
+    """Execute one tool call, returning (result_text, is_error)."""
+    tool = registry.get(block.tool_name)
+    if tool is None:
+        return json.dumps({"error": f"Unknown tool: {block.tool_name}"}), True
+    try:
+        result_text = await tool.call(block.input, context)
+        from agentcore.tools.tool_result_storage import process_tool_result_block
+        result_text = process_tool_result_block(
+            result_text, tool.name, block.tool_use_id,
+            getattr(tool, 'max_result_chars', None), cwd,
+        )
+        return result_text, False
+    except Exception as e:
+        return f"Tool error: {e}", True
+
+
+def _partition_tool_calls(blocks, registry):
+    """Partition tool calls into concurrent-safe and serial batches.
+    Mirrors partitionToolCalls() from toolOrchestration.ts.
+    """
+    batches = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        tool = registry.get(block.tool_name)
+        if tool and tool.is_concurrency_safe():
+            # Collect consecutive read-only tools
+            concurrent_blocks = [block]
+            j = i + 1
+            while j < len(blocks):
+                next_tool = registry.get(blocks[j].tool_name)
+                if next_tool and next_tool.is_concurrency_safe():
+                    concurrent_blocks.append(blocks[j])
+                    j += 1
+                else:
+                    break
+            batches.append({"concurrent": True, "blocks": concurrent_blocks})
+            i = j
+        else:
+            batches.append({"concurrent": False, "blocks": [block]})
+            i += 1
+    return batches
 
 
 class Agent:
@@ -301,43 +347,39 @@ class Agent:
                 self._flush_messages()
                 return assistant_msg.content or "(no response)"
 
-            # 3. Execute tools — mirrors query.ts:1366
+            # 3. Execute tools — mirrors query.ts:1366 + toolOrchestration.ts
             context = ToolContext(cwd=self.cwd, messages=list(self.messages))
-            for block in tool_use_blocks:
-                if self.on_tool_call:
-                    await self.on_tool_call(block.tool_name, block.input)
-
-                tool = self.registry.get(block.tool_name)
-                if tool is None:
-                    result_text = json.dumps({
-                        "error": f"Unknown tool: {block.tool_name}"
-                    })
-                    is_error = True
+            for batch in _partition_tool_calls(tool_use_blocks, self.registry):
+                if batch["concurrent"]:
+                    results = await asyncio.gather(*[
+                        _execute_single_tool(block, self.registry, context, self.cwd)
+                        for block in batch["blocks"]
+                    ])
+                    for block, (result_text, is_error) in zip(batch["blocks"], results):
+                        if self.on_tool_call:
+                            await self.on_tool_call(block.tool_name, block.input)
+                        if self.on_tool_result:
+                            await self.on_tool_result(block.tool_name, result_text, is_error)
+                        self.messages.append(Message(
+                            role="user",
+                            content=result_text,
+                            tool_use_id=block.tool_use_id,
+                        ))
+                        self._persist_message(self.messages[-1])
                 else:
-                    try:
-                        result_text = await tool.call(block.input, context)
-                        is_error = False
-                        # Layer 1: Per-tool persistence threshold
-                        result_text = process_tool_result_block(
-                            result_text,
-                            tool.name,
-                            block.tool_use_id,
-                            getattr(tool, 'max_result_chars', None),
-                            self.cwd,
-                        )
-                    except Exception as e:
-                        result_text = f"Tool error: {e}"
-                        is_error = True
-
-                if self.on_tool_result:
-                    await self.on_tool_result(block.tool_name, result_text, is_error)
-
-                self.messages.append(Message(
-                    role="user",
-                    content=result_text,
-                    tool_use_id=block.tool_use_id,
-                ))
-                self._persist_message(self.messages[-1])
+                    for block in batch["blocks"]:
+                        if self.on_tool_call:
+                            await self.on_tool_call(block.tool_name, block.input)
+                        result_text, is_error = await _execute_single_tool(
+                            block, self.registry, context, self.cwd)
+                        if self.on_tool_result:
+                            await self.on_tool_result(block.tool_name, result_text, is_error)
+                        self.messages.append(Message(
+                            role="user",
+                            content=result_text,
+                            tool_use_id=block.tool_use_id,
+                        ))
+                        self._persist_message(self.messages[-1])
 
         self._flush_messages()
         return "Agent: max turns reached without completing the task."

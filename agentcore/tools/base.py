@@ -38,6 +38,10 @@ class Tool(ABC):
     def is_read_only(self) -> bool:
         return False
 
+    def is_concurrency_safe(self) -> bool:
+        """Read-only tools without side effects can run concurrently. Default: False."""
+        return self.is_read_only()
+
     def get_schema(self) -> dict[str, Any]:
         """Serialize to API-compatible JSON Schema (mirrors toolToAPISchema)."""
         return {

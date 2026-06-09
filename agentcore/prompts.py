@@ -51,34 +51,39 @@ def _get_using_your_tools_section(tool_names: list[str]) -> str:
     lines = [
         "# Using your tools",
         "",
-        "You have access to a set of tools for file operations and system commands.",
-        "Prefer dedicated tools over Bash when available:",
+        "Do NOT use Bash to run commands when a relevant dedicated tool is provided. "
+        "Using dedicated tools allows the user to better understand and review your work. "
+        "This is CRITICAL to assisting the user:",
         "",
     ]
 
-    tool_guidance = {
-        "FileRead": "To read files use FileRead instead of cat, head, or tail",
-        "FileEdit": "To edit files use FileEdit instead of sed or awk",
-        "FileWrite": "To create files use FileWrite instead of cat with heredoc or echo redirection",
-        "Glob": "To search for files by pattern use Glob instead of find",
-        "Grep": "To search file contents use Grep instead of grep or rg",
-        "Bash": (
-            "Use Bash for shell commands: ls/dir (list directory), mkdir, cd, "
-            "git, npm, pip, python, and other terminal operations. "
-            "If there is a relevant dedicated tool, prefer it over Bash."
-        ),
-    }
+    tool_names_set = set(tool_names)
 
-    for name in tool_names:
-        if name in tool_guidance:
-            lines.append(f"- {tool_guidance[name]}")
+    if "FileRead" in tool_names_set:
+        lines.append("- To read files use FileRead instead of cat, head, tail, or sed")
+    if "FileEdit" in tool_names_set:
+        lines.append("- To edit files use FileEdit instead of sed or awk")
+    if "FileWrite" in tool_names_set:
+        lines.append("- To create files use FileWrite instead of cat with heredoc or echo redirection")
+    if "Glob" in tool_names_set:
+        lines.append("- To search for files by name use Glob instead of find or ls")
+    if "Grep" in tool_names_set:
+        lines.append("- To search file contents use Grep instead of grep or rg")
+    if "Bash" in tool_names_set:
+        lines.append(
+            "- Reserve using Bash exclusively for system commands and terminal operations "
+            "that require shell execution. If you are unsure and there is a relevant "
+            "dedicated tool, default to using the dedicated tool and only fallback on "
+            "Bash if it is absolutely necessary."
+        )
 
-    lines.extend([
-        "",
-        "You can call multiple tools in a single response. When there are no "
-        "dependencies between them, make all independent tool calls in parallel. "
-        "If some tool calls depend on previous calls, run them sequentially instead.",
-    ])
+    lines.append("")
+    lines.append(
+        "You can call multiple tools in a single response. If you intend to call "
+        "multiple tools and there are no dependencies between them, make all "
+        "independent tool calls in parallel. Maximize use of parallel tool calls "
+        "where possible to increase efficiency."
+    )
 
     return "\n".join(lines)
 
