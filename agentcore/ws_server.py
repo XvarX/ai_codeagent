@@ -1012,13 +1012,14 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.handler._session_manager = session_mgr
                     # Send initial system debug events
+                    slot_config = slot.agent_manager.agents["master"].controller.config
                     registry = slot.agent_manager.agents["master"].controller.registry
                     await slot.handler._send_debug(
                         "[System]",
-                        f"Provider: {session_mgr._config.provider}  |  Model: {session_mgr._config.model or 'default'}\n"
+                        f"Provider: {slot_config.provider}  |  Model: {slot_config.model or 'default'}\n"
                         f"Tools: {', '.join(registry.get_tool_names())}\n"
-                        f"CWD: {session_mgr._config.cwd or Path.cwd()}\n"
-                        f"Hash: {dd.project_hash(str(session_mgr._config.cwd or Path.cwd()))}",
+                        f"CWD: {slot_config.cwd or Path.cwd()}\n"
+                        f"Hash: {dd.project_hash(str(slot_config.cwd or Path.cwd()))}",
                         "#569cd6")
                     await slot.handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
                 await websocket.send(json.dumps({

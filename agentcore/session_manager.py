@@ -44,9 +44,11 @@ class SessionManager:
         from agentcore.agent_definitions import load_user_agents
         from agentcore.ws_server import WsEventHandler
         import asyncio
+        from dataclasses import replace
 
-        user_agents = load_user_agents(self._config.cwd)
-        mgr = AgentManager(self._config, user_agents)
+        config = replace(self._config, cwd=project_path)
+        user_agents = load_user_agents(config.cwd)
+        mgr = AgentManager(config, user_agents)
 
         # Connect MCP for master
         master_state = mgr.agents["master"]
@@ -114,9 +116,11 @@ class SessionManager:
         from agentcore.agent_definitions import load_user_agents
         from agentcore.ws_server import WsEventHandler
         import asyncio
+        from dataclasses import replace
 
-        user_agents = load_user_agents(self._config.cwd)
-        mgr = AgentManager(self._config, user_agents)
+        config = replace(self._config, cwd=project_path)
+        user_agents = load_user_agents(config.cwd)
+        mgr = AgentManager(config, user_agents)
 
         master_state = mgr.agents["master"]
         await master_state.controller.connect_mcp()
