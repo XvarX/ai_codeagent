@@ -11,9 +11,17 @@ from .grep import _find_rg
 MAX_RESULTS = 100
 
 
+def _to_relative_g(file_path: str, cwd: str) -> str:
+    """Convert absolute path to relative (vs cwd)."""
+    try:
+        return str(Path(file_path).relative_to(Path(cwd)))
+    except (ValueError, TypeError):
+        return file_path
+
+
 class GlobTool(Tool):
     name = "Glob"
-    max_result_chars = 50_000
+    max_result_chars = 100_000
 
     description = (
         "- Fast file pattern matching tool that works with any codebase size\n"
@@ -94,6 +102,10 @@ class GlobTool(Tool):
         num_files = len(filenames)
         if num_files == 0:
             return "No files found"
+
+        # Convert absolute paths to relative
+        cwd_str = str(context.cwd)
+        filenames = [_to_relative_g(f, cwd_str) for f in filenames]
 
         truncated = num_files > MAX_RESULTS
         filenames = filenames[:MAX_RESULTS]

@@ -10,6 +10,11 @@ from .base import Tool, ToolContext
 
 _RG_PATH: str | None = None
 
+VCS_EXCLUDES = [
+    "!.git/*", "!.svn/*", "!.hg/*", "!.bzr/*",
+    "!.jj/*", "!.sl/*",
+]
+
 
 def _find_rg() -> str:
     """Find ripgrep binary. Checks env, bundled, and system PATH."""
@@ -48,7 +53,7 @@ HEAD_LIMIT_DEFAULT = 250
 
 class GrepTool(Tool):
     name = "Grep"
-    max_result_chars = 200_000
+    max_result_chars = 20_000
 
     description = (
         "A powerful search tool built on ripgrep\n\n"
@@ -154,20 +159,24 @@ class GrepTool(Tool):
         except RuntimeError as e:
             return f"Error: {e}"
 
-        cmd = [rg, "--json", "--no-heading", "--no-config", "--no-ignore-global"]
+        cmd = [rg, "--no-config", "--no-ignore-global", "--hidden",
+               "--max-columns", "500", "--max-columns-preview"]
+
+        # VCS directory exclusion
+        for excl in VCS_EXCLUDES:
+            cmd.extend(["--iglob", excl])
 
         # Mode
         if output_mode == "files_with_matches":
-            cmd.extend(["--files-with-matches"])
+            cmd.extend(["--files-with-matches", "--sort", "modified"])
         elif output_mode == "count":
             cmd.extend(["--count"])
         else:
-            # content mode: line numbers on by default
             cmd.extend(["--no-heading", "--with-filename"])
             show_line_numbers = True
             if "-n" in input and input["-n"] is False:
                 show_line_numbers = False
-            if output_mode == "content" and show_line_numbers:
+            if show_line_numbers:
                 cmd.append("--line-number")
 
         # Context lines
@@ -190,17 +199,18 @@ class GrepTool(Tool):
         if file_type:
             cmd.extend(["--type", file_type])
 
-        # Glob filter
+        # Glob filter — split by comma and whitespace (mirrors source)
         glob_pattern = input.get("glob")
         if glob_pattern:
-            cmd.extend(["--glob", glob_pattern])
+            for g in _split_glob(glob_pattern):
+                cmd.extend(["--glob", g])
 
         # Multiline
         if input.get("multiline"):
             cmd.append("--multiline-dotall")
 
-        # Pattern and path
-        cmd.extend(["--", pattern, search_path])
+        # Use -e for safe pattern handling, then path
+        cmd.extend(["-e", pattern, "--", search_path])
 
         try:
             proc = subprocess.run(
@@ -218,15 +228,15 @@ class GrepTool(Tool):
         if proc.returncode > 1:
             return f"Error in grep search: {proc.stderr.strip()}"
         if proc.returncode == 1:
-            # rg returns 1 when no matches
             if output_mode == "files_with_matches":
                 return "No files found"
             return "No matches found"
 
         raw = proc.stdout
+        cwd_str = str(context.cwd)
 
         if output_mode == "files_with_matches":
-            filenames = [f.strip() for f in raw.splitlines() if f.strip()]
+            filenames = [_to_relative(f.strip(), cwd_str) for f in raw.splitlines() if f.strip()]
             num_files = len(filenames)
             if num_files == 0:
                 return "No files found"
@@ -246,7 +256,8 @@ class GrepTool(Tool):
                     total_matches += int(parts[-1])
                 except (ValueError, IndexError):
                     pass
-            applied_limit, applied_offset = _apply_pagination(lines, head_limit, offset, use_default_limit)
+            applied_limit, applied_offset = _apply_pagination(head_limit, offset, use_default_limit)
+            lines = [_to_relative(l, cwd_str) for l in lines]
             lines = lines[applied_offset:applied_offset + applied_limit] if applied_limit else lines[applied_offset:]
             limit_info = _format_limit_info(applied_limit if applied_limit > 0 else None, applied_offset if applied_offset > 0 else None)
             raw_content = "\n".join(lines)
@@ -258,15 +269,46 @@ class GrepTool(Tool):
             return raw_content + summary
 
         else:
-            # content mode
+            # content mode — rg with --line-number returns "file:line:content" format
+            # Strip line numbers from relative paths that contain ':' (e.g., "./foo/bar.py:42:text")
             lines = [l.strip() for l in raw.splitlines() if l.strip()]
-            applied_limit, applied_offset = _apply_pagination(lines, head_limit, offset, use_default_limit)
-            lines = lines[applied_offset:applied_offset + applied_limit] if applied_limit else lines[applied_offset:]
+            # Convert absolute paths to relative in output
+            rel_lines = []
+            for line in lines:
+                # rg output format: /abs/path/to/file:line_num:content
+                # Convert to: rel/path/to/file:line_num:content
+                if line.startswith(cwd_str):
+                    # Find the second colon (after path) to split path from line:content
+                    rel_path = _to_relative(line, cwd_str)
+                    # rel_path is "rel/path:line:content" already since only the prefix was replaced
+                    rel_lines.append(rel_path)
+                else:
+                    rel_lines.append(line)
+            applied_limit, applied_offset = _apply_pagination(head_limit, offset, use_default_limit)
+            rel_lines = rel_lines[applied_offset:applied_offset + applied_limit] if applied_limit else rel_lines[applied_offset:]
             limit_info = _format_limit_info(applied_limit if applied_limit > 0 else None, applied_offset if applied_offset > 0 else None)
-            result_content = "\n".join(lines) if lines else "No matches found"
+            result_content = "\n".join(rel_lines) if rel_lines else "No matches found"
             if limit_info:
                 result_content += f"\n\n[Showing results with pagination = {limit_info}]"
             return result_content
+
+
+def _split_glob(pattern: str) -> list[str]:
+    """Split glob pattern by comma/whitespace, respecting braces. Mirrors source."""
+    import re
+    parts = re.split(r",\s*|\s+", pattern)
+    return [p for p in parts if p]
+
+
+def _to_relative(file_path: str, cwd: str) -> str:
+    """Convert absolute path to relative (vs cwd)."""
+    try:
+        p = Path(file_path)
+        c = Path(cwd)
+        rel = p.relative_to(c)
+        return str(rel)
+    except (ValueError, TypeError):
+        return file_path
 
 
 def _format_limit_info(limit: int | None, ofs: int | None) -> str:
