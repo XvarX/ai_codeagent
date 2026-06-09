@@ -102,9 +102,7 @@ const activeAgent = computed(() => {
   return agentStore.agents.find(a => a.id === agentStore.activeAgentId) || null;
 });
 
-const activeDebugEvents = computed(() => {
-  // Debug events come through the debugStore; for agents, we use the agent-specific events
-  // For now, show an empty state since per-agent debug events aren't wired
+const activeDebugEvents = computed<{prefix: string; message: string; color: string}[]>(() => {
   return [];
 });
 
