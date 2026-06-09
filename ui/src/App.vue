@@ -114,7 +114,7 @@ onMounted(() => {
   agentWs.on('response_done', (d: any) => {
     const usage = d.raw?.usage || {};
     const total = usage.total_tokens || usage.totalTokens || 0;
-    debugStore.updateContextUsage(total, 128000);
+    debugStore.updateContextUsage(total);
     chatStore.updateUsage(total);
   });
   agentWs.on('context_usage', (d: any) => {

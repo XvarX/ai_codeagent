@@ -345,7 +345,8 @@ class WsEventHandler(EventHandler):
             usage = raw["raw_response"].get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
         completion_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0) or 0
-        total_tokens = usage.get("total_tokens", 0) or (prompt_tokens + completion_tokens)
+        total_tokens = usage.get("total_tokens", 0) or (
+            prompt_tokens + completion_tokens + usage.get("cache_creation_input_tokens", 0))
 
         pt_details = usage.get("prompt_tokens_details") or {}
         cache_read = pt_details.get("cached_tokens", 0) if isinstance(pt_details, dict) else 0
@@ -382,6 +383,7 @@ class WsEventHandler(EventHandler):
             "total_tokens": total_tokens,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "max_tokens": self._controller.agent.context_window,
         })
         # Backfill raw_json into [Request] entry
         if self._pending_request_data is not None:

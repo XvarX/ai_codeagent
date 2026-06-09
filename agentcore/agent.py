@@ -287,11 +287,7 @@ class Agent:
             self._persist_message(self.messages[-1])
 
             # Track actual token usage from API response
-            usage = raw_response.get("usage", {})
-            if usage.get("total_tokens"):
-                self._last_actual_tokens = usage["total_tokens"]
-            elif usage.get("input_tokens"):
-                self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            self._last_actual_tokens = self._compute_total_tokens(raw_response.get("usage", {}))
 
             if self.on_response:
                 await self.on_response(
@@ -349,6 +345,16 @@ class Agent:
     def est_tokens(self) -> int:
         from agentcore.compact.grouping import estimate_tokens
         return estimate_tokens(self.messages)
+
+    @staticmethod
+    def _compute_total_tokens(usage: dict) -> int:
+        """Compute total tokens including Anthropic cache_creation tokens."""
+        if usage.get("total_tokens"):
+            return usage["total_tokens"]
+        # Anthropic: input_tokens + output_tokens + cache_creation_input_tokens
+        total = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+        total += usage.get("cache_creation_input_tokens", 0)
+        return total
 
     def _reactive_compact(self):
         from agentcore.compact.grouping import group_by_api_round
@@ -523,10 +529,7 @@ class Agent:
                     elif isinstance(event, ResponseDoneEvent):
                         # Track actual token usage
                         usage = event.raw.get("usage", {})
-                        if usage.get("total_tokens"):
-                            self._last_actual_tokens = usage["total_tokens"]
-                        elif usage.get("input_tokens"):
-                            self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                        self._last_actual_tokens = self._compute_total_tokens(usage)
                         _last_response_id = event.raw.get("id")
                         _last_response_usage = event.raw.get("usage", {})
                         # Add assistant message now so debug grouping can find it
@@ -586,10 +589,7 @@ class Agent:
                                 yield event
                             elif isinstance(event, ResponseDoneEvent):
                                 usage = event.raw.get("usage", {})
-                                if usage.get("total_tokens"):
-                                    self._last_actual_tokens = usage["total_tokens"]
-                                elif usage.get("input_tokens"):
-                                    self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                                self._last_actual_tokens = self._compute_total_tokens(usage)
                                 _last_response_id = event.raw.get("id")
                                 _last_response_usage = event.raw.get("usage", {})
                                 _streaming_asst = Message(
