@@ -1,41 +1,41 @@
 <template>
-  <div class="diff-viewer">
-    <div class="diff-header" @click="open = !open">
-      <span class="arrow">{{ open ? '▼' : '▶' }}</span>
-      <span class="filename">{{ filename }}</span>
-      <span class="summary">+{{ added }} -{{ removed }}</span>
-      <span class="filepath">{{ filePath }}</span>
+  <div class="border border-border-subtle rounded-lg overflow-hidden my-2 font-mono">
+    <div class="flex items-center gap-[6px] p-[8px_10px] bg-surface-1 cursor-pointer select-none" @click="open = !open">
+      <span class="text-xs text-accent flex-shrink-0">{{ open ? '▼' : '▶' }}</span>
+      <span class="text-base font-semibold text-text-primary whitespace-nowrap">{{ filename }}</span>
+      <span class="font-mono text-sm text-text-secondary bg-surface-2 px-[6px] py-px rounded-sm flex-shrink-0">+{{ added }} -{{ removed }}</span>
+      <span class="text-sm text-text-muted overflow-hidden text-ellipsis whitespace-nowrap flex-1 min-w-0">{{ filePath }}</span>
     </div>
-    <div v-if="open" class="diff-body">
-      <div class="expand-row">
-        <button class="expand-all-btn" @click="expandAll">&#8691; Expand All</button>
+    <div v-if="open" class="border-t border-border-subtle">
+      <div class="flex justify-end p-[2px_6px]">
+        <button class="bg-transparent border-none font-mono text-sm text-text-secondary cursor-pointer py-0.5 px-2 hover:text-text-primary" @click="expandAll">&#8691; Expand All</button>
       </div>
-      <div class="diff-scroll">
+      <div class="max-h-[500px] overflow-y-auto">
         <template v-for="block in resolvedBlocks" :key="block.key">
           <div
             v-if="block.tag === 'fold'"
-            class="fold-row"
+            class="flex items-center justify-center gap-1 p-[3px_0] bg-surface-2 text-sm text-text-muted cursor-pointer select-none hover:bg-surface-3"
             @click="openFold(block.key)"
           >
             <span>{{ block.count }} lines unchanged</span>
-            <span class="fold-icon">&#8691;</span>
+            <span class="text-sm">&#8691;</span>
           </div>
           <template v-else>
             <div
               v-for="(row, ri) in blockRows(block)"
               :key="block.key + '-' + ri"
-              class="diff-row"
+              class="flex min-h-[26px]"
             >
-              <div :class="['diff-side', row.oldBgClass]">
-                <span class="line-num">{{ row.oldNum }}</span>
-                <span class="line-spacer"></span>
-                <span :class="['code-text', row.oldColorClass]">{{ row.oldText }}</span>
+              <div class="flex-1 flex items-stretch min-w-0 overflow-hidden" :class="bgClass(row.oldBgClass)">
+                <span class="w-[44px] min-w-[44px] text-right pr-1 font-mono text-[13px] text-text-muted leading-[26px] flex-shrink-0">{{ row.oldNum }}</span>
+                <span class="w-2 flex-shrink-0"></span>
+                <span class="font-mono text-sm leading-[26px] whitespace-pre overflow-hidden flex-1" :class="textClass(row.oldColorClass)">{{ row.oldText }}</span>
               </div>
-              <div class="diff-divider"></div>
-              <div :class="['diff-side', row.newBgClass]">
-                <span class="line-num">{{ row.newNum }}</span>
-                <span class="line-spacer"></span>
-                <span :class="['code-text', row.newColorClass]">{{ row.newText }}</span>
+              <div class="w-px bg-border-subtle flex-shrink-0"></div>
+              <div class="flex-1 flex items-stretch min-w-0 overflow-hidden" :class="bgClass(row.newBgClass)">
+                <span class="w-[44px] min-w-[44px] text-right pr-1 font-mono text-[13px] text-text-muted leading-[26px] flex-shrink-0">{{ row.newNum }}</span>
+                <span class="w-2 flex-shrink-0"></span>
+                <span class="font-mono text-sm leading-[26px] whitespace-pre overflow-hidden flex-1" :class="textClass(row.newColorClass)">{{ row.newText }}</span>
               </div>
             </div>
           </template>
@@ -305,160 +305,12 @@ function expandAll() {
     }
   }
 }
+
+function bgClass(cls: string) {
+  return { 'del-bg': 'bg-danger-subtle', 'add-bg': 'bg-success-subtle', 'eq-bg': 'bg-transparent' }[cls] || 'bg-transparent';
+}
+
+function textClass(cls: string) {
+  return { 'del-color': 'text-red-300', 'add-color': 'text-green-300', 'eq-color': 'text-text-secondary' }[cls] || 'text-text-secondary';
+}
 </script>
-
-<style scoped>
-.diff-viewer {
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 8px 0;
-  font-family: Consolas, monospace;
-}
-
-.diff-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: #F8F9FB;
-  cursor: pointer;
-  user-select: none;
-}
-
-.arrow {
-  font-size: 12px;
-  color: #6366F1;
-  flex-shrink: 0;
-}
-
-.filename {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1E1B3A;
-  white-space: nowrap;
-}
-
-.summary {
-  font-family: Consolas, monospace;
-  font-size: 15px;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 1px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.filepath {
-  font-size: 14px;
-  color: #94A3B8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.diff-body {
-  border-top: 1px solid #E2E8F0;
-}
-
-.expand-row {
-  display: flex;
-  justify-content: flex-end;
-  padding: 2px 6px;
-}
-
-.expand-all-btn {
-  background: none;
-  border: none;
-  font-family: Consolas, monospace;
-  font-size: 14px;
-  color: #64748B;
-  cursor: pointer;
-  padding: 2px 8px;
-}
-
-.expand-all-btn:hover {
-  color: #334155;
-}
-
-.diff-scroll {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.fold-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 3px 0;
-  background: #F1F5F9;
-  font-size: 14px;
-  color: #94A3B8;
-  cursor: pointer;
-  user-select: none;
-}
-
-.fold-row:hover {
-  background: #E2E8F0;
-}
-
-.fold-icon {
-  font-size: 14px;
-}
-
-.diff-row {
-  display: flex;
-  min-height: 26px;
-}
-
-.diff-side {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.diff-side.del-bg { background: #FEE2E2; }
-.diff-side.add-bg { background: #DCFCE7; }
-.diff-side.eq-bg { background: #FFFFFF; }
-
-.line-num {
-  width: 44px;
-  min-width: 44px;
-  text-align: right;
-  padding-right: 4px;
-  font-family: Consolas, monospace;
-  font-size: 13px;
-  color: #94A3B8;
-  line-height: 26px;
-  flex-shrink: 0;
-}
-
-.line-spacer {
-  width: 8px;
-  flex-shrink: 0;
-}
-
-.code-text {
-  font-family: Consolas, monospace;
-  font-size: 14px;
-  line-height: 26px;
-  white-space: pre;
-  overflow: hidden;
-  flex: 1;
-}
-
-.code-text.del-color { color: #991B1B; }
-.code-text.add-color { color: #166534; }
-.code-text.eq-color { color: #334155; }
-
-.diff-divider {
-  width: 1px;
-  background: #E2E8F0;
-  flex-shrink: 0;
-}
-</style>

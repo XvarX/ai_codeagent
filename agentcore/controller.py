@@ -20,6 +20,49 @@ from agentcore.events import (
 )
 
 
+def _update_agent_status(agent: Agent, status: str):
+    """Sync agent status to SubagentState for UI status dots."""
+    mgr = getattr(agent, '_agent_manager', None)
+    aid = getattr(agent, '_agent_id', None)
+    if mgr and aid and aid in mgr.agents:
+        mgr.agents[aid].status = status
+
+
+def _push_state_to_frontend(agent: Agent):
+    """Send agent_list + session_status through the handler's WebSocket."""
+    try:
+        mgr = getattr(agent, '_agent_manager', None)
+        if not mgr or not mgr.master_handler:
+            return
+        handler = mgr.master_handler
+        ws = getattr(handler, '_ws', None)
+        if ws is None:
+            return
+        import json
+        import asyncio
+        from agentcore.ws_server import _send_agent_list
+
+        async def _push():
+            await _send_agent_list(ws, mgr)
+            # Also push session_status
+            session_mgr = getattr(handler, '_session_manager', None)
+            if session_mgr:
+                session_id = getattr(handler, '_session_id', '')
+                if session_id:
+                    status = session_mgr.get_aggregate_status(session_id)
+                    try:
+                        await ws.send(json.dumps({
+                            "type": "session_status",
+                            "session_id": session_id,
+                            "status": status,
+                        }, ensure_ascii=False))
+                    except Exception:
+                        pass
+        asyncio.ensure_future(_push())
+    except Exception:
+        pass
+
+
 def _build_registry(cwd: str | None = None) -> tuple[ToolRegistry, str]:
     from agentcore.skills.loader import load_skills
     from agentcore.skills.skill_tool import SkillTool
@@ -116,6 +159,8 @@ class AgentController:
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
         self.agent._loop_running = True
+        _update_agent_status(self.agent, "running")
+        _push_state_to_frontend(self.agent)
 
         try:
             async for event in self.agent.run_stream(text):
@@ -157,6 +202,8 @@ class AgentController:
         finally:
             self._current_task = None
             self.agent._loop_running = False
+            _update_agent_status(self.agent, "idle")
+            _push_state_to_frontend(self.agent)
 
     async def cancel(self) -> None:
         self._cancel_event.set()

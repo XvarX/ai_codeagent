@@ -18,7 +18,7 @@ class InputBar(ft.Container):
             multiline=True,
             shift_enter=True,
             min_lines=1,
-            max_lines=6,
+            max_lines=12,
             border=ft.InputBorder.NONE,
             expand=True,
             bgcolor="transparent",

@@ -28,30 +28,41 @@ class AgentConfig:
     compact_threshold: float = 0.85
     reserved_output: int = 8000
     agent_presets: dict = field(default_factory=dict)
+    data_dir: str | None = None  # .ai-code-agent/ directory absolute path
 
     @classmethod
-    def from_yaml(cls, path: str | None = None) -> "AgentConfig":
+    def from_yaml(cls, path: str | None = None, data_dir: str | None = None) -> "AgentConfig":
         """Load configuration from a YAML file, with env vars as override."""
         import yaml
 
         cfg: dict = {}
 
-        # Find config file: next to exe (PyInstaller) > cwd > example
+        # Find config file: explicit path > data_dir > next to exe (PyInstaller) > cwd > example
         if path:
             config_path = Path(path)
+        elif data_dir:
+            # New path: .ai-code-agent/config.yaml
+            config_path = Path(data_dir) / "config.yaml"
         else:
-            # PyInstaller: look next to exe first
+            # Legacy: PyInstaller exe dir or cwd
             if getattr(sys, 'frozen', False):
                 exe_dir = Path(sys.executable).parent
                 config_path = exe_dir / "config.yaml"
+                if not config_path.exists():
+                    meipass = getattr(sys, '_MEIPASS', '')
+                    if meipass:
+                        meipass_path = Path(meipass) / "config.yaml"
+                        if meipass_path.exists():
+                            config_path = meipass_path
             else:
                 config_path = Path("config.yaml")
         if not config_path.exists():
+            # Initialize config at target path from example or defaults
             example = Path("config.example.yaml")
             if example.exists():
-                config_path = example
+                with open(example, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
             else:
-                # Auto-generate config with defaults
                 cfg = {
                     "provider": "anthropic",
                     "model": "claude-sonnet-4-6-20250514",
@@ -65,12 +76,28 @@ class AgentConfig:
                     "compact_thresholds": {},
                     "reserved_outputs": {},
                 }
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(config_path, "w", encoding="utf-8") as f:
-                    yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
+
+        # Two-level config merge: project-level .myagent/config.yaml overrides global
+        if data_dir:
+            project_cwd = os.environ.get("AGENT_CWD") or cfg.get("cwd")
+            if project_cwd:
+                project_config = Path(project_cwd) / ".myagent" / "config.yaml"
+                if project_config.exists():
+                    with open(project_config, "r", encoding="utf-8") as f:
+                        project_cfg = yaml.safe_load(f) or {}
+                    for key in ("provider", "model", "api_key", "api_keys",
+                                "base_url", "base_urls", "models",
+                                "context_window", "context_windows",
+                                "compact_threshold", "compact_thresholds",
+                                "reserved_output", "reserved_outputs"):
+                        if key in project_cfg:
+                            cfg[key] = project_cfg[key]
 
         # Provider
         provider = (
@@ -146,6 +173,7 @@ class AgentConfig:
             compact_threshold=compact_threshold,
             reserved_output=reserved_output,
             agent_presets=normalized_presets,
+            data_dir=data_dir,
         )
 
     def get_agent_provider_config(self, preset_name: str) -> dict | None:
@@ -159,7 +187,10 @@ class AgentConfig:
 
         provider = preset["provider"]
         import yaml
-        config_path = Path("config.yaml")
+        if self.data_dir:
+            config_path = Path(self.data_dir) / "config.yaml"
+        else:
+            config_path = Path("config.yaml")
         cfg = {}
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:

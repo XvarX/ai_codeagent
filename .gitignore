@@ -3,6 +3,7 @@ config.yaml
 
 # Local config
 .claude/
+.ai-code-agent/
 
 # Generated
 __pycache__/
@@ -18,4 +19,6 @@ logs/
 offline_deps/
 build/
 dist/
-*.spec
+# Tauri
+ui/src-tauri/target/
+ui/src-tauri/gen/

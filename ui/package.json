@@ -3,51 +3,29 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && tsc electron/main.ts --outDir dist-electron --module commonjs --target es2020 && electron-builder"
-  },
-  "build": {
-    "appId": "com.ai-codeagent.app",
-    "productName": "AI Code Agent",
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "../build/agentcore.exe",
-        "to": "agentcore.exe"
-      }
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "directories": {
-      "output": "../build/electron-release"
-    }
+    "tauri": "tauri"
   },
   "dependencies": {
-    "diff": "^9.0.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "marked": "^18.0.4",
     "pinia": "^3.0.4",
     "vue": "^3.5.34"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2",
     "@types/diff": "^7.0.2",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
-    "concurrently": "^10.0.3",
-    "electron": "^42.3.2",
-    "electron-builder": "^26.8.1",
+    "diff": "^9.0.0",
+    "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
-    "vue-tsc": "^3.2.8",
-    "wait-on": "^9.0.10"
+    "vue-tsc": "^3.2.8"
   }
 }

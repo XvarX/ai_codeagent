@@ -1,101 +1,99 @@
 <template>
   <Teleport to="body">
-    <div class="dialog-overlay" @click.self="onCancel">
-      <div class="dialog">
-        <h3>配置</h3>
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]" @click.self="onCancel">
+      <div class="bg-surface-1 rounded-xl p-6 min-w-[420px] max-w-[520px] max-h-[90vh] overflow-y-auto shadow-dialog">
+        <h3 class="mb-4 text-[17px] font-semibold text-text-primary">配置</h3>
 
-        <!-- Provider dropdown -->
-        <label class="field">
+        <label class="block mb-3 text-sm text-text-secondary">
           Provider
-          <select v-model="provider" @change="onProviderChange" class="input select-input">
+          <select v-model="provider" @change="onProviderChange" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1 cursor-pointer">
             <option v-for="p in providerList" :key="p" :value="p">{{ p }}</option>
           </select>
         </label>
 
-        <label class="field">
+        <label class="block mb-3 text-sm text-text-secondary">
           Model
-          <input v-model="model" class="input" placeholder="claude-sonnet-4-6-20250514" />
+          <input v-model="model" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1 placeholder:text-text-muted" placeholder="claude-sonnet-4-6-20250514" />
         </label>
 
-        <label class="field">
+        <label class="block mb-3 text-sm text-text-secondary">
           API Key
-          <div class="key-row">
-            <input v-model="apiKey" :type="showKey ? 'text' : 'password'" class="input" placeholder="Enter API key" />
-            <button class="eye-btn" @click="showKey = !showKey" :title="showKey ? '隐藏' : '显示'">{{ showKey ? '🙈' : '👁' }}</button>
+          <div class="flex mt-1 gap-0">
+            <input v-model="apiKey" :type="showKey ? 'text' : 'password'" class="flex-1 p-[7px_10px] border border-border-default rounded-l-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent placeholder:text-text-muted" placeholder="Enter API key" />
+            <button class="px-2 py-[6px] border border-l-0 border-border-default rounded-r-md bg-surface-2 cursor-pointer text-sm leading-none hover:bg-surface-3 text-text-secondary" @click="showKey = !showKey" :title="showKey ? '隐藏' : '显示'">{{ showKey ? '🙈' : '👁' }}</button>
           </div>
         </label>
 
-        <label class="field">
+        <label class="block mb-3 text-sm text-text-secondary">
           Base URL
-          <input v-model="baseUrl" class="input" placeholder="https://api.anthropic.com" />
+          <input v-model="baseUrl" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1 placeholder:text-text-muted" placeholder="https://api.anthropic.com" />
         </label>
 
-        <!-- Custom Provider -->
-        <div class="section">
-          <div class="section-header" @click="showAddProvider = !showAddProvider">
+        <div class="border-t border-border-subtle mt-3 pt-3">
+          <div class="flex justify-between items-center cursor-pointer select-none text-sm font-semibold text-text-primary hover:text-accent" @click="showAddProvider = !showAddProvider">
             <span>自定义 Provider</span>
-            <span class="chevron" v-html="showAddProvider ? '&#9660;' : '&#9654;'"></span>
+            <span class="text-xs text-text-muted" v-html="showAddProvider ? '&#9660;' : '&#9654;'"></span>
           </div>
-          <div v-if="showAddProvider" class="section-body">
-            <div class="add-provider-row">
-              <input v-model="newProviderName" class="input" placeholder="名称" />
-              <select v-model="newProviderType" class="input select-input" style="width: 110px; flex-shrink: 0;">
+          <div v-if="showAddProvider" class="pt-[10px]">
+            <div class="flex gap-[6px] items-start">
+              <input v-model="newProviderName" class="flex-1 p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent placeholder:text-text-muted" placeholder="名称" />
+              <select v-model="newProviderType" class="w-[110px] flex-shrink-0 p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent cursor-pointer">
                 <option v-for="t in builtinProviders" :key="t" :value="t">{{ t }}</option>
               </select>
-              <button class="btn-add" @click="addCustomProvider" :disabled="!newProviderName.trim()">添加</button>
+              <button class="px-3 py-[7px] border-none rounded-md bg-accent text-white cursor-pointer text-[13px] whitespace-nowrap flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover" @click="addCustomProvider" :disabled="!newProviderName.trim()">添加</button>
             </div>
-            <div v-if="customProviders.length" class="custom-list">
-              <div v-for="(cp, i) in customProviders" :key="i" class="custom-item">
-                <span class="custom-name">{{ cp.name }}</span>
-                <span class="custom-type">({{ cp.type }})</span>
-                <button class="btn-remove" @click="removeCustomProvider(i)">&times;</button>
+            <div v-if="customProviders.length" class="mt-2">
+              <div v-for="(cp, i) in customProviders" :key="i" class="flex items-center gap-[6px] p-[5px_8px] border border-border-subtle rounded-md mb-1 text-sm text-text-primary">
+                <span class="font-medium">{{ cp.name }}</span>
+                <span class="text-text-muted text-xs">({{ cp.type }})</span>
+                <button class="ml-auto bg-transparent border-none text-danger cursor-pointer text-base leading-none px-1 hover:text-red-400" @click="removeCustomProvider(i)">&times;</button>
               </div>
             </div>
-            <p v-else class="placeholder-text">暂无自定义 Provider</p>
+            <p v-else class="text-text-muted text-[13px] mt-2">暂无自定义 Provider</p>
           </div>
         </div>
 
-        <!-- Advanced Settings -->
-        <div class="section">
-          <div class="section-header" @click="showAdvanced = !showAdvanced">
+        <div class="border-t border-border-subtle mt-3 pt-3">
+          <div class="flex justify-between items-center cursor-pointer select-none text-sm font-semibold text-text-primary hover:text-accent" @click="showAdvanced = !showAdvanced">
             <span>高级设置</span>
-            <span class="chevron" v-html="showAdvanced ? '&#9660;' : '&#9654;'"></span>
+            <span class="text-xs text-text-muted" v-html="showAdvanced ? '&#9660;' : '&#9654;'"></span>
           </div>
-          <div v-if="showAdvanced" class="section-body">
-            <label class="field">
+          <div v-if="showAdvanced" class="pt-[10px]">
+            <label class="block mb-3 text-sm text-text-secondary">
               Context Window
-              <input v-model.number="contextWindow" type="number" class="input" min="1000" step="1000" />
+              <input v-model.number="contextWindow" type="number" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1" min="1000" step="1000" />
             </label>
-            <label class="field">
+            <label class="block mb-3 text-sm text-text-secondary">
               Compact Threshold
-              <input v-model.number="compactThreshold" type="number" class="input" min="0.1" max="1.0" step="0.05" />
-              <span class="field-hint">范围: 0.1 ~ 1.0</span>
+              <input v-model.number="compactThreshold" type="number" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1" min="0.1" max="1.0" step="0.05" />
+              <span class="block text-xs text-text-muted mt-0.5">范围: 0.1 ~ 1.0</span>
             </label>
-            <label class="field">
+            <label class="block mb-3 text-sm text-text-secondary">
               Reserved Output
-              <input v-model.number="reservedOutput" type="number" class="input" min="1000" step="500" />
+              <input v-model.number="reservedOutput" type="number" class="block w-full p-[7px_10px] border border-border-default rounded-md text-sm bg-surface-2 text-text-primary outline-none focus:border-accent mt-1" min="1000" step="500" />
             </label>
           </div>
         </div>
 
-        <!-- Delete provider -->
-        <div v-if="!confirmDelete" class="delete-section">
-          <button v-if="isBuiltinProvider" class="btn-danger btn-disabled" disabled>内置 Provider 不可删除</button>
-          <button v-else class="btn-danger" @click="confirmDelete = true">删除当前 Provider</button>
-        </div>
-        <div v-else class="delete-section confirm-delete">
-          <span class="confirm-text">确认删除 "{{ provider }}"？</span>
-          <div class="confirm-actions">
-            <button class="btn-save btn-danger-bg" @click="deleteProvider">确认</button>
-            <button class="btn-cancel" @click="confirmDelete = false">取消</button>
+        <div class="border-t border-border-subtle mt-3 pt-3">
+          <div v-if="!confirmDelete">
+            <button v-if="isBuiltinProvider" class="px-[14px] py-[6px] border border-border-default rounded-md bg-surface-2 text-text-muted cursor-not-allowed text-[13px] opacity-50" disabled>内置 Provider 不可删除</button>
+            <button v-else class="px-[14px] py-[6px] border border-red-900/30 rounded-md bg-danger-subtle text-danger cursor-pointer text-[13px] hover:bg-red-900/40" @click="confirmDelete = true">删除当前 Provider</button>
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <span class="text-sm text-danger font-medium">确认删除 "{{ provider }}"？</span>
+            <div class="flex gap-[6px]">
+              <button class="px-[14px] py-[6px] border-none rounded-md bg-danger text-white cursor-pointer text-[13px] hover:bg-red-600" @click="deleteProvider">确认</button>
+              <button class="px-[14px] py-[6px] border border-border-default rounded-md bg-transparent text-text-primary cursor-pointer text-[13px] hover:bg-surface-2" @click="confirmDelete = false">取消</button>
+            </div>
           </div>
         </div>
 
-        <p v-if="saved" class="saved-msg">已保存!</p>
+        <p v-if="saved" class="text-success text-sm my-2">已保存!</p>
 
-        <div class="dialog-actions">
-          <button class="btn-save" @click="save">保存</button>
-          <button class="btn-cancel" @click="onCancel">取消</button>
+        <div class="flex gap-2 justify-end mt-4">
+          <button class="px-[18px] py-[7px] border-none rounded-md bg-accent text-white cursor-pointer text-sm hover:bg-accent-hover" @click="save">保存</button>
+          <button class="px-[18px] py-[7px] border border-border-default rounded-md bg-transparent text-text-primary cursor-pointer text-sm hover:bg-surface-2" @click="onCancel">取消</button>
         </div>
       </div>
     </div>
@@ -248,63 +246,3 @@ function onCancel() {
   emit('close');
 }
 </script>
-
-<style scoped>
-/* ---- overlay & dialog ---- */
-.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.dialog { background: white; border-radius: 12px; padding: 24px; min-width: 420px; max-width: 520px; box-shadow: 0 4px 24px rgba(0,0,0,0.12); max-height: 90vh; overflow-y: auto; }
-.dialog h3 { margin-bottom: 16px; font-size: 17px; color: #1E1B3A; }
-
-/* ---- fields ---- */
-.field { display: block; margin-bottom: 12px; font-size: 14px; color: #64748B; }
-.input { display: block; width: 100%; padding: 7px 10px; border: 1px solid #E2E6EC; border-radius: 6px; font-size: 15px; margin-top: 4px; outline: none; box-sizing: border-box; }
-.input:focus { border-color: #6366F1; }
-.select-input { appearance: auto; background: white; cursor: pointer; }
-.field-hint { display: block; font-size: 12px; color: #94A3B8; margin-top: 2px; }
-.key-row { display: flex; gap: 0; margin-top: 4px; }
-.key-row .input { margin-top: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.eye-btn { padding: 6px 8px; border: 1px solid #E2E6EC; border-left: none; border-radius: 0 6px 6px 0; background: #FAFBFC; cursor: pointer; font-size: 14px; line-height: 1; }
-.eye-btn:hover { background: #EEF0F4; }
-
-/* ---- collapsible sections ---- */
-.section { border-top: 1px solid #EEF0F4; margin-top: 12px; padding-top: 12px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 14px; font-weight: 600; color: #1E1B3A; user-select: none; }
-.section-header:hover { color: #6366F1; }
-.chevron { font-size: 12px; color: #94A3B8; }
-.section-body { padding-top: 10px; }
-
-/* ---- custom provider ---- */
-.add-provider-row { display: flex; gap: 6px; align-items: flex-start; }
-.add-provider-row .input { margin-top: 0; }
-.btn-add { padding: 7px 12px; border: none; border-radius: 6px; background: #6366F1; color: white; cursor: pointer; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
-.btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-add:hover:not(:disabled) { background: #5558E8; }
-.custom-list { margin-top: 8px; }
-.custom-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #EEF0F4; border-radius: 6px; margin-bottom: 4px; font-size: 14px; color: #1E1B3A; }
-.custom-name { font-weight: 500; }
-.custom-type { color: #94A3B8; font-size: 12px; }
-.btn-remove { margin-left: auto; background: none; border: none; color: #EF4444; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
-.btn-remove:hover { color: #DC2626; }
-.placeholder-text { color: #94A3B8; font-size: 13px; margin-top: 8px; }
-
-/* ---- delete section ---- */
-.delete-section { border-top: 1px solid #EEF0F4; margin-top: 12px; padding-top: 12px; }
-.btn-danger { padding: 6px 14px; border: 1px solid #FECACA; border-radius: 6px; background: #FEF2F2; color: #EF4444; cursor: pointer; font-size: 13px; }
-.btn-danger:hover:not(:disabled) { background: #FEE2E2; }
-.btn-danger.btn-disabled { opacity: 0.5; cursor: not-allowed; border-color: #E2E6EC; color: #94A3B8; background: #FAFBFC; }
-.confirm-delete { display: flex; flex-direction: column; gap: 8px; }
-.confirm-text { font-size: 14px; color: #EF4444; font-weight: 500; }
-.confirm-actions { display: flex; gap: 6px; }
-.btn-danger-bg { background: #EF4444 !important; }
-.btn-danger-bg:hover { background: #DC2626 !important; }
-
-/* ---- save feedback ---- */
-.saved-msg { color: #22C55E; font-size: 14px; margin-bottom: 8px; }
-
-/* ---- dialog buttons ---- */
-.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-.btn-save { padding: 7px 18px; border: none; border-radius: 6px; background: #6366F1; color: white; cursor: pointer; font-size: 14px; }
-.btn-save:hover { background: #5558E8; }
-.btn-cancel { padding: 7px 18px; border: 1px solid #E2E6EC; border-radius: 6px; background: white; cursor: pointer; font-size: 14px; }
-.btn-cancel:hover { background: #FAFBFC; }
-</style>

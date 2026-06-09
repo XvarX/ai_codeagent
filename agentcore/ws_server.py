@@ -1,4 +1,4 @@
-"""WebSocket server — bridges frontend <-> SubagentManager.
+"""WebSocket server — bridges frontend <-> AgentManager.
 
 Start: python main.py --ws --port 18765
 """
@@ -14,7 +14,9 @@ from websockets.asyncio.server import serve, ServerConnection
 
 from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler
-from agentcore.subagent_manager import SubagentManager, _SubagentHandler
+from agentcore.data_dir import DataDir
+from agentcore.session_store import SessionStore
+from agentcore.subagent_manager import AgentManager, _AgentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
 
@@ -39,6 +41,10 @@ class WsEventHandler(EventHandler):
         self._has_pending_tool_results = False
         self._debug_entries: list[dict] = []
         self._entry_id = 0
+        self._store: "SessionStore | None" = None
+        self._session_project: str = ""
+        self._session_id: str = ""
+        self._session_manager: "SessionManager | None" = None
 
     def set_controller(self, controller: AgentController):
         """Update the controller reference (used when switching agents)."""
@@ -67,6 +73,10 @@ class WsEventHandler(EventHandler):
         self._entry_id = 0
 
     async def _send(self, data: dict):
+        """Send to frontend only if this handler's session is active."""
+        if self._session_manager and self._session_id:
+            if self._session_manager.active_session_id != self._session_id:
+                return  # Background session — don't stream to frontend
         try:
             payload = json.dumps(data, ensure_ascii=False)
             await self._ws.send(payload)
@@ -172,6 +182,24 @@ class WsEventHandler(EventHandler):
         }
         self._debug_entries.append(entry)
         self._entry_id += 1
+        # Persist debug entry to disk
+        if self._store and self._session_id:
+            try:
+                self._store.append_debug_entry(
+                    self._session_project, self._session_id, entry)
+            except Exception:
+                pass
+        # Notify frontend about session status changes
+        if self._session_manager and self._session_id:
+            status = self._session_manager.get_aggregate_status(self._session_id)
+            try:
+                await self._ws.send(json.dumps({
+                    "type": "session_status",
+                    "session_id": self._session_id,
+                    "status": status,
+                }, ensure_ascii=False))
+            except Exception:
+                pass
         # Send to frontend
         await self._send({
             "type": "debug_event",
@@ -187,7 +215,7 @@ class WsEventHandler(EventHandler):
         await self._send({"type": "thinking"})
         if self._has_pending_tool_results:
             await self._send_debug(
-                "[Send Tool Result]", "→ LLM  |  回传工具结果", "#8B5CF6",
+                "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
@@ -243,7 +271,7 @@ class WsEventHandler(EventHandler):
         except ImportError:
             pass
 
-        status_icon = "✗" if is_error else "✓"
+        status_icon = "X" if is_error else "OK"
         message = (
             f"{call_detail}\n---\n"
             f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
@@ -378,12 +406,12 @@ class WsEventHandler(EventHandler):
             "type": "compact_call", "old_msg_count": old_msg_count, "pre_tokens": pre_tokens,
         })
         await self._send_debug(
-            "[Compact Call]", f"→ LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
+            "[Compact Call]", f"-> LLM  |  {old_msg_count} msgs  |  ~{pre_tokens} tokens",
             "#F59E0B", group_key="compact_call")
 
     async def on_compact(self, pre_tokens: int, post_tokens: int,
                          trigger: str, summary: str = ""):
-        info = f"{trigger}  |  ~{pre_tokens} → ~{post_tokens} tokens"
+        info = f"{trigger}  |  ~{pre_tokens} -> ~{post_tokens} tokens"
         if summary:
             info += f"\n---\n{summary[:800]}"
         await self._send({
@@ -414,10 +442,26 @@ class WsEventHandler(EventHandler):
         await self._send_debug(
             "[SnipCompact]",
             f"Snip removed {groups_removed} groups\n"
-            f"tokens: ~{tokens_before} → ~{tokens_after}",
+            f"tokens: ~{tokens_before} -> ~{tokens_after}",
             "#94A3B8", group_key="snip")
 
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
+        # Update persisted subagent status + debug events
+        if self._store and self._session_project and self._session_id:
+            meta = self._store.load_subagent_meta(
+                self._session_project, self._session_id, agent_id)
+            if meta:
+                meta["status"] = status
+                meta["result"] = result
+                self._store.save_subagent_meta(
+                    self._session_project, self._session_id, agent_id, meta)
+            # Persist subagent debug events
+            mgr = getattr(self._controller.agent, '_agent_manager', None)
+            if mgr and agent_id in mgr.agents:
+                state = mgr.agents[agent_id]
+                self._store.save_subagent_debug_log(
+                    self._session_project, self._session_id, agent_id,
+                    state.debug_events or [])
         await self._send({
             "type": "subagent_done", "agent_id": agent_id,
             "status": status, "result": result,
@@ -619,21 +663,25 @@ class WsEventHandler(EventHandler):
             self._debug_entries.insert(boundary + j, rec)
 
 
-async def _send_agent_list(ws: ServerConnection, manager: SubagentManager):
+async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     """Send the full agent list to the frontend."""
     agents = []
     for aid, s in manager.agents.items():
+        status = s.status
+        # Master agent: use _loop_running for live status
+        if aid == "master":
+            status = "running" if s.controller.agent._loop_running else "idle"
         agents.append({
             "id": aid,
             "name": s.name,
-            "status": s.status,
+            "status": status,
             "active": aid == manager.active_id,
             "est_tokens": s.est_tokens,
         })
     await ws.send(json.dumps({"type": "agent_list", "agents": agents}, ensure_ascii=False))
 
 
-async def _send_mcp_info(ws: ServerConnection, manager: SubagentManager):
+async def _send_mcp_info(ws: ServerConnection, manager: AgentManager):
     """Send MCP server info to the frontend."""
     active = manager.get_active()
     controller = active.controller
@@ -644,53 +692,15 @@ async def _send_mcp_info(ws: ServerConnection, manager: SubagentManager):
     }, ensure_ascii=False))
 
 
-async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
+async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManager",
+                          store: "SessionStore", dd: "DataDir"):
     """Handle a single WebSocket client connection."""
-    # Create handler wired to the active (master) controller
-    master_state = manager.get_active()
-    controller = master_state.controller
-    handler = WsEventHandler(websocket, controller)
-    # Save native _SubagentHandler before overwriting with WsEventHandler
-    master_native = controller.handler
-    if isinstance(master_native, _SubagentHandler):
-        master_state._native_handler = master_native
-    controller.handler = handler
-    manager.master_handler = handler  # ensure subagent_done events reach WebSocket
+    from agentcore.session_manager import SessionManager
 
-    # Wire on_change to push agent list updates (AgentTool spawn, kill, etc.)
-    async def _push_agent_list():
-        await _send_agent_list(websocket, manager)
-    manager.on_change = lambda: asyncio.ensure_future(_push_agent_list())
-
-    # Send initial debug events
-    registry = controller.registry
+    # Send connection message (no session active yet)
     await websocket.send(json.dumps({
         "type": "connected", "version": "0.1.0",
     }))
-    await handler._send_debug(
-        "[System]",
-        f"Provider: {controller.config.provider}  |  Model: {controller.provider.model or 'default'}\n"
-        f"Tools: {', '.join(registry.get_tool_names())}\n"
-        f"CWD: {controller.config.cwd or Path.cwd()}",
-        "#569cd6")
-
-    # MCP info
-    mcp_info = controller.get_mcp_info()
-    if mcp_info:
-        svr_lines = [f"MCP: {mcp_info['server_count']} servers, {mcp_info['tool_count']} tools"]
-        for s in mcp_info["servers"]:
-            tool_names = ", ".join(t["name"] for t in s.get("tools", []))
-            svr_lines.append(f"  {s['name']}: {tool_names}")
-        mcp_json = json.dumps(mcp_info, ensure_ascii=False, indent=2)
-        await handler._send_debug("[System]", "\n".join(svr_lines), "#6366F1",
-                                  event_data={
-                                      "type": "MCP",
-                                      "servers": mcp_info["servers"],
-                                      "formatted": "\n".join(svr_lines),
-                                      "raw_json": mcp_json,
-                                  })
-    else:
-        await handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
 
     async for raw_message in websocket:
         try:
@@ -704,41 +714,64 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
         msg_type = msg.get("type", "")
         try:
             if msg_type == "send_message":
-                # Ensure handler is wired to the current active controller
+                slot = session_mgr.get_active()
+                if not slot:
+                    await websocket.send(json.dumps({
+                        "type": "error", "message": "No active session",
+                    }))
+                    continue
+                manager = slot.agent_manager
+                handler = slot.handler
                 active_state = manager.get_active()
                 if handler._controller is not active_state.controller:
                     handler.set_controller(active_state.controller)
                     active_state.controller.handler = handler
                 handler._has_pending_tool_results = False
-                # Block input while compacting
                 if getattr(active_state.controller.agent, '_compacting', False):
-                    await handler._send_debug(
-                        "[Blocked]", "正在压缩中，请稍候...", "#F59E0B")
+                    await handler._send_debug("[Blocked]", "正在压缩中，请稍候...", "#F59E0B")
                     continue
                 text = msg.get("text", "")
                 queue = active_state.message_queue
+                # Push agent_list before sending (master → running)
+                await _send_agent_list(websocket, manager)
                 if queue:
                     queue.enqueue(text, source="user")
                 else:
                     await active_state.controller.send_message(text)
+                # Push final status + agent_list after processing
+                if session_mgr.active_session_id:
+                    status = session_mgr.get_aggregate_status(session_mgr.active_session_id)
+                    try:
+                        await websocket.send(json.dumps({
+                            "type": "session_status",
+                            "session_id": session_mgr.active_session_id,
+                            "status": status,
+                        }, ensure_ascii=False))
+                    except Exception:
+                        pass
+                await _send_agent_list(websocket, manager)
 
             elif msg_type == "cancel":
-                active_state = manager.get_active()
-                await active_state.controller.cancel()
-                await handler._send_debug("[Stopped]", "用户中止了当前任务", "#EF4444")
+                slot = session_mgr.get_active()
+                if slot:
+                    active_state = slot.agent_manager.get_active()
+                    await active_state.controller.cancel()
+                    await slot.handler._send_debug("[Stopped]", "用户中止了当前任务", "#EF4444")
 
             elif msg_type == "clear_history":
-                active_state = manager.get_active()
-                active_state.controller.clear_history()
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager.get_active().controller.clear_history()
 
             elif msg_type == "compact":
-                active_state = manager.get_active()
-                agent = active_state.controller.agent
-                await handler._do_compact(agent)
+                slot = session_mgr.get_active()
+                if slot:
+                    agent = slot.agent_manager.get_active().controller.agent
+                    await slot.handler._do_compact(agent)
 
             elif msg_type == "get_config":
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -778,12 +811,13 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                 from agentcore.config import AgentConfig as AC
                 config_data = msg.get("config", {})
                 new_config = AC(**config_data)
-                active_state = manager.get_active()
-                active_state.controller.reconfigure(new_config)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager.get_active().controller.reconfigure(new_config)
 
-                # Write back to config.yaml
+                # Write back to .ai-code-agent/config.yaml
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -808,56 +842,62 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                 with open(config_path, "w", encoding="utf-8") as f:
                     yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
 
-                await handler._send_debug(
-                    "[System]",
-                    f"Config updated: {new_config.provider} / {new_config.model}",
-                    "#6366F1")
+                if slot:
+                    await slot.handler._send_debug(
+                        "[System]",
+                        f"Config updated: {new_config.provider} / {new_config.model}",
+                        "#6366F1")
                 # Update frontend title bar
                 await websocket.send(json.dumps({
                     "type": "status",
                     "config": {
                         "provider": new_config.provider,
-                        "model": new_config.model or active_state.controller.provider.model,
+                        "model": new_config.model or (slot.agent_manager.get_active().controller.provider.model if slot else ""),
                     },
                 }, ensure_ascii=False))
 
             elif msg_type == "switch_agent":
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
+                manager = slot.agent_manager
+                handler = slot.handler
                 target_id = msg.get("agent_id", "master")
                 if target_id != manager.active_id and target_id in manager.agents:
-                    # Save current snapshot to old state
                     old_state = manager.get_active()
                     old_state.debug_events = list(handler._debug_entries)
-                    # Restore old controller's native handler so its events
-                    # (e.g. enqueued messages) are recorded, not forwarded
+                    # Persist old subagent debug events to disk
+                    if manager.active_id != "master":
+                        store.save_subagent_debug_log(
+                            slot.project_path, slot.session_id,
+                            manager.active_id,
+                            old_state.debug_events or [])
                     old_native = getattr(old_state, '_native_handler', None)
                     if old_native is not None:
                         old_native._clear_forwarding()
                         old_state.controller.handler = old_native
 
-                    # Switch
                     manager.switch(target_id)
 
-                    # Wire the new agent's SubagentHandler to forward events through WsEventHandler
                     new_state = manager.get_active()
                     new_native = new_state.controller.handler
-                    if isinstance(new_native, _SubagentHandler):
+                    if isinstance(new_native, _AgentHandler):
                         new_state._native_handler = new_native
                         new_native._wire_forwarding(handler)
                     new_state.controller.handler = handler
                     handler.set_controller(new_state.controller)
 
-                    # Load stored debug events from the new state (captured while inactive)
                     if new_state.debug_events:
                         handler._debug_entries = list(new_state.debug_events)
                         handler._entry_id = len(new_state.debug_events)
                     else:
                         handler.clear_entries()
 
-                    # Send full state dump to frontend
                     agent = new_state.controller.agent
                     messages_data = [
                         {"role": m.role, "content": m.content or ""}
                         for m in agent.messages
+                        if not m.is_tool_result
                     ]
                     await websocket.send(json.dumps({
                         "type": "agent_switched",
@@ -869,69 +909,240 @@ async def _handle_client(websocket: ServerConnection, manager: SubagentManager):
                     }, ensure_ascii=False))
 
             elif msg_type == "spawn_agent":
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
                 agent_name = msg.get("agent_name", "")
                 user_prompt = msg.get("prompt", "")
                 definition = AgentDefinition(
-                    name=agent_name,
-                    description=agent_name,
-                    agent_type="user",
-                    system_prompt="",
-                    tools=None,
-                    source="user",
+                    name=agent_name, description=agent_name,
+                    agent_type="user", system_prompt="",
+                    tools=None, source="user",
                 )
-                agent_id = await manager.spawn(definition, user_prompt, background=True)
+                agent_id = await slot.agent_manager.spawn(definition, user_prompt, background=True)
                 await websocket.send(json.dumps({
                     "type": "agent_spawned",
-                    "agent_id": agent_id,
-                    "name": agent_name,
-                    "status": "running",
+                    "agent_id": agent_id, "name": agent_name, "status": "running",
                 }))
-                # Update agent list
-                await _send_agent_list(websocket, manager)
+                await _send_agent_list(websocket, slot.agent_manager)
 
             elif msg_type == "kill_agent":
-                await manager.kill(msg.get("agent_id", ""))
-                await _send_agent_list(websocket, manager)
+                slot = session_mgr.get_active()
+                if slot:
+                    await slot.agent_manager.kill(msg.get("agent_id", ""))
+                    await _send_agent_list(websocket, slot.agent_manager)
 
             elif msg_type == "get_status":
-                await _send_agent_list(websocket, manager)
-                active = manager.get_active()
-                controller = active.controller
-                mcp_info = controller.get_mcp_info()
-                await websocket.send(json.dumps({
-                    "type": "status",
-                    "busy": controller.agent._loop_running,
-                    "config": {
-                        "provider": controller.config.provider,
-                        "model": controller.provider.model,
-                    },
-                    "usage": controller.estimate_usage(),
-                    "agents": [
-                        {
-                            "id": aid,
-                            "name": s.name,
-                            "status": s.status,
-                            "active": aid == manager.active_id,
-                        }
-                        for aid, s in manager.agents.items()
-                    ],
-                    "mcp": mcp_info,
-                    "skills": getattr(controller.agent, 'skills_text', ''),
-                }, ensure_ascii=False))
+                slot = session_mgr.get_active()
+                if slot:
+                    manager = slot.agent_manager
+                    handler = slot.handler
+                    await _send_agent_list(websocket, manager)
+                    active = manager.get_active()
+                    controller = active.controller
+                    mcp_info = controller.get_mcp_info()
+                    await websocket.send(json.dumps({
+                        "type": "status",
+                        "busy": controller.agent._loop_running,
+                        "config": {
+                            "provider": controller.config.provider,
+                            "model": controller.provider.model,
+                        },
+                        "usage": controller.estimate_usage(),
+                        "agents": [
+                            {
+                                "id": aid,
+                                "name": s.name,
+                                "status": s.status,
+                                "active": aid == manager.active_id,
+                            }
+                            for aid, s in manager.agents.items()
+                        ],
+                        "mcp": mcp_info,
+                        "skills": getattr(controller.agent, 'skills_text', ''),
+                    }, ensure_ascii=False))
+                else:
+                    await websocket.send(json.dumps({
+                        "type": "status", "busy": False, "config": {},
+                        "agents": [], "mcp": None,
+                    }, ensure_ascii=False))
 
             elif msg_type == "mcp_stop":
-                server_name = msg.get("server_name", "")
-                controller = manager.get_active().controller
-                if controller.mcp_manager:
-                    await controller.mcp_manager.stop_server(server_name)
-                await _send_mcp_info(websocket, manager)
+                slot = session_mgr.get_active()
+                if slot:
+                    server_name = msg.get("server_name", "")
+                    controller = slot.agent_manager.get_active().controller
+                    if controller.mcp_manager:
+                        await controller.mcp_manager.stop_server(server_name)
+                    await _send_mcp_info(websocket, slot.agent_manager)
 
             elif msg_type == "mcp_restart":
-                server_name = msg.get("server_name", "")
-                controller = manager.get_active().controller
-                if controller.mcp_manager:
-                    await controller.mcp_manager.restart_server(server_name)
-                await _send_mcp_info(websocket, manager)
+                slot = session_mgr.get_active()
+                if slot:
+                    server_name = msg.get("server_name", "")
+                    controller = slot.agent_manager.get_active().controller
+                    if controller.mcp_manager:
+                        await controller.mcp_manager.restart_server(server_name)
+                    await _send_mcp_info(websocket, slot.agent_manager)
+
+            elif msg_type == "list_projects":
+                projects = store.list_projects()
+                await websocket.send(json.dumps({
+                    "type": "projects", "projects": projects,
+                    "default_cwd": str(session_mgr._config.cwd or Path.cwd()),
+                }, ensure_ascii=False))
+
+            elif msg_type == "open_project":
+                project_path = msg.get("path", "")
+                store.register_project(project_path)
+                store.touch_project(project_path)
+                sessions = store.list_sessions(project_path)
+                await websocket.send(json.dumps({
+                    "type": "project_opened",
+                    "path": project_path,
+                    "sessions": sessions,
+                }, ensure_ascii=False))
+
+            elif msg_type == "create_session":
+                project_path = msg.get("project_path", "")
+                title = msg.get("title", "New Chat")
+                session_id = store.create_session(project_path, title=title)
+                await session_mgr.create_session(project_path, session_id, title)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.handler._session_manager = session_mgr
+                    # Send initial system debug events
+                    registry = slot.agent_manager.agents["master"].controller.registry
+                    await slot.handler._send_debug(
+                        "[System]",
+                        f"Provider: {session_mgr._config.provider}  |  Model: {session_mgr._config.model or 'default'}\n"
+                        f"Tools: {', '.join(registry.get_tool_names())}\n"
+                        f"CWD: {session_mgr._config.cwd or Path.cwd()}\n"
+                        f"Hash: {dd.project_hash(str(session_mgr._config.cwd or Path.cwd()))}",
+                        "#569cd6")
+                    await slot.handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
+                await websocket.send(json.dumps({
+                    "type": "session_created",
+                    "session_id": session_id,
+                    "title": title,
+                    "debug_entries": slot.handler._debug_entries if slot else [],
+                }, ensure_ascii=False))
+
+            elif msg_type == "load_session":
+                project_path = msg.get("project_path", "")
+                session_id = msg.get("session_id", "")
+                # Save current active subagent debug events before switching
+                old_slot = session_mgr.get_active()
+                if old_slot and old_slot.session_id != session_id:
+                    old_active = old_slot.agent_manager.get_active()
+                    if old_active and old_slot.agent_manager.active_id != "master":
+                        old_active.debug_events = list(old_slot.handler._debug_entries)
+                        store.save_subagent_debug_log(
+                            old_slot.project_path, old_slot.session_id,
+                            old_slot.agent_manager.active_id,
+                            old_active.debug_events or [])
+                await session_mgr.load_session(project_path, session_id)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.handler._session_manager = session_mgr
+                    active_state = slot.agent_manager.get_active()
+                    agent = active_state.controller.agent
+                    messages_data = [
+                        {"role": m.role, "content": m.content or ""}
+                        for m in agent.messages if not m.is_tool_result
+                    ]
+                    est_tokens = agent.est_tokens()
+                    debug_evts = active_state.debug_events or list(slot.handler._debug_entries)
+                    await _send_agent_list(websocket, slot.agent_manager)
+                    await websocket.send(json.dumps({
+                        "type": "session_loaded",
+                        "session_id": session_id,
+                        "active_agent_id": slot.agent_manager.active_id,
+                        "messages": messages_data,
+                        "meta": store.get_session_meta(project_path, session_id),
+                        "debug_entries": debug_evts,
+                        "est_tokens": est_tokens,
+                    }, ensure_ascii=False))
+
+            elif msg_type == "switch_session":
+                session_id = msg.get("session_id", "")
+                if session_id in session_mgr.slots and session_id != session_mgr.active_session_id:
+                    # Save current handler debug state
+                    old_slot = session_mgr.get_active()
+                    if old_slot:
+                        old_active = old_slot.agent_manager.get_active()
+                        old_active.debug_events = list(old_slot.handler._debug_entries)
+                        if old_slot.agent_manager.active_id != "master":
+                            store.save_subagent_debug_log(
+                                old_slot.project_path, old_slot.session_id,
+                                old_slot.agent_manager.active_id,
+                                old_active.debug_events or [])
+                    # Switch
+                    session_mgr.switch_session(session_id)
+                    new_slot = session_mgr.get_active()
+                    if new_slot:
+                        new_active = new_slot.agent_manager.get_active()
+                        agent = new_active.controller.agent
+                        debug_evts = new_active.debug_events or []
+                        await _send_agent_list(websocket, new_slot.agent_manager)
+                        await websocket.send(json.dumps({
+                            "type": "active_session_switched",
+                            "session_id": session_id,
+                            "active_agent_id": new_slot.agent_manager.active_id,
+                            "messages": [
+                                {"role": m.role, "content": m.content or ""}
+                                for m in agent.messages if not m.is_tool_result
+                            ],
+                            "debug_entries": debug_evts,
+                            "est_tokens": agent.est_tokens(),
+                        }, ensure_ascii=False))
+
+            elif msg_type == "destroy_session":
+                session_id = msg.get("session_id", "")
+                await session_mgr.destroy_session(session_id)
+                await websocket.send(json.dumps({
+                    "type": "session_destroyed",
+                    "session_id": session_id,
+                }, ensure_ascii=False))
+
+            elif msg_type == "delete_session":
+                project_path = msg.get("project_path", "")
+                session_id = msg.get("session_id", "")
+                # Stop running session first
+                if session_id in session_mgr.slots:
+                    await session_mgr.destroy_session(session_id)
+                store.delete_session(project_path, session_id)
+                await websocket.send(json.dumps({
+                    "type": "session_deleted",
+                    "session_id": session_id,
+                    "project_path": project_path,
+                }, ensure_ascii=False))
+
+            elif msg_type == "delete_project":
+                project_path = msg.get("project_path", "")
+                # Stop all sessions belonging to this project
+                for sid in list(session_mgr.slots):
+                    if session_mgr.slots[sid].project_path == project_path:
+                        await session_mgr.destroy_session(sid)
+                store.delete_project(project_path)
+                await websocket.send(json.dumps({
+                    "type": "project_deleted",
+                    "project_path": project_path,
+                }, ensure_ascii=False))
+
+            elif msg_type == "list_all_sessions":
+                projects = store.list_projects()
+                all_sessions = []
+                for p in projects:
+                    sessions = store.list_sessions(p["path"])
+                    for s in sessions:
+                        s["project_path"] = p["path"]
+                        s["project_name"] = p.get("name", "")
+                    all_sessions.extend(sessions)
+                all_sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+                await websocket.send(json.dumps({
+                    "type": "all_sessions", "sessions": all_sessions,
+                }, ensure_ascii=False))
 
             elif msg_type == "shutdown":
                 break
@@ -957,21 +1168,25 @@ async def _watch_files(root: Path, interval: float = 1.0) -> None:
         await asyncio.sleep(interval)
 
 
-async def run_ws_server(config: AgentConfig, port: int = 18765, reload: bool = False):
+async def run_ws_server(config: AgentConfig, port: int = 18765,
+                         reload: bool = False, data_dir: str | None = None):
     """Start WebSocket server. Called from main.py --ws mode."""
+    from agentcore.session_manager import SessionManager
+
+    # Initialize data directory
+    effective_data_dir = data_dir or str(Path(__file__).parent.parent / ".ai-code-agent")
+    dd = DataDir(Path(effective_data_dir))
+    dd.init()
+    store = SessionStore(dd)
 
     watch_root = Path(__file__).parent
 
     while True:
-        user_agents = load_user_agents(config.cwd)
-        manager = SubagentManager(config, user_agents)
+        session_mgr = SessionManager(config=config, store=store, dd=dd, ws=None)
 
-        # Connect MCP for master
-        master_state = manager.agents["master"]
-        await master_state.controller.connect_mcp()
-
-        async def handler(websocket):
-            await _handle_client(websocket, manager)
+        async def handler(websocket: ServerConnection):
+            session_mgr._ws = websocket
+            await _handle_client(websocket, session_mgr, store, dd)
 
         logger.info(f"WebSocket server listening on ws://127.0.0.1:{port}")
         print(f"WebSocket server listening on ws://127.0.0.1:{port}")
@@ -987,13 +1202,12 @@ async def run_ws_server(config: AgentConfig, port: int = 18765, reload: bool = F
                 [server_task, watch_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            # Cancel whichever didn't finish
             for t in [server_task, watch_task]:
                 if not t.done():
                     t.cancel()
             if watch_task in done:
                 print("[reload] restarting server...")
-                await asyncio.sleep(0.5)  # brief pause before restart
+                await asyncio.sleep(0.5)
                 continue
             break
         else:

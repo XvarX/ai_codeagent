@@ -1,76 +1,73 @@
 <template>
-  <div :class="['debug-drawer', { collapsed }]" :style="collapsed ? {} : { width: drawerWidth + 'px', minWidth: drawerWidth + 'px' }">
+  <div class="border-l border-border-default bg-surface-1 flex flex-col p-3 h-full relative" :style="collapsed ? { width: '36px', minWidth: '36px', padding: '4px' } : { width: drawerWidth + 'px', minWidth: drawerWidth + 'px' }">
     <!-- Resize handle -->
-    <div class="resize-handle" @mousedown="onResizeStart"></div>
+    <div class="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize z-10 hover:bg-accent/30" @mousedown="onResizeStart"></div>
     <template v-if="!collapsed">
       <!-- Header -->
-      <div class="debug-header">
-        <button class="collapse-toggle" @click="collapsed = !collapsed">◀</button>
-        <span class="debug-title">调试面板</span>
-        <button class="debug-close" @click="debugStore.open = false">&times;</button>
+      <div class="flex justify-between items-center mb-2">
+        <button class="bg-transparent border-none cursor-pointer text-xs p-[2px_4px] text-text-secondary leading-none hover:text-text-primary" @click="collapsed = !collapsed">◀</button>
+        <span class="text-[15px] font-semibold text-text-primary">调试面板</span>
+        <button class="bg-transparent border-none text-xl text-text-secondary cursor-pointer py-0.5 px-[6px] leading-none hover:text-danger" @click="debugStore.open = false">&times;</button>
       </div>
 
       <!-- Context Usage -->
-      <div class="usage-section">
-        <div class="usage-label">上下文窗口</div>
-        <div class="progress-bar">
-          <div
-            class="progress-fill"
-            :style="{ width: (debugStore.usageProgress * 100) + '%' }"
-          ></div>
+      <div class="mb-[10px]">
+        <div class="text-[13px] text-text-secondary mb-1">上下文窗口</div>
+        <div class="h-[6px] bg-surface-3 rounded-[3px] overflow-hidden">
+          <div class="h-full bg-accent rounded-[3px] transition-[width] duration-300 ease" :style="{ width: (debugStore.usageProgress * 100) + '%' }"></div>
         </div>
-        <div class="usage-text">{{ debugStore.usageText }}</div>
+        <div class="text-[13px] text-text-secondary mt-0.5">{{ debugStore.usageText }}</div>
       </div>
 
       <!-- Event Log -->
-      <div class="event-log">
+      <div class="flex-1 overflow-y-auto bg-surface-2 rounded-md p-[6px] border border-border-subtle min-h-0">
         <div
           v-for="entry in debugStore.entries"
           :key="entry.id"
-          class="event-entry"
-          :class="{ 'event-entry--clickable': entry.data }"
+          class="p-[4px_6px] border-b border-border-subtle text-[13px] leading-[1.4]"
+          :class="entry.data ? 'cursor-pointer hover:bg-surface-3' : 'cursor-default'"
           :style="{ opacity: entry.opacity }"
           @click="onEntryClick(entry)"
         >
-          <div class="event-prefix" :style="{ color: entry.color }">
-            <span v-if="entry.opacity < 1.0" class="compacted-tag">[Compacted]</span>
+          <div class="font-semibold mb-0.5" :style="{ color: entry.color }">
+            <span v-if="entry.opacity < 1.0" class="text-[11px] text-danger mr-[3px]">[Compacted]</span>
             {{ entry.prefix }}
-            <span v-if="entry.groupIdx !== null" class="group-badge">G{{ entry.groupIdx }}</span>
+            <span v-if="entry.groupIdx !== null" class="inline-block text-[11px] font-medium text-text-muted ml-1 bg-surface-2 rounded-[3px] px-1">G{{ entry.groupIdx }}</span>
           </div>
-          <div class="event-message">{{ entry.message }}</div>
+          <div class="text-text-secondary whitespace-pre-wrap break-all">{{ entry.message }}</div>
         </div>
-        <div v-if="debugStore.entries.length === 0" class="event-empty">
+        <div v-if="debugStore.entries.length === 0" class="text-center text-text-muted text-[13px] py-4">
           暂无事件
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="debug-footer">
-        <button class="btn-compact" @click="onCompact" :disabled="debugStore.compacting">{{ debugStore.compacting ? 'Compacting...' : 'Compact' }}</button>
-        <button class="btn-clear" @click="debugStore.clear()">Clear History</button>
+      <div class="mt-2 flex gap-3 items-center">
+        <button class="text-[13px] text-text-secondary bg-transparent border-none cursor-pointer p-0 disabled:text-accent-muted disabled:cursor-default hover:underline" @click="onCompact" :disabled="debugStore.compacting">{{ debugStore.compacting ? 'Compacting...' : 'Compact' }}</button>
+        <button class="text-[13px] text-danger bg-transparent border-none cursor-pointer p-0 hover:underline" @click="debugStore.clear()">Clear History</button>
       </div>
     </template>
     <template v-else>
-      <button class="collapse-toggle" @click="collapsed = !collapsed">▶</button>
-      <div class="collapsed-label">调<br>试</div>
+      <button class="bg-transparent border-none cursor-pointer text-xs p-[2px_4px] text-text-secondary leading-none hover:text-text-primary" @click="collapsed = !collapsed">▶</button>
+      <div class="[writing-mode:vertical-lr] text-sm text-text-secondary text-center mt-2">调<br>试</div>
     </template>
 
     <!-- Detail Dialog (modal) -->
     <Teleport to="body">
-      <div v-if="activeEntry" class="detail-overlay" @click.self="closeDetail">
-        <div class="detail-dialog">
-          <div class="detail-header">
-            <span class="detail-title">{{ detailTitle }}</span>
-            <button class="detail-close" @click="closeDetail">&times;</button>
+      <div v-if="activeEntry" class="fixed inset-0 bg-black/40 flex items-center justify-center z-[1000]" @click.self="closeDetail">
+        <div class="bg-surface-1 rounded-xl w-[560px] max-w-[90vw] max-h-[80vh] flex flex-col shadow-dialog">
+          <div class="flex justify-between items-center p-[14px_18px] border-b border-border-subtle">
+            <span class="text-base font-semibold text-text-primary">{{ detailTitle }}</span>
+            <button class="bg-transparent border-none text-[22px] text-text-secondary cursor-pointer py-0.5 px-[6px] leading-none hover:text-danger" @click="closeDetail">&times;</button>
           </div>
-          <div class="detail-body">
-            <pre class="detail-text">{{ detailText }}</pre>
+          <div class="flex-1 overflow-y-auto p-[14px_18px] min-h-0">
+            <pre class="font-mono text-[13px] leading-[1.5] text-text-primary whitespace-pre-wrap break-all m-0">{{ detailText }}</pre>
           </div>
-          <div class="detail-footer">
-            <button class="detail-toggle" @click="toggleRaw">
+          <div class="flex justify-end gap-2 p-[12px_18px] border-t border-border-subtle">
+            <button class="text-[13px] text-accent bg-transparent border border-border-default rounded-md px-3 py-[6px] cursor-pointer hover:bg-accent-subtle" @click="toggleRaw">
               {{ showRaw ? 'Formatted' : 'Raw JSON' }}
             </button>
-            <button class="detail-btn-close" @click="closeDetail">关闭</button>
+            <button class="text-[13px] text-text-secondary bg-surface-2 border border-border-default rounded-md px-[14px] py-[6px] cursor-pointer hover:bg-surface-3" @click="closeDetail">关闭</button>
           </div>
         </div>
       </div>
@@ -79,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useDebugStore, type DebugEntry } from '../stores/debug';
 import { agentWs } from '../services/agentWs';
 
@@ -182,283 +179,3 @@ function toggleRaw() {
   showRaw.value = !showRaw.value;
 }
 </script>
-
-<style scoped>
-.debug-drawer {
-  width: 280px;
-  min-width: 200px;
-  border-left: 1px solid #F1F3F6;
-  background: #FAFBFC;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  height: 100%;
-  position: relative;
-}
-
-.debug-drawer.collapsed {
-  width: 36px !important;
-  min-width: 36px !important;
-  padding: 4px;
-}
-
-.collapsed-label {
-  writing-mode: vertical-lr;
-  font-size: 14px;
-  color: #64748B;
-  text-align: center;
-  margin-top: 8px;
-}
-
-.collapse-toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-  color: #64748B;
-  line-height: 1;
-}
-.collapse-toggle:hover { color: #1E1B3A; }
-
-/* Resize handle */
-.resize-handle {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  cursor: ew-resize;
-  z-index: 10;
-}
-.resize-handle:hover {
-  background: #6366F1;
-  opacity: 0.3;
-}
-
-/* Header */
-.debug-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.debug-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1E1B3A;
-}
-.debug-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: #64748B;
-  cursor: pointer;
-  padding: 2px 6px;
-  line-height: 1;
-}
-.debug-close:hover {
-  color: #EF4444;
-}
-
-/* Usage section */
-.usage-section {
-  margin-bottom: 10px;
-}
-.usage-label {
-  font-size: 13px;
-  color: #64748B;
-  margin-bottom: 4px;
-}
-.progress-bar {
-  height: 6px;
-  background: #E8E8EF;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: #6366F1;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-.usage-text {
-  font-size: 13px;
-  color: #64748B;
-  margin-top: 2px;
-}
-
-/* Event log */
-.event-log {
-  flex: 1;
-  overflow-y: auto;
-  background: #F8F9FB;
-  border-radius: 6px;
-  padding: 6px;
-  border: 1px solid #EEF0F4;
-  min-height: 0;
-}
-.event-entry {
-  padding: 4px 6px;
-  border-bottom: 1px solid #E8EAF0;
-  font-size: 13px;
-  line-height: 1.4;
-  cursor: default;
-}
-.event-entry--clickable {
-  cursor: pointer;
-}
-.event-entry--clickable:hover {
-  background: #EEF0F4;
-}
-.event-prefix {
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-.compacted-tag {
-  font-size: 11px;
-  color: #EF4444;
-  margin-right: 3px;
-}
-.group-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 500;
-  color: #94A3B8;
-  margin-left: 4px;
-  background: #F1F3F6;
-  border-radius: 3px;
-  padding: 0 4px;
-}
-.event-message {
-  color: #64748B;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.event-empty {
-  text-align: center;
-  color: #94A3B8;
-  font-size: 13px;
-  padding: 16px 0;
-}
-
-/* Footer */
-.debug-footer {
-  margin-top: 8px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-.btn-compact {
-  font-size: 13px;
-  color: #64748B;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.btn-compact:hover { text-decoration: underline; }
-.btn-compact:disabled { color: #A5B4FC; cursor: default; }
-.btn-clear {
-  font-size: 13px;
-  color: #EF4444;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.btn-clear:hover {
-  text-decoration: underline;
-}
-
-/* Detail Dialog (modal) */
-.detail-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.detail-dialog {
-  background: #FFFFFF;
-  border-radius: 12px;
-  width: 560px;
-  max-width: 90vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  border-bottom: 1px solid #EEF0F4;
-}
-.detail-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1E1B3A;
-}
-.detail-close {
-  background: none;
-  border: none;
-  font-size: 22px;
-  color: #64748B;
-  cursor: pointer;
-  padding: 2px 6px;
-  line-height: 1;
-}
-.detail-close:hover {
-  color: #EF4444;
-}
-.detail-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 18px;
-  min-height: 0;
-}
-.detail-text {
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #334155;
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin: 0;
-}
-.detail-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid #EEF0F4;
-}
-.detail-toggle {
-  font-size: 13px;
-  color: #6366F1;
-  background: none;
-  border: 1px solid #E2E6EC;
-  border-radius: 6px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-.detail-toggle:hover {
-  background: #F0F0FF;
-}
-.detail-btn-close {
-  font-size: 13px;
-  color: #64748B;
-  background: #F1F3F6;
-  border: 1px solid #E2E6EC;
-  border-radius: 6px;
-  padding: 6px 14px;
-  cursor: pointer;
-}
-.detail-btn-close:hover {
-  background: #E2E6EC;
-}
-</style>
