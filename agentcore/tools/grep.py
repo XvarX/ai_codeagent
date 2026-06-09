@@ -44,7 +44,6 @@ def _find_rg() -> str:
 
 
 HEAD_LIMIT_DEFAULT = 250
-MATCH_LIMIT = 10_000
 
 
 class GrepTool(Tool):
@@ -231,7 +230,7 @@ class GrepTool(Tool):
             num_files = len(filenames)
             if num_files == 0:
                 return "No files found"
-            applied_limit, applied_offset = _apply_pagination(filenames, head_limit, offset, use_default_limit)
+            applied_limit, applied_offset = _apply_pagination(head_limit, offset, use_default_limit)
             filenames = filenames[applied_offset:applied_offset + applied_limit] if applied_limit else filenames[applied_offset:]
             limit_info = _format_limit_info(applied_limit if applied_limit > 0 else None, applied_offset if applied_offset > 0 else None)
             result = f"Found {num_files} {'file' if num_files == 1 else 'files'}{' ' + limit_info if limit_info else ''}\n" + "\n".join(filenames)
@@ -279,10 +278,8 @@ def _format_limit_info(limit: int | None, ofs: int | None) -> str:
     return ", ".join(parts)
 
 
-def _apply_pagination(lines: list, head_limit: int, offset: int, use_default: bool) -> tuple[int, int]:
+def _apply_pagination(head_limit: int, offset: int, use_default: bool) -> tuple[int, int]:
     """Returns (effective_limit, effective_offset)."""
     if use_default and head_limit == 0:
         head_limit = HEAD_LIMIT_DEFAULT
-    if len(lines) > MATCH_LIMIT:
-        lines = lines[:MATCH_LIMIT]
     return head_limit, offset
