@@ -15,6 +15,7 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallEntry[];
   toolLabels?: ToolLabel[];
+  diffs?: DiffEntry[];
 }
 
 export interface ToolLabel {
@@ -70,9 +71,11 @@ export const useChatStore = defineStore('chat', () => {
         role: 'assistant',
         content: currentAssistantMsg.value,
         toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+        diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
       } as ChatMessage);
       currentAssistantMsg.value = '';
       toolLabels.value = [];
+      diffs.value = [];
     }
     thinking.value = false;
   }

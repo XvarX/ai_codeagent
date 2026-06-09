@@ -15,6 +15,9 @@
           <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
         </div>
       </div>
+      <div v-if="msg.diffs && msg.diffs.length" v-for="(diff, di) in msg.diffs" :key="'diff-' + i + '-' + di" class="my-2">
+        <DiffViewer :filePath="diff.filePath" :oldContent="diff.oldContent" :newContent="diff.newContent" />
+      </div>
     </div>
     <div v-if="chatStore.thinking" class="flex gap-1 py-2 items-center">
       <span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span><span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span><span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span>
@@ -56,10 +59,18 @@ function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string;
 }
 
+function isNearBottom(): boolean {
+  if (!container.value) return true;
+  const el = container.value;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
 watch(
   () => [chatStore.messages.length, chatStore.currentAssistantMsg.length],
   () => nextTick(() => {
-    if (container.value) container.value.scrollTop = container.value.scrollHeight;
+    if (container.value && isNearBottom()) {
+      container.value.scrollTop = container.value.scrollHeight;
+    }
   })
 );
 </script>
