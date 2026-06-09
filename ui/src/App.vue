@@ -39,6 +39,7 @@ import { useChatStore } from './stores/chat';
 import { useAgentStore } from './stores/agent';
 import { useDebugStore } from './stores/debug';
 import { useSessionStore } from './stores/session';
+import { useFileBrowserStore } from './stores/fileBrowser';
 import { agentWs } from './services/agentWs';
 import ProjectPicker from './components/ProjectPicker.vue';
 import SessionList from './components/SessionList.vue';
@@ -55,6 +56,7 @@ const chatStore = useChatStore();
 const agentStore = useAgentStore();
 const debugStore = useDebugStore();
 const sessionStore = useSessionStore();
+const fileBrowserStore = useFileBrowserStore();
 
 const showSidebar = ref(false);
 const showProjectPicker = ref(false);
@@ -242,6 +244,12 @@ onMounted(() => {
   agentWs.on('agent_list', (d: any) => {
     agentStore.setAgentList(d.agents);
   });
+
+  // File browser responses
+  agentWs.on('file_list', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_read', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_write', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_search', (d: any) => fileBrowserStore.handleResponse(d));
 
   agentWs.connect();
 });
