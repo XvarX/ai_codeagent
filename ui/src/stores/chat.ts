@@ -101,10 +101,11 @@ export const useChatStore = defineStore('chat', () => {
     diffs.value.push({ filePath, oldContent, newContent });
   }
 
-  function loadMessages(msgs: Array<{ role: string; content: string }>) {
+  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[] }>) {
     messages.value = msgs.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
+      diffs: m.diffs,
     }));
     currentAssistantMsg.value = '';
     thinking.value = false;

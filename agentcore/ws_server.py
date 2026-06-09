@@ -298,6 +298,15 @@ class WsEventHandler(EventHandler):
                 "new_content": new_content,
             } if file_path and old_content != new_content else None,
         })
+
+        # Attach diff to last assistant message for persistence
+        if file_path and old_content != new_content:
+            for msg in reversed(self._controller.agent.messages):
+                if msg.role == "assistant" and not msg.is_tool_result:
+                    if msg.diffs is None:
+                        msg.diffs = []
+                    msg.diffs.append({"file_path": file_path, "old_content": old_content, "new_content": new_content})
+                    break
         self._has_pending_tool_results = True
         tool_gk = f"tool:{tool_use_id}" if tool_use_id else None
         self._last_tool_group_key = tool_gk
@@ -663,6 +672,19 @@ class WsEventHandler(EventHandler):
             self._debug_entries.insert(boundary + j, rec)
 
 
+def _serialize_messages(agent) -> list[dict]:
+    """Serialize agent messages for frontend, excluding tool_result rows."""
+    result = []
+    for m in agent.messages:
+        if m.is_tool_result:
+            continue
+        d: dict = {"role": m.role, "content": m.content or ""}
+        if m.diffs:
+            d["diffs"] = m.diffs
+        result.append(d)
+    return result
+
+
 async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     """Send the full agent list to the frontend."""
     agents = []
@@ -894,11 +916,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         handler.clear_entries()
 
                     agent = new_state.controller.agent
-                    messages_data = [
-                        {"role": m.role, "content": m.content or ""}
-                        for m in agent.messages
-                        if not m.is_tool_result
-                    ]
+                    messages_data = _serialize_messages(agent)
                     await websocket.send(json.dumps({
                         "type": "agent_switched",
                         "agent_id": target_id,
@@ -1048,10 +1066,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     slot.handler._session_manager = session_mgr
                     active_state = slot.agent_manager.get_active()
                     agent = active_state.controller.agent
-                    messages_data = [
-                        {"role": m.role, "content": m.content or ""}
-                        for m in agent.messages if not m.is_tool_result
-                    ]
+                    messages_data = _serialize_messages(agent)
                     est_tokens = agent.est_tokens()
                     debug_evts = active_state.debug_events or list(slot.handler._debug_entries)
                     await _send_agent_list(websocket, slot.agent_manager)
@@ -1090,10 +1105,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                             "type": "active_session_switched",
                             "session_id": session_id,
                             "active_agent_id": new_slot.agent_manager.active_id,
-                            "messages": [
-                                {"role": m.role, "content": m.content or ""}
-                                for m in agent.messages if not m.is_tool_result
-                            ],
+                            "messages": _serialize_messages(agent),
                             "debug_entries": debug_evts,
                             "est_tokens": agent.est_tokens(),
                         }, ensure_ascii=False))

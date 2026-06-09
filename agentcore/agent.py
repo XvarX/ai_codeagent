@@ -106,6 +106,8 @@ class Agent:
                 kwargs["id"] = m["id"]
             if m.get("usage"):
                 kwargs["usage"] = m["usage"]
+            if m.get("diffs"):
+                kwargs["diffs"] = m["diffs"]
             self.messages.append(Message(**kwargs))
 
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
@@ -373,6 +375,8 @@ class Agent:
             msg_dict["id"] = message.id
         if message.usage:
             msg_dict["usage"] = message.usage
+        if message.diffs:
+            msg_dict["diffs"] = message.diffs
         self._session_store.append_message(
             self._session_project, self._session_id, msg_dict
         )
