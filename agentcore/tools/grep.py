@@ -281,16 +281,12 @@ class GrepTool(Tool):
 
 def _split_glob(pattern: str) -> list[str]:
     """Split glob pattern by whitespace, preserving brace groups (mirrors source)."""
-    import re
-    # Split by whitespace first
     parts = pattern.split()
     result = []
     for p in parts:
-        # If it contains braces, keep as-is (don't comma-split)
         if "{" in p and "}" in p:
             result.append(p)
         else:
-            # Comma-split only non-brace sub-patterns
             result.extend([x.strip() for x in p.split(",") if x.strip()])
     return result
 
