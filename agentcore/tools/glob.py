@@ -77,7 +77,8 @@ class GlobTool(Tool):
 
         cmd = [
             rg, "--files", "--glob", pattern,
-            "--sortr", "modified",
+            "--sort", "modified",
+            "--no-ignore", "--hidden",
             "--no-config", "--no-ignore-global",
             "--", search_path,
         ]

@@ -168,11 +168,10 @@ class GrepTool(Tool):
 
         # Mode
         if output_mode == "files_with_matches":
-            cmd.extend(["--files-with-matches", "--sort", "modified"])
+            cmd.extend(["--files-with-matches", "--sortr", "modified"])
         elif output_mode == "count":
             cmd.extend(["--count"])
         else:
-            cmd.extend(["--no-heading", "--with-filename"])
             show_line_numbers = True
             if "-n" in input and input["-n"] is False:
                 show_line_numbers = False
@@ -269,19 +268,16 @@ class GrepTool(Tool):
             return raw_content + summary
 
         else:
-            # content mode — rg with --line-number returns "file:line:content" format
-            # Strip line numbers from relative paths that contain ':' (e.g., "./foo/bar.py:42:text")
+            # content mode
             lines = [l.strip() for l in raw.splitlines() if l.strip()]
             # Convert absolute paths to relative in output
+            prefix = cwd_str + os.sep
             rel_lines = []
             for line in lines:
-                # rg output format: /abs/path/to/file:line_num:content
-                # Convert to: rel/path/to/file:line_num:content
-                if line.startswith(cwd_str):
-                    # Find the second colon (after path) to split path from line:content
-                    rel_path = _to_relative(line, cwd_str)
-                    # rel_path is "rel/path:line:content" already since only the prefix was replaced
-                    rel_lines.append(rel_path)
+                if line.startswith(prefix):
+                    rel_lines.append(line[len(prefix):])
+                elif line.startswith(cwd_str):
+                    rel_lines.append(line[len(cwd_str) + 1:])
                 else:
                     rel_lines.append(line)
             applied_limit, applied_offset = _apply_pagination(head_limit, offset, use_default_limit)
