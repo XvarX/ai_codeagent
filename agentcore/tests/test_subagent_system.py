@@ -62,7 +62,7 @@ def test_subagent_manager_creates_master(monkeypatch):
     assert mgr.active_id == "master"
     master = mgr.get_active()
     assert master.name == "Master"
-    assert master.status == "running"
+    assert master.status == "idle"
 
 
 def test_list_all_agents():

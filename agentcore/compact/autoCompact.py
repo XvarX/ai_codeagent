@@ -59,11 +59,10 @@ def should_auto_compact(
     effective = context_window - reserved_output
     max_threshold = int(effective * threshold)
 
-    # Use actual tokens from last API call if available
-    if actual_base > 0:
-        total = actual_base
-    else:
-        total = estimate_tokens(messages)
+    # Use max of last API token count and current estimate.
+    # actual_base can be stale (tool results added since last call),
+    # so use the larger value to avoid undercounting.
+    total = max(actual_base, estimate_tokens(messages))
 
     # Also check that we have enough messages to compact meaningfully
     groups = group_by_api_round(messages)

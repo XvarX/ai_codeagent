@@ -75,6 +75,7 @@ onMounted(() => {
   // Chat streaming events
   agentWs.on('thinking', () => {
     chatStore.startThinking();
+    agentStore.setBusy(true);
     _toolCallIndex = 0;
   });
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
@@ -113,7 +114,7 @@ onMounted(() => {
   agentWs.on('response_done', (d: any) => {
     const usage = d.raw?.usage || {};
     const total = usage.total_tokens || usage.totalTokens || 0;
-    debugStore.updateContextUsage(total, 128000);
+    debugStore.updateContextUsage(total);
     chatStore.updateUsage(total);
   });
   agentWs.on('context_usage', (d: any) => {

@@ -298,6 +298,15 @@ class WsEventHandler(EventHandler):
                 "new_content": new_content,
             } if file_path and old_content != new_content else None,
         })
+
+        # Attach diff to last assistant message for persistence
+        if file_path and old_content != new_content:
+            for msg in reversed(self._controller.agent.messages):
+                if msg.role == "assistant" and not msg.is_tool_result:
+                    if msg.diffs is None:
+                        msg.diffs = []
+                    msg.diffs.append({"file_path": file_path, "old_content": old_content, "new_content": new_content})
+                    break
         self._has_pending_tool_results = True
         tool_gk = f"tool:{tool_use_id}" if tool_use_id else None
         self._last_tool_group_key = tool_gk
@@ -336,7 +345,10 @@ class WsEventHandler(EventHandler):
             usage = raw["raw_response"].get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
         completion_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0) or 0
-        total_tokens = usage.get("total_tokens", 0) or (prompt_tokens + completion_tokens)
+        total_tokens = usage.get("total_tokens", 0) or (
+            prompt_tokens + completion_tokens +
+            usage.get("cache_creation_input_tokens", 0) +
+            usage.get("cache_read_input_tokens", 0))
 
         pt_details = usage.get("prompt_tokens_details") or {}
         cache_read = pt_details.get("cached_tokens", 0) if isinstance(pt_details, dict) else 0
@@ -373,6 +385,7 @@ class WsEventHandler(EventHandler):
             "total_tokens": total_tokens,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "max_tokens": self._controller.agent.context_window,
         })
         # Backfill raw_json into [Request] entry
         if self._pending_request_data is not None:
@@ -663,6 +676,19 @@ class WsEventHandler(EventHandler):
             self._debug_entries.insert(boundary + j, rec)
 
 
+def _serialize_messages(agent) -> list[dict]:
+    """Serialize agent messages for frontend, excluding tool_result rows."""
+    result = []
+    for m in agent.messages:
+        if m.is_tool_result:
+            continue
+        d: dict = {"role": m.role, "content": m.content or ""}
+        if m.diffs:
+            d["diffs"] = m.diffs
+        result.append(d)
+    return result
+
+
 async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     """Send the full agent list to the frontend."""
     agents = []
@@ -894,11 +920,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         handler.clear_entries()
 
                     agent = new_state.controller.agent
-                    messages_data = [
-                        {"role": m.role, "content": m.content or ""}
-                        for m in agent.messages
-                        if not m.is_tool_result
-                    ]
+                    messages_data = _serialize_messages(agent)
                     await websocket.send(json.dumps({
                         "type": "agent_switched",
                         "agent_id": target_id,
@@ -1012,13 +1034,14 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.handler._session_manager = session_mgr
                     # Send initial system debug events
+                    slot_config = slot.agent_manager.agents["master"].controller.config
                     registry = slot.agent_manager.agents["master"].controller.registry
                     await slot.handler._send_debug(
                         "[System]",
-                        f"Provider: {session_mgr._config.provider}  |  Model: {session_mgr._config.model or 'default'}\n"
+                        f"Provider: {slot_config.provider}  |  Model: {slot_config.model or 'default'}\n"
                         f"Tools: {', '.join(registry.get_tool_names())}\n"
-                        f"CWD: {session_mgr._config.cwd or Path.cwd()}\n"
-                        f"Hash: {dd.project_hash(str(session_mgr._config.cwd or Path.cwd()))}",
+                        f"CWD: {slot_config.cwd or Path.cwd()}\n"
+                        f"Hash: {dd.project_hash(str(slot_config.cwd or Path.cwd()))}",
                         "#569cd6")
                     await slot.handler._send_debug("[System]", "MCP: no servers configured", "#94A3B8")
                 await websocket.send(json.dumps({
@@ -1047,10 +1070,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     slot.handler._session_manager = session_mgr
                     active_state = slot.agent_manager.get_active()
                     agent = active_state.controller.agent
-                    messages_data = [
-                        {"role": m.role, "content": m.content or ""}
-                        for m in agent.messages if not m.is_tool_result
-                    ]
+                    messages_data = _serialize_messages(agent)
                     est_tokens = agent.est_tokens()
                     debug_evts = active_state.debug_events or list(slot.handler._debug_entries)
                     await _send_agent_list(websocket, slot.agent_manager)
@@ -1089,10 +1109,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                             "type": "active_session_switched",
                             "session_id": session_id,
                             "active_agent_id": new_slot.agent_manager.active_id,
-                            "messages": [
-                                {"role": m.role, "content": m.content or ""}
-                                for m in agent.messages if not m.is_tool_result
-                            ],
+                            "messages": _serialize_messages(agent),
                             "debug_entries": debug_evts,
                             "est_tokens": agent.est_tokens(),
                         }, ensure_ascii=False))
