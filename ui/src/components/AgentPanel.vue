@@ -112,7 +112,7 @@ function statusColor(status: string): string {
     case 'completed': return '#3B82F6';
     case 'failed':
     case 'error': return '#EF4444';
-    case 'killed': return '#5C5C6E';
+    case 'killed': return '#6B7280';
     case 'pending': return '#F59E0B';
     default: return '#868E96';
   }

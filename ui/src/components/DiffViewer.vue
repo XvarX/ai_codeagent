@@ -311,6 +311,6 @@ function bgClass(cls: string) {
 }
 
 function textClass(cls: string) {
-  return { 'del-color': 'text-red-300', 'add-color': 'text-green-300', 'eq-color': 'text-text-secondary' }[cls] || 'text-text-secondary';
+  return { 'del-color': 'text-red-700', 'add-color': 'text-green-700', 'eq-color': 'text-text-secondary' }[cls] || 'text-text-secondary';
 }
 </script>

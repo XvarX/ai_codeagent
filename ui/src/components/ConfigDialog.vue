@@ -46,7 +46,7 @@
               <div v-for="(cp, i) in customProviders" :key="i" class="flex items-center gap-[6px] p-[5px_8px] border border-border-subtle rounded-md mb-1 text-sm text-text-primary">
                 <span class="font-medium">{{ cp.name }}</span>
                 <span class="text-text-muted text-xs">({{ cp.type }})</span>
-                <button class="ml-auto bg-transparent border-none text-danger cursor-pointer text-base leading-none px-1 hover:text-red-400" @click="removeCustomProvider(i)">&times;</button>
+                <button class="ml-auto bg-transparent border-none text-danger cursor-pointer text-base leading-none px-1 hover:opacity-70" @click="removeCustomProvider(i)">&times;</button>
               </div>
             </div>
             <p v-else class="text-text-muted text-[13px] mt-2">暂无自定义 Provider</p>
@@ -77,13 +77,13 @@
 
         <div class="border-t border-border-subtle mt-3 pt-3">
           <div v-if="!confirmDelete">
-            <button v-if="isBuiltinProvider" class="px-[14px] py-[6px] border border-border-default rounded-md bg-surface-2 text-text-muted cursor-not-allowed text-[13px] opacity-50" disabled>内置 Provider 不可删除</button>
-            <button v-else class="px-[14px] py-[6px] border border-red-900/30 rounded-md bg-danger-subtle text-danger cursor-pointer text-[13px] hover:bg-red-900/40" @click="confirmDelete = true">删除当前 Provider</button>
+            <button v-if="isBuiltinProvider" class="px-[14px] py-[6px] border border-border-default rounded-md bg-surface-2 text-text-muted cursor-not-allowed text-[13px] opacity-60" disabled>内置 Provider 不可删除</button>
+            <button v-else class="px-[14px] py-[6px] border border-danger/30 rounded-md bg-danger-subtle text-danger cursor-pointer text-[13px] hover:bg-danger-subtle/60" @click="confirmDelete = true">删除当前 Provider</button>
           </div>
           <div v-else class="flex flex-col gap-2">
             <span class="text-sm text-danger font-medium">确认删除 "{{ provider }}"？</span>
             <div class="flex gap-[6px]">
-              <button class="px-[14px] py-[6px] border-none rounded-md bg-danger text-white cursor-pointer text-[13px] hover:bg-red-600" @click="deleteProvider">确认</button>
+              <button class="px-[14px] py-[6px] border-none rounded-md bg-danger text-white cursor-pointer text-[13px] hover:opacity-85" @click="deleteProvider">确认</button>
               <button class="px-[14px] py-[6px] border border-border-default rounded-md bg-transparent text-text-primary cursor-pointer text-[13px] hover:bg-surface-2" @click="confirmDelete = false">取消</button>
             </div>
           </div>
