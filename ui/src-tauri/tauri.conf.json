@@ -28,8 +28,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../../build/agentcore/**/*": "agentcore/"
-    }
+    "resources": []
   }
 }

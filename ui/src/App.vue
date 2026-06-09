@@ -151,6 +151,9 @@ onMounted(() => {
   });
   agentWs.on('session_loaded', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    if (d.active_agent_id) {
+      agentStore.setActiveAgent(d.active_agent_id);
+    }
     chatStore.loadMessages(
       (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
     );
@@ -171,6 +174,9 @@ onMounted(() => {
   // Active session switched (from switch_session message)
   agentWs.on('active_session_switched', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    if (d.active_agent_id) {
+      agentStore.setActiveAgent(d.active_agent_id);
+    }
     chatStore.loadMessages(
       (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
     );
@@ -185,17 +191,25 @@ onMounted(() => {
 
   // Session destroyed (close)
   agentWs.on('session_destroyed', (d: any) => {
+    const wasCurrent = sessionStore.currentSessionId === d.session_id;
     sessionStore.removeSession(d.session_id);
     chatStore.clear();
     debugStore.clear();
+    if (wasCurrent) {
+      agentStore.setAgentList([]);
+      agentStore.setActiveAgent('master');
+    }
   });
 
   // Session deleted (permanent)
   agentWs.on('session_deleted', (d: any) => {
+    const wasCurrent = sessionStore.currentSessionId === d.session_id;
     sessionStore.removeSession(d.session_id);
-    if (sessionStore.currentSessionId === d.session_id) {
+    if (wasCurrent) {
       chatStore.clear();
       debugStore.clear();
+      agentStore.setAgentList([]);
+      agentStore.setActiveAgent('master');
     }
   });
 

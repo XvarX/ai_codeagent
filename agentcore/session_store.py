@@ -211,6 +211,14 @@ class SessionStore:
         meta_path = sdir / "meta.json"
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def save_subagent_debug_log(self, project_path: str, session_id: str,
+                                sub_id: str, entries: list[dict]):
+        """Save subagent debug events to disk."""
+        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
+        sdir.mkdir(parents=True, exist_ok=True)
+        (sdir / "debug_log.json").write_text(
+            json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+
     def load_subagent_meta(self, project_path: str, session_id: str,
                            sub_id: str) -> dict | None:
         """Load subagent metadata."""

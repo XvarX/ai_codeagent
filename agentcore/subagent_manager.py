@@ -460,7 +460,7 @@ class AgentManager:
                     if m.role == "assistant" and m.content
                 ]
                 state.result = "\n".join(assistant_msgs) if assistant_msgs else "(no response)"
-                state.status = "completed"
+                state.status = "idle" if keep_alive else "completed"
             except Exception as e:
                 state.error = str(e)
                 state.status = "failed"
@@ -497,7 +497,7 @@ class AgentManager:
                 if m.role == "assistant" and m.content
             ]
             state.result = "\n".join(assistant_msgs) if assistant_msgs else "(no response)"
-            state.status = "completed"
+            state.status = "idle" if state.keep_alive else "completed"
             print(f"[AgentMgr] {agent_id} done: {state.result[:80]}", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             state.status = "killed"
