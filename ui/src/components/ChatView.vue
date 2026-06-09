@@ -62,8 +62,8 @@ watch(
 </script>
 
 <style scoped>
-.bubble-content :deep(pre) { background: var(--color-surface-2); color: #CDD6F4; padding: 10px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.5; margin: 6px 0; }
-.bubble-content :deep(code) { font-family: var(--font-mono); font-size: 14px; background: var(--color-surface-3); color: var(--color-text-primary); padding: 1px 5px; border-radius: 4px; }
+.bubble-content :deep(pre) { background: #1E1E2E; color: #CDD6F4; padding: 10px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.5; margin: 6px 0; border: 1px solid var(--color-border-subtle); }
+.bubble-content :deep(code) { font-family: var(--font-mono); font-size: 14px; background: var(--color-surface-3); color: #D6336C; padding: 1px 5px; border-radius: 4px; }
 .bubble-content :deep(pre code) { background: none; padding: 0; border-radius: 0; color: inherit; font-size: 14px; }
 .bubble-content :deep(h1), .bubble-content :deep(h2), .bubble-content :deep(h3) { margin: 8px 0 4px; font-weight: 600; color: var(--color-text-primary); }
 .bubble-content :deep(h1) { font-size: 20px; }
