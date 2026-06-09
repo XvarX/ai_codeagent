@@ -346,7 +346,9 @@ class WsEventHandler(EventHandler):
         prompt_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0) or 0
         completion_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0) or 0
         total_tokens = usage.get("total_tokens", 0) or (
-            prompt_tokens + completion_tokens + usage.get("cache_creation_input_tokens", 0))
+            prompt_tokens + completion_tokens +
+            usage.get("cache_creation_input_tokens", 0) +
+            usage.get("cache_read_input_tokens", 0))
 
         pt_details = usage.get("prompt_tokens_details") or {}
         cache_read = pt_details.get("cached_tokens", 0) if isinstance(pt_details, dict) else 0

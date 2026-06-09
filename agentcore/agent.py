@@ -348,13 +348,12 @@ class Agent:
 
     @staticmethod
     def _compute_total_tokens(usage: dict) -> int:
-        """Compute total tokens including Anthropic cache_creation tokens."""
+        """Compute total tokens including Anthropic cache tokens."""
         if usage.get("total_tokens"):
             return usage["total_tokens"]
-        # Anthropic: input_tokens + output_tokens + cache_creation_input_tokens
-        total = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        total += usage.get("cache_creation_input_tokens", 0)
-        return total
+        return (usage.get("input_tokens", 0) + usage.get("output_tokens", 0) +
+                usage.get("cache_creation_input_tokens", 0) +
+                usage.get("cache_read_input_tokens", 0))
 
     def _reactive_compact(self):
         from agentcore.compact.grouping import group_by_api_round
