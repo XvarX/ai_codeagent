@@ -4,7 +4,7 @@
 a = Analysis(
     ['agentcore\\main.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('agentcore/rg.exe', '.')],
     datas=[],
     hiddenimports=[
         'agentcore.ws_server', 'agentcore.flet_ui.app',
