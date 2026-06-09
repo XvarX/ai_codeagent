@@ -5,15 +5,11 @@
       <div v-else :class="['flex py-[6px] gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start items-start']">
         <div v-if="msg.role === 'assistant'" class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[13px] font-semibold">AI</div>
         <div class="max-w-[75%] px-[14px] py-2 rounded-[14px] text-base leading-relaxed" :class="msg.role === 'user' ? 'bg-surface-2 border border-border-default rounded-br-[3px]' : 'bg-surface-2 border border-border-subtle rounded-tl-[3px]'">
-          <div v-if="msg.toolLabels && msg.toolLabels.length" class="mb-1">
-            <div v-for="(tl, ti) in msg.toolLabels" :key="'tl-' + ti" class="flex items-center gap-1 text-[13px] text-text-secondary py-0.5">
-              <span class="text-xs w-[14px] text-center">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
-              <span class="font-semibold text-text-primary">{{ tl.name }}</span>
-              <span v-if="tl.resultPreview" class="text-text-muted max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">{{ tl.resultPreview }}</span>
-            </div>
-          </div>
           <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
         </div>
+      </div>
+      <div v-if="msg.diffs && msg.diffs.length" v-for="(diff, di) in msg.diffs" :key="'diff-' + i + '-' + di" class="my-2">
+        <DiffViewer :filePath="diff.filePath" :oldContent="diff.oldContent" :newContent="diff.newContent" />
       </div>
     </div>
     <div v-if="chatStore.thinking" class="flex gap-1 py-2 items-center">
@@ -23,13 +19,6 @@
     <div v-if="chatStore.currentAssistantMsg" class="flex py-[6px] gap-2 justify-start items-start">
       <div class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[13px] font-semibold">AI</div>
       <div class="max-w-[75%] px-[14px] py-2 rounded-[14px] text-base leading-relaxed bg-surface-2 border border-border-subtle rounded-tl-[3px]">
-        <div v-if="chatStore.toolLabels && chatStore.toolLabels.length" class="mb-1">
-          <div v-for="(tl, ti) in chatStore.toolLabels" :key="'tl-' + ti" class="flex items-center gap-1 text-[13px] text-text-secondary py-0.5">
-            <span class="text-xs w-[14px] text-center">{{ tl.resultPreview ? (tl.isError ? '&#10007;' : '&#10003;') : '&#128295;' }}</span>
-            <span class="font-semibold text-text-primary">{{ tl.name }}</span>
-            <span v-if="tl.resultPreview" class="text-text-muted max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">{{ tl.resultPreview }}</span>
-          </div>
-        </div>
         <div class="bubble-content" v-html="renderMarkdown(chatStore.currentAssistantMsg)"></div>
       </div>
     </div>
@@ -56,17 +45,25 @@ function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string;
 }
 
+function isNearBottom(): boolean {
+  if (!container.value) return true;
+  const el = container.value;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
 watch(
   () => [chatStore.messages.length, chatStore.currentAssistantMsg.length],
   () => nextTick(() => {
-    if (container.value) container.value.scrollTop = container.value.scrollHeight;
+    if (container.value && isNearBottom()) {
+      container.value.scrollTop = container.value.scrollHeight;
+    }
   })
 );
 </script>
 
 <style scoped>
-.bubble-content :deep(pre) { background: var(--color-surface-2); color: #CDD6F4; padding: 10px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.5; margin: 6px 0; }
-.bubble-content :deep(code) { font-family: var(--font-mono); font-size: 14px; background: var(--color-surface-3); color: var(--color-text-primary); padding: 1px 5px; border-radius: 4px; }
+.bubble-content :deep(pre) { background: #1E1E2E; color: #CDD6F4; padding: 10px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.5; margin: 6px 0; border: 1px solid var(--color-border-subtle); }
+.bubble-content :deep(code) { font-family: var(--font-mono); font-size: 14px; background: var(--color-surface-3); color: #D6336C; padding: 1px 5px; border-radius: 4px; }
 .bubble-content :deep(pre code) { background: none; padding: 0; border-radius: 0; color: inherit; font-size: 14px; }
 .bubble-content :deep(h1), .bubble-content :deep(h2), .bubble-content :deep(h3) { margin: 8px 0 4px; font-weight: 600; color: var(--color-text-primary); }
 .bubble-content :deep(h1) { font-size: 20px; }

@@ -4,8 +4,8 @@
 a = Analysis(
     ['agentcore\\main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('config.yaml', '.')],
+    binaries=[('agentcore/rg.exe', '.')],
+    datas=[],
     hiddenimports=[
         'agentcore.ws_server', 'agentcore.flet_ui.app',
         'agentcore.providers.anthropic', 'agentcore.providers.openai_compat',

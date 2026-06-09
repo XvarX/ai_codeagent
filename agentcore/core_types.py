@@ -23,6 +23,7 @@ class Message:
     timestamp: float = field(default_factory=time)
     id: str | None = None  # API response message.id — used for API-round grouping
     usage: dict | None = None  # raw API usage data (input_tokens, output_tokens, etc.)
+    diffs: list[dict] | None = None  # file diffs from FileEdit/FileWrite tools
 
     @property
     def is_tool_result(self) -> bool:

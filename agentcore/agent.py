@@ -1,6 +1,8 @@
 """Agent core loop — mirrors query.ts while(true) with needsFollowUp termination."""
 
+import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Callable, Awaitable
 from agentcore.core_types import Message, ToolUseBlock
@@ -20,6 +22,53 @@ OnToolCall = Callable[[str, dict], Awaitable[None]]
 OnToolResult = Callable[[str, str, bool], Awaitable[None]]
 OnResponse = Callable[[str, list, dict], Awaitable[None]]  # text, tool_use_blocks, raw_response
 OnCompact = Callable[[int, int, str], Awaitable[None]]  # pre_tokens, post_tokens, trigger
+
+MAX_TOOL_CONCURRENCY = int(os.environ.get("AGENT_MAX_TOOL_CONCURRENCY", "10") or "10")
+
+
+async def _execute_single_tool(block, registry, context, cwd):
+    """Execute one tool call, returning (result_text, is_error)."""
+    tool = registry.get(block.tool_name)
+    if tool is None:
+        return json.dumps({"error": f"Unknown tool: {block.tool_name}"}), True
+    try:
+        result_text = await tool.call(block.input, context)
+        from agentcore.tools.tool_result_storage import process_tool_result_block
+        result_text = process_tool_result_block(
+            result_text, tool.name, block.tool_use_id,
+            getattr(tool, 'max_result_chars', None), cwd,
+        )
+        return result_text, False
+    except Exception as e:
+        return f"Tool error: {e}", True
+
+
+def _partition_tool_calls(blocks, registry):
+    """Partition tool calls into concurrent-safe and serial batches.
+    Mirrors partitionToolCalls() from toolOrchestration.ts.
+    """
+    batches = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        tool = registry.get(block.tool_name)
+        if tool and tool.is_concurrency_safe():
+            # Collect consecutive read-only tools
+            concurrent_blocks = [block]
+            j = i + 1
+            while j < len(blocks):
+                next_tool = registry.get(blocks[j].tool_name)
+                if next_tool and next_tool.is_concurrency_safe():
+                    concurrent_blocks.append(blocks[j])
+                    j += 1
+                else:
+                    break
+            batches.append({"concurrent": True, "blocks": concurrent_blocks})
+            i = j
+        else:
+            batches.append({"concurrent": False, "blocks": [block]})
+            i += 1
+    return batches
 
 
 class Agent:
@@ -106,6 +155,8 @@ class Agent:
                 kwargs["id"] = m["id"]
             if m.get("usage"):
                 kwargs["usage"] = m["usage"]
+            if m.get("diffs"):
+                kwargs["diffs"] = m["diffs"]
             self.messages.append(Message(**kwargs))
 
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
@@ -285,11 +336,7 @@ class Agent:
             self._persist_message(self.messages[-1])
 
             # Track actual token usage from API response
-            usage = raw_response.get("usage", {})
-            if usage.get("total_tokens"):
-                self._last_actual_tokens = usage["total_tokens"]
-            elif usage.get("input_tokens"):
-                self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            self._last_actual_tokens = self._compute_total_tokens(raw_response.get("usage", {}))
 
             if self.on_response:
                 await self.on_response(
@@ -300,51 +347,61 @@ class Agent:
 
             # 2. Termination check — mirrors query.ts:1062
             if not tool_use_blocks:
+                self._flush_messages()
                 return assistant_msg.content or "(no response)"
 
-            # 3. Execute tools — mirrors query.ts:1366
+            # 3. Execute tools — mirrors query.ts:1366 + toolOrchestration.ts
             context = ToolContext(cwd=self.cwd, messages=list(self.messages))
-            for block in tool_use_blocks:
-                if self.on_tool_call:
-                    await self.on_tool_call(block.tool_name, block.input)
-
-                tool = self.registry.get(block.tool_name)
-                if tool is None:
-                    result_text = json.dumps({
-                        "error": f"Unknown tool: {block.tool_name}"
-                    })
-                    is_error = True
+            sem = asyncio.Semaphore(MAX_TOOL_CONCURRENCY)
+            for batch in _partition_tool_calls(tool_use_blocks, self.registry):
+                if batch["concurrent"]:
+                    async def _run_with_sem(block):
+                        async with sem:
+                            return await _execute_single_tool(block, self.registry, context, self.cwd)
+                    results = await asyncio.gather(*[
+                        _run_with_sem(block) for block in batch["blocks"]
+                    ])
+                    for block, (result_text, is_error) in zip(batch["blocks"], results):
+                        if self.on_tool_call:
+                            await self.on_tool_call(block.tool_name, block.input)
+                        if self.on_tool_result:
+                            await self.on_tool_result(block.tool_name, result_text, is_error)
+                        self.messages.append(Message(
+                            role="user",
+                            content=result_text,
+                            tool_use_id=block.tool_use_id,
+                        ))
+                        self._persist_message(self.messages[-1])
                 else:
-                    try:
-                        result_text = await tool.call(block.input, context)
-                        is_error = False
-                        # Layer 1: Per-tool persistence threshold
-                        result_text = process_tool_result_block(
-                            result_text,
-                            tool.name,
-                            block.tool_use_id,
-                            getattr(tool, 'max_result_chars', None),
-                            self.cwd,
-                        )
-                    except Exception as e:
-                        result_text = f"Tool error: {e}"
-                        is_error = True
+                    for block in batch["blocks"]:
+                        if self.on_tool_call:
+                            await self.on_tool_call(block.tool_name, block.input)
+                        result_text, is_error = await _execute_single_tool(
+                            block, self.registry, context, self.cwd)
+                        if self.on_tool_result:
+                            await self.on_tool_result(block.tool_name, result_text, is_error)
+                        self.messages.append(Message(
+                            role="user",
+                            content=result_text,
+                            tool_use_id=block.tool_use_id,
+                        ))
+                        self._persist_message(self.messages[-1])
 
-                if self.on_tool_result:
-                    await self.on_tool_result(block.tool_name, result_text, is_error)
-
-                self.messages.append(Message(
-                    role="user",
-                    content=result_text,
-                    tool_use_id=block.tool_use_id,
-                ))
-                self._persist_message(self.messages[-1])
-
+        self._flush_messages()
         return "Agent: max turns reached without completing the task."
 
     def est_tokens(self) -> int:
         from agentcore.compact.grouping import estimate_tokens
         return estimate_tokens(self.messages)
+
+    @staticmethod
+    def _compute_total_tokens(usage: dict) -> int:
+        """Compute total tokens including Anthropic cache tokens."""
+        if usage.get("total_tokens"):
+            return usage["total_tokens"]
+        return (usage.get("input_tokens", 0) + usage.get("output_tokens", 0) +
+                usage.get("cache_creation_input_tokens", 0) +
+                usage.get("cache_read_input_tokens", 0))
 
     def _reactive_compact(self):
         from agentcore.compact.grouping import group_by_api_round
@@ -358,6 +415,21 @@ class Agent:
         """Append a message to the session store if configured."""
         if not self._session_store or not self._session_id:
             return
+        msg_dict = self._message_to_dict(message)
+        self._session_store.append_message(
+            self._session_project, self._session_id, msg_dict
+        )
+
+    def _flush_messages(self):
+        """Overwrite all persisted messages with current state (includes diffs)."""
+        if not self._session_store or not self._session_id:
+            return
+        all_dicts = [self._message_to_dict(m) for m in self.messages]
+        self._session_store.overwrite_messages(
+            self._session_project, self._session_id, all_dicts
+        )
+
+    def _message_to_dict(self, message) -> dict:
         msg_dict = {
             "role": message.role,
             "content": message.content or "",
@@ -373,9 +445,9 @@ class Agent:
             msg_dict["id"] = message.id
         if message.usage:
             msg_dict["usage"] = message.usage
-        self._session_store.append_message(
-            self._session_project, self._session_id, msg_dict
-        )
+        if message.diffs:
+            msg_dict["diffs"] = message.diffs
+        return msg_dict
 
     def _persist_llm_log(self, raw_response: dict):
         """Log LLM request/response details."""
@@ -504,10 +576,7 @@ class Agent:
                     elif isinstance(event, ResponseDoneEvent):
                         # Track actual token usage
                         usage = event.raw.get("usage", {})
-                        if usage.get("total_tokens"):
-                            self._last_actual_tokens = usage["total_tokens"]
-                        elif usage.get("input_tokens"):
-                            self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                        self._last_actual_tokens = self._compute_total_tokens(usage)
                         _last_response_id = event.raw.get("id")
                         _last_response_usage = event.raw.get("usage", {})
                         # Add assistant message now so debug grouping can find it
@@ -567,10 +636,7 @@ class Agent:
                                 yield event
                             elif isinstance(event, ResponseDoneEvent):
                                 usage = event.raw.get("usage", {})
-                                if usage.get("total_tokens"):
-                                    self._last_actual_tokens = usage["total_tokens"]
-                                elif usage.get("input_tokens"):
-                                    self._last_actual_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                                self._last_actual_tokens = self._compute_total_tokens(usage)
                                 _last_response_id = event.raw.get("id")
                                 _last_response_usage = event.raw.get("usage", {})
                                 _streaming_asst = Message(
@@ -690,6 +756,7 @@ class Agent:
                 if tool is None:
                     result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                     is_error = True
+                    duration_ms = 0
                 else:
                     import time
                     t0 = time.time()
