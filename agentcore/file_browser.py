@@ -8,7 +8,6 @@ safety is enforced: no traversal outside the project root is allowed.
 from __future__ import annotations
 
 import os
-import stat
 from datetime import datetime, timezone
 from pathlib import Path
 

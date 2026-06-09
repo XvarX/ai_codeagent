@@ -2,7 +2,6 @@
 """Unit tests for FileBrowserHandler — list_dir, read_file, write_file, search,
 and path-safety enforcement."""
 
-import os
 import tempfile
 from pathlib import Path
 
