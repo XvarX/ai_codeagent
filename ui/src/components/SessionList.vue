@@ -14,7 +14,7 @@
           <span class="text-[13px] font-semibold flex-1 whitespace-nowrap overflow-hidden text-ellipsis" :class="proj.path === sessionStore.currentProjectPath ? 'text-accent' : 'text-text-primary'">{{ proj.name }}</span>
           <span class="flex gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-3" @click.stop="closeProject(proj.path)" title="关闭项目">&#10005;</button>
-            <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger-subtle" @click.stop="deleteProject(proj.path)" title="删除项目">&#128465;</button>
+            <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger-subtle" @click.stop="askDeleteProject(proj.path)" title="删除项目">&#128465;</button>
           </span>
         </div>
         <div v-if="proj.expanded" class="pl-2">
@@ -27,7 +27,7 @@
               <span class="text-[13px] font-medium text-text-primary whitespace-nowrap overflow-hidden text-ellipsis flex-1">{{ s.title }}</span>
               <span class="flex gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ml-auto">
                 <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-3" @click.stop="closeSession(s.session_id)" title="关闭会话">&#10005;</button>
-                <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger-subtle" @click.stop="deleteSession(s.session_id)" title="删除会话">&#128465;</button>
+                <button class="bg-transparent border-none cursor-pointer text-xs w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger-subtle" @click.stop="askDeleteSession(s.session_id)" title="删除会话">&#128465;</button>
               </span>
             </div>
             <span class="text-[11px] text-text-muted pl-[14px]">{{ s.msg_count }}条 · {{ formatTime(s.updated_at) }}</span>
@@ -41,14 +41,39 @@
         暂无项目，点击上方选择项目
       </div>
     </div>
+
+    <!-- Confirm dialog -->
+    <Teleport to="body">
+      <div v-if="confirmMsg" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]" @click.self="confirmMsg = ''">
+        <div class="bg-surface-1 rounded-xl p-5 min-w-[280px] shadow-dialog">
+          <p class="text-sm text-text-primary mb-4">{{ confirmMsg }}</p>
+          <div class="flex gap-2 justify-end">
+            <button class="px-4 py-[6px] border border-border-default rounded-md bg-transparent cursor-pointer text-[13px] text-text-primary hover:bg-surface-2" @click="confirmMsg = ''">取消</button>
+            <button class="px-4 py-[6px] border-none rounded-md bg-danger text-white cursor-pointer text-[13px] hover:opacity-80" @click="doConfirm">删除</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useSessionStore } from '../stores/session';
 
 defineEmits(['showMore']);
 const sessionStore = useSessionStore();
+
+const confirmMsg = ref('');
+let confirmAction: (() => void) | null = null;
+
+function doConfirm() {
+  confirmMsg.value = '';
+  if (confirmAction) {
+    confirmAction();
+    confirmAction = null;
+  }
+}
 
 function newChat() {
   sessionStore.createSession();
@@ -60,7 +85,6 @@ function toggleExpand(path: string) {
 
 function switchTo(projectPath: string, sessionId: string) {
   if (sessionId === sessionStore.currentSessionId) return;
-  // Always load to ensure slot exists in backend
   sessionStore.switchToSession(projectPath, sessionId);
 }
 
@@ -68,20 +92,18 @@ function closeProject(path: string) {
   sessionStore.closeProject(path);
 }
 
-function deleteProject(path: string) {
-  if (confirm('确定删除该项目及所有会话数据？此操作不可恢复。')) {
-    sessionStore.deleteProject(path);
-  }
+function askDeleteProject(path: string) {
+  confirmMsg.value = '确定删除该项目及所有会话数据？此操作不可恢复。';
+  confirmAction = () => sessionStore.deleteProject(path);
 }
 
 function closeSession(id: string) {
   sessionStore.closeSession(id);
 }
 
-function deleteSession(id: string) {
-  if (confirm('确定删除该会话？此操作不可恢复。')) {
-    sessionStore.deleteSession(id);
-  }
+function askDeleteSession(id: string) {
+  confirmMsg.value = '确定删除该会话？此操作不可恢复。';
+  confirmAction = () => sessionStore.deleteSession(id);
 }
 
 function statusClass(sessionId: string): string {

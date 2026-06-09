@@ -218,17 +218,22 @@ class SessionManager:
                 if sub_msgs:
                     controller.agent.restore_messages(sub_msgs)
 
+            keep_alive = meta.get("keep_alive", False)
+            restored_status = meta.get("status", "completed")
+            # keep_alive agents should show idle, not completed
+            if keep_alive and restored_status in ("completed", "pending"):
+                restored_status = "idle"
             state = SubagentState(
                 id=sub_id,
                 name=meta["name"],
                 definition=definition,
                 controller=controller,
                 message_queue=queue,
-                status=meta.get("status", "completed"),
+                status=restored_status,
                 result=meta.get("result", ""),
                 error=meta.get("error", ""),
                 est_tokens=meta.get("est_tokens", 0),
-                keep_alive=meta.get("keep_alive", False),
+                keep_alive=keep_alive,
             )
             # Wire debug events from disk
             debug_path = self._dd.session_dir(

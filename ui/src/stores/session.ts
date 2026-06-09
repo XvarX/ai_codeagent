@@ -161,9 +161,6 @@ export const useSessionStore = defineStore('session', () => {
     agentWs.send({ type: 'destroy_session', session_id: sessionId });
     _removeSessionFromOpenProjects(sessionId);
     delete sessionStatuses.value[sessionId];
-    if (currentSessionId.value === sessionId) {
-      currentSessionId.value = '';
-    }
   }
 
   function deleteSession(sessionId: string) {

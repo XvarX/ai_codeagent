@@ -446,7 +446,7 @@ class WsEventHandler(EventHandler):
             "#94A3B8", group_key="snip")
 
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
-        # Update persisted subagent status
+        # Update persisted subagent status + debug events
         if self._store and self._session_project and self._session_id:
             meta = self._store.load_subagent_meta(
                 self._session_project, self._session_id, agent_id)
@@ -455,6 +455,13 @@ class WsEventHandler(EventHandler):
                 meta["result"] = result
                 self._store.save_subagent_meta(
                     self._session_project, self._session_id, agent_id, meta)
+            # Persist subagent debug events
+            mgr = getattr(self._controller.agent, '_agent_manager', None)
+            if mgr and agent_id in mgr.agents:
+                state = mgr.agents[agent_id]
+                self._store.save_subagent_debug_log(
+                    self._session_project, self._session_id, agent_id,
+                    state.debug_events or [])
         await self._send({
             "type": "subagent_done", "agent_id": agent_id,
             "status": status, "result": result,
@@ -859,6 +866,12 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if target_id != manager.active_id and target_id in manager.agents:
                     old_state = manager.get_active()
                     old_state.debug_events = list(handler._debug_entries)
+                    # Persist old subagent debug events to disk
+                    if manager.active_id != "master":
+                        store.save_subagent_debug_log(
+                            slot.project_path, slot.session_id,
+                            manager.active_id,
+                            old_state.debug_events or [])
                     old_native = getattr(old_state, '_native_handler', None)
                     if old_native is not None:
                         old_native._clear_forwarding()
@@ -1018,24 +1031,38 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
             elif msg_type == "load_session":
                 project_path = msg.get("project_path", "")
                 session_id = msg.get("session_id", "")
-                messages = store.load_messages(project_path, session_id)
-                meta = store.get_session_meta(project_path, session_id)
-                debug_entries = store.load_debug_log(project_path, session_id)
+                # Save current active subagent debug events before switching
+                old_slot = session_mgr.get_active()
+                if old_slot and old_slot.session_id != session_id:
+                    old_active = old_slot.agent_manager.get_active()
+                    if old_active and old_slot.agent_manager.active_id != "master":
+                        old_active.debug_events = list(old_slot.handler._debug_entries)
+                        store.save_subagent_debug_log(
+                            old_slot.project_path, old_slot.session_id,
+                            old_slot.agent_manager.active_id,
+                            old_active.debug_events or [])
                 await session_mgr.load_session(project_path, session_id)
                 slot = session_mgr.get_active()
-                est_tokens = 0
                 if slot:
                     slot.handler._session_manager = session_mgr
-                    est_tokens = slot.agent_manager.get_active().controller.agent.est_tokens()
+                    active_state = slot.agent_manager.get_active()
+                    agent = active_state.controller.agent
+                    messages_data = [
+                        {"role": m.role, "content": m.content or ""}
+                        for m in agent.messages if not m.is_tool_result
+                    ]
+                    est_tokens = agent.est_tokens()
+                    debug_evts = active_state.debug_events or list(slot.handler._debug_entries)
                     await _send_agent_list(websocket, slot.agent_manager)
-                await websocket.send(json.dumps({
-                    "type": "session_loaded",
-                    "session_id": session_id,
-                    "messages": messages,
-                    "meta": meta,
-                    "debug_entries": debug_entries,
-                    "est_tokens": est_tokens,
-                }, ensure_ascii=False))
+                    await websocket.send(json.dumps({
+                        "type": "session_loaded",
+                        "session_id": session_id,
+                        "active_agent_id": slot.agent_manager.active_id,
+                        "messages": messages_data,
+                        "meta": store.get_session_meta(project_path, session_id),
+                        "debug_entries": debug_evts,
+                        "est_tokens": est_tokens,
+                    }, ensure_ascii=False))
 
             elif msg_type == "switch_session":
                 session_id = msg.get("session_id", "")
@@ -1045,6 +1072,11 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     if old_slot:
                         old_active = old_slot.agent_manager.get_active()
                         old_active.debug_events = list(old_slot.handler._debug_entries)
+                        if old_slot.agent_manager.active_id != "master":
+                            store.save_subagent_debug_log(
+                                old_slot.project_path, old_slot.session_id,
+                                old_slot.agent_manager.active_id,
+                                old_active.debug_events or [])
                     # Switch
                     session_mgr.switch_session(session_id)
                     new_slot = session_mgr.get_active()
@@ -1052,9 +1084,11 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         new_active = new_slot.agent_manager.get_active()
                         agent = new_active.controller.agent
                         debug_evts = new_active.debug_events or []
+                        await _send_agent_list(websocket, new_slot.agent_manager)
                         await websocket.send(json.dumps({
                             "type": "active_session_switched",
                             "session_id": session_id,
+                            "active_agent_id": new_slot.agent_manager.active_id,
                             "messages": [
                                 {"role": m.role, "content": m.content or ""}
                                 for m in agent.messages if not m.is_tool_result
