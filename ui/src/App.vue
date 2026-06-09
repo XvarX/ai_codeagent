@@ -75,6 +75,7 @@ onMounted(() => {
   // Chat streaming events
   agentWs.on('thinking', () => {
     chatStore.startThinking();
+    agentStore.setBusy(true);
     _toolCallIndex = 0;
   });
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
