@@ -2,6 +2,7 @@
   <div class="flex flex-col h-screen bg-surface-0">
     <header class="flex items-center h-10 px-3 border-b border-border-default bg-surface-1 gap-2">
       <button class="bg-transparent border-none text-lg cursor-pointer p-1 text-text-primary" @click="showSidebar = !showSidebar">&#9776;</button>
+      <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="fileBrowserStore.togglePanel()">📁</button>
       <button class="bg-transparent border border-border-default rounded-md px-[10px] py-1 cursor-pointer text-sm text-accent hover:bg-surface-2" @click="showProjectPicker = true">
         {{ sessionStore.currentProjectName || '选择项目' }}
       </button>
@@ -18,6 +19,7 @@
       <div v-if="showSidebar" class="flex flex-col border-r border-border-default bg-surface-1 min-w-[200px] max-w-[260px]">
         <SessionList @showMore="showAllSessions = true" />
       </div>
+      <FileTreePanel v-if="fileBrowserStore.panelVisible" />
       <div class="flex-1 flex flex-col overflow-hidden">
         <ChatView class="flex-1" />
         <AgentPanel />
@@ -30,6 +32,7 @@
     <SkillDialog v-if="showSkill" @close="showSkill = false" />
     <ProjectPicker v-if="showProjectPicker" @close="showProjectPicker = false" />
     <AllSessionsDialog v-if="showAllSessions" @close="showAllSessions = false" />
+    <CodeEditorDialog />
   </div>
 </template>
 
@@ -51,6 +54,8 @@ import AgentPanel from './components/AgentPanel.vue';
 import ConfigDialog from './components/ConfigDialog.vue';
 import McpDialog from './components/McpDialog.vue';
 import SkillDialog from './components/SkillDialog.vue';
+import FileTreePanel from './components/FileTreePanel.vue';
+import CodeEditorDialog from './components/CodeEditorDialog.vue';
 
 const chatStore = useChatStore();
 const agentStore = useAgentStore();
