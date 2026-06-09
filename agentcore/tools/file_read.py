@@ -6,8 +6,8 @@ from typing import Any
 from .base import Tool, ToolContext
 
 MAX_LINES = 2000
-MAX_SIZE_STR = "2MB"
-MAX_SIZE_BYTES = 2 * 1024 * 1024
+MAX_SIZE_STR = "256KB"
+MAX_SIZE_BYTES = 256 * 1024
 
 
 class FileReadTool(Tool):

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Callable, Awaitable
 from agentcore.core_types import Message, ToolUseBlock
@@ -21,6 +22,8 @@ OnToolCall = Callable[[str, dict], Awaitable[None]]
 OnToolResult = Callable[[str, str, bool], Awaitable[None]]
 OnResponse = Callable[[str, list, dict], Awaitable[None]]  # text, tool_use_blocks, raw_response
 OnCompact = Callable[[int, int, str], Awaitable[None]]  # pre_tokens, post_tokens, trigger
+
+MAX_TOOL_CONCURRENCY = int(os.environ.get("AGENT_MAX_TOOL_CONCURRENCY", "10") or "10")
 
 
 async def _execute_single_tool(block, registry, context, cwd):
@@ -349,11 +352,14 @@ class Agent:
 
             # 3. Execute tools — mirrors query.ts:1366 + toolOrchestration.ts
             context = ToolContext(cwd=self.cwd, messages=list(self.messages))
+            sem = asyncio.Semaphore(MAX_TOOL_CONCURRENCY)
             for batch in _partition_tool_calls(tool_use_blocks, self.registry):
                 if batch["concurrent"]:
+                    async def _run_with_sem(block):
+                        async with sem:
+                            return await _execute_single_tool(block, self.registry, context, self.cwd)
                     results = await asyncio.gather(*[
-                        _execute_single_tool(block, self.registry, context, self.cwd)
-                        for block in batch["blocks"]
+                        _run_with_sem(block) for block in batch["blocks"]
                     ])
                     for block, (result_text, is_error) in zip(batch["blocks"], results):
                         if self.on_tool_call:
