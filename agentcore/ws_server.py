@@ -19,6 +19,7 @@ from agentcore.session_store import SessionStore
 from agentcore.subagent_manager import AgentManager, _AgentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
+from agentcore.file_browser import FileBrowserHandler
 
 logger = logging.getLogger(__name__)
 
@@ -1159,6 +1160,73 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 all_sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
                 await websocket.send(json.dumps({
                     "type": "all_sessions", "sessions": all_sessions,
+                }, ensure_ascii=False))
+
+            elif msg_type == "file_list":
+                cwd = str(session_mgr._config.cwd or Path.cwd())
+                fb = FileBrowserHandler(cwd)
+                path = msg.get("path")
+                entries = fb.list_dir(path)
+                request_id = msg.get("request_id", "")
+                await websocket.send(json.dumps({
+                    "type": "file_list",
+                    "path": path or "",
+                    "entries": entries,
+                    "request_id": request_id,
+                }, ensure_ascii=False))
+
+            elif msg_type == "file_read":
+                cwd = str(session_mgr._config.cwd or Path.cwd())
+                fb = FileBrowserHandler(cwd)
+                file_path = msg.get("path", "")
+                request_id = msg.get("request_id", "")
+                try:
+                    result = fb.read_file(file_path)
+                    result["type"] = "file_read"
+                    result["path"] = file_path
+                    result["request_id"] = request_id
+                    await websocket.send(json.dumps(result, ensure_ascii=False))
+                except (FileNotFoundError, IsADirectoryError, ValueError) as e:
+                    await websocket.send(json.dumps({
+                        "type": "file_read",
+                        "path": file_path,
+                        "request_id": request_id,
+                        "error": str(e),
+                    }, ensure_ascii=False))
+
+            elif msg_type == "file_write":
+                cwd = str(session_mgr._config.cwd or Path.cwd())
+                fb = FileBrowserHandler(cwd)
+                file_path = msg.get("path", "")
+                content = msg.get("content", "")
+                request_id = msg.get("request_id", "")
+                try:
+                    fb.write_file(file_path, content)
+                    await websocket.send(json.dumps({
+                        "type": "file_write",
+                        "path": file_path,
+                        "success": True,
+                        "request_id": request_id,
+                    }, ensure_ascii=False))
+                except Exception as e:
+                    await websocket.send(json.dumps({
+                        "type": "file_write",
+                        "path": file_path,
+                        "success": False,
+                        "error": str(e),
+                        "request_id": request_id,
+                    }, ensure_ascii=False))
+
+            elif msg_type == "file_search":
+                cwd = str(session_mgr._config.cwd or Path.cwd())
+                fb = FileBrowserHandler(cwd)
+                query = msg.get("query", "")
+                request_id = msg.get("request_id", "")
+                results = fb.search(query)
+                await websocket.send(json.dumps({
+                    "type": "file_search",
+                    "results": results,
+                    "request_id": request_id,
                 }, ensure_ascii=False))
 
             elif msg_type == "shutdown":
