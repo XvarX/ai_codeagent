@@ -189,18 +189,17 @@ class WsEventHandler(EventHandler):
                     self._session_project, self._session_id, entry)
             except Exception:
                 pass
-        # Notify frontend about background session status changes
+        # Notify frontend about session status changes
         if self._session_manager and self._session_id:
-            if self._session_manager.active_session_id != self._session_id:
-                status = self._session_manager.get_aggregate_status(self._session_id)
-                try:
-                    await self._ws.send(json.dumps({
-                        "type": "session_status",
-                        "session_id": self._session_id,
-                        "status": status,
-                    }, ensure_ascii=False))
-                except Exception:
-                    pass
+            status = self._session_manager.get_aggregate_status(self._session_id)
+            try:
+                await self._ws.send(json.dumps({
+                    "type": "session_status",
+                    "session_id": self._session_id,
+                    "status": status,
+                }, ensure_ascii=False))
+            except Exception:
+                pass
         # Send to frontend
         await self._send({
             "type": "debug_event",
@@ -661,10 +660,14 @@ async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     """Send the full agent list to the frontend."""
     agents = []
     for aid, s in manager.agents.items():
+        status = s.status
+        # Master agent: use _loop_running for live status
+        if aid == "master":
+            status = "running" if s.controller.agent._loop_running else "idle"
         agents.append({
             "id": aid,
             "name": s.name,
-            "status": s.status,
+            "status": status,
             "active": aid == manager.active_id,
             "est_tokens": s.est_tokens,
         })
@@ -722,10 +725,24 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     continue
                 text = msg.get("text", "")
                 queue = active_state.message_queue
+                # Push agent_list before sending (master → running)
+                await _send_agent_list(websocket, manager)
                 if queue:
                     queue.enqueue(text, source="user")
                 else:
                     await active_state.controller.send_message(text)
+                # Push final status + agent_list after processing
+                if session_mgr.active_session_id:
+                    status = session_mgr.get_aggregate_status(session_mgr.active_session_id)
+                    try:
+                        await websocket.send(json.dumps({
+                            "type": "session_status",
+                            "session_id": session_mgr.active_session_id,
+                            "status": status,
+                        }, ensure_ascii=False))
+                    except Exception:
+                        pass
+                await _send_agent_list(websocket, manager)
 
             elif msg_type == "cancel":
                 slot = session_mgr.get_active()
@@ -747,7 +764,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
 
             elif msg_type == "get_config":
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -791,9 +808,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.agent_manager.get_active().controller.reconfigure(new_config)
 
-                # Write back to config.yaml
+                # Write back to .ai-code-agent/config.yaml
                 import yaml
-                config_path = Path("config.yaml")
+                config_path = dd.config_path
                 cfg = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -995,6 +1012,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     "type": "session_created",
                     "session_id": session_id,
                     "title": title,
+                    "debug_entries": slot.handler._debug_entries if slot else [],
                 }, ensure_ascii=False))
 
             elif msg_type == "load_session":
@@ -1009,7 +1027,6 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.handler._session_manager = session_mgr
                     est_tokens = slot.agent_manager.get_active().controller.agent.est_tokens()
-                    # Send agent list for the new session
                     await _send_agent_list(websocket, slot.agent_manager)
                 await websocket.send(json.dumps({
                     "type": "session_loaded",

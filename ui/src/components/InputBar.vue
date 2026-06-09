@@ -1,10 +1,10 @@
 <template>
-  <div class="input-bar">
-    <div class="input-wrapper">
+  <div class="flex items-end gap-2 p-[10px_18px] bg-surface-1 border-t border-border-default">
+    <div class="flex-1 border border-border-default rounded-[10px] p-[10px_14px] bg-surface-2">
       <textarea
         ref="textareaRef"
         v-model="text"
-        class="input-field"
+        class="w-full border-none outline-none resize-none text-[17px] text-text-primary font-sans bg-transparent min-h-6 max-h-[150px] placeholder:text-text-secondary disabled:text-text-muted"
         rows="1"
         :placeholder="agentStore.compacting ? 'Compacting...' : (agentStore.busy ? 'Working...' : '输入消息... (Ctrl+Enter 发送)')"
         :disabled="agentStore.busy || agentStore.compacting"
@@ -12,9 +12,9 @@
         @input="autoResize"
       ></textarea>
     </div>
-    <div class="input-buttons">
-      <button v-if="agentStore.busy" class="btn-stop" @click="stop" title="Stop">■</button>
-      <button class="btn-send" :disabled="agentStore.busy || agentStore.compacting || !text.trim()" @click="send" title="Send">↑</button>
+    <div class="flex flex-col gap-1">
+      <button v-if="agentStore.busy" class="w-[34px] h-[34px] rounded-[9px] border-none bg-danger text-white text-sm cursor-pointer" @click="stop" title="Stop">■</button>
+      <button class="w-[34px] h-[34px] rounded-[9px] border-none bg-accent text-white text-base cursor-pointer transition-colors disabled:bg-accent-muted disabled:cursor-not-allowed" :disabled="agentStore.busy || agentStore.compacting || !text.trim()" @click="send" title="Send">↑</button>
     </div>
   </div>
 </template>
@@ -75,15 +75,3 @@ function stop() {
   agentWs.send({ type: 'cancel' });
 }
 </script>
-
-<style scoped>
-.input-bar { display: flex; align-items: flex-end; gap: 8px; padding: 10px 18px; background: #FAFBFC; border-top: 1px solid #F1F3F6; }
-.input-wrapper { flex: 1; border: 1px solid #E2E6EC; border-radius: 10px; padding: 10px 14px; background: white; }
-.input-field { width: 100%; border: none; outline: none; resize: none; font-size: 17px; color: #1E1B3A; font-family: inherit; min-height: 24px; max-height: 150px; }
-.input-field::placeholder { color: #64748B; }
-.input-field:disabled { background: transparent; color: #94A3B8; }
-.input-buttons { display: flex; flex-direction: column; gap: 4px; }
-.btn-send { width: 34px; height: 34px; border-radius: 9px; border: none; background: #6366F1; color: white; font-size: 16px; cursor: pointer; transition: background 0.15s; }
-.btn-send:disabled { background: #A5B4FC; cursor: not-allowed; }
-.btn-stop { width: 34px; height: 34px; border-radius: 9px; border: none; background: #EF4444; color: white; font-size: 14px; cursor: pointer; }
-</style>

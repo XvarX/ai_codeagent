@@ -1,19 +1,19 @@
 <template>
   <Teleport to="body">
-    <div class="dialog-overlay" @click.self="$emit('close')">
-      <div class="dialog">
-        <h3>技能管理 ({{ skills.length }})</h3>
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]" @click.self="$emit('close')">
+      <div class="bg-surface-1 rounded-xl p-6 min-w-[380px] max-w-[500px] max-h-[80vh] overflow-y-auto shadow-dialog">
+        <h3 class="mb-4 text-[17px] font-semibold text-text-primary">技能管理 ({{ skills.length }})</h3>
 
-        <div v-if="skills.length" class="skill-list">
-          <div v-for="s in skills" :key="s.name" class="skill-card">
-            <div class="skill-name">{{ s.name }}</div>
-            <div v-if="s.description" class="skill-desc">{{ s.description }}</div>
+        <div v-if="skills.length" class="space-y-[6px]">
+          <div v-for="s in skills" :key="s.name" class="p-[8px_12px] border border-border-default rounded-lg">
+            <div class="font-semibold text-sm text-text-primary">{{ s.name }}</div>
+            <div v-if="s.description" class="text-[13px] text-text-secondary mt-0.5 whitespace-pre-wrap">{{ s.description }}</div>
           </div>
         </div>
-        <p v-else class="empty-state">暂无可用技能</p>
+        <p v-else class="text-text-muted text-sm text-center py-6">暂无可用技能</p>
 
-        <div class="dialog-actions">
-          <button class="btn-cancel" @click="$emit('close')">关闭</button>
+        <div class="flex justify-end mt-4">
+          <button class="px-[18px] py-[7px] border border-border-default rounded-md bg-transparent cursor-pointer text-sm text-text-primary hover:bg-surface-2" @click="$emit('close')">关闭</button>
         </div>
       </div>
     </div>
@@ -49,19 +49,3 @@ const skills = computed<SkillCard[]>(() => {
   });
 });
 </script>
-
-<style scoped>
-.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.dialog { background: white; border-radius: 12px; padding: 24px; min-width: 380px; max-width: 500px; box-shadow: 0 4px 24px rgba(0,0,0,0.12); max-height: 80vh; overflow-y: auto; }
-.dialog h3 { margin-bottom: 16px; font-size: 17px; color: #1E1B3A; }
-
-.empty-state { color: #94A3B8; font-size: 14px; text-align: center; padding: 24px 0; }
-
-.skill-card { padding: 8px 12px; border: 1px solid #E2E6EC; border-radius: 8px; margin-bottom: 6px; }
-.skill-name { font-weight: 600; font-size: 14px; color: #1E1B3A; }
-.skill-desc { font-size: 13px; color: #64748B; margin-top: 2px; white-space: pre-wrap; }
-
-.dialog-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
-.btn-cancel { padding: 7px 18px; border: 1px solid #E2E6EC; border-radius: 6px; background: white; cursor: pointer; font-size: 14px; }
-.btn-cancel:hover { background: #FAFBFC; }
-</style>

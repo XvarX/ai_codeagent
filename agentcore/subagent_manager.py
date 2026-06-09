@@ -376,7 +376,7 @@ class AgentManager:
             ),
             controller=controller,
             message_queue=None,
-            status="running",
+            status="idle",
         )
         self.agents["master"] = state
         from agentcore.agent_message_queue import AgentMessageQueue

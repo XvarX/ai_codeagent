@@ -1,19 +1,19 @@
 <template>
-  <div class="session-overlay" @click.self="$emit('close')">
-    <div class="session-dialog">
-      <h3>所有对话</h3>
-      <div class="session-search">
-        <input v-model="search" placeholder="搜索对话..." class="session-input" />
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]" @click.self="$emit('close')">
+    <div class="bg-surface-1 rounded-[10px] p-5 min-w-[480px] max-h-[60vh] flex flex-col shadow-dialog">
+      <h3 class="text-base font-semibold mb-3 text-text-primary">所有对话</h3>
+      <div class="mb-2">
+        <input v-model="search" placeholder="搜索对话..." class="w-full p-[6px_10px] border border-border-default rounded-md text-sm outline-none bg-surface-2 text-text-primary placeholder:text-text-muted focus:border-accent box-border" />
       </div>
-      <div class="all-sessions">
-        <div v-for="s in filtered" :key="s.session_id" class="all-session-item" @click="load(s)">
-          <span class="all-session-title">{{ s.title }}</span>
-          <div class="all-session-meta">
-            <span v-if="s.project_name" class="all-session-project">{{ s.project_name }}</span>
+      <div class="overflow-y-auto flex-1">
+        <div v-for="s in filtered" :key="s.session_id" class="p-[8px_10px] rounded-md cursor-pointer flex flex-col gap-1 hover:bg-surface-2" @click="load(s)">
+          <span class="text-sm font-medium text-text-primary">{{ s.title }}</span>
+          <div class="flex gap-2 text-xs text-text-muted">
+            <span v-if="s.project_name" class="text-accent">{{ s.project_name }}</span>
             <span>{{ s.msg_count }}条 · {{ formatTime(s.updated_at) }}</span>
           </div>
         </div>
-        <div v-if="!filtered.length" class="session-empty">没有找到对话</div>
+        <div v-if="!filtered.length" class="text-text-muted text-[13px] py-4 text-center">没有找到对话</div>
       </div>
     </div>
   </div>
@@ -58,18 +58,3 @@ function formatTime(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 </script>
-
-<style scoped>
-.session-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.session-dialog { background: white; border-radius: 10px; padding: 20px; min-width: 480px; max-height: 60vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-.session-dialog h3 { font-size: 16px; margin-bottom: 12px; }
-.session-input { width: 100%; padding: 6px 10px; border: 1px solid #E2E6EC; border-radius: 6px; font-size: 14px; outline: none; margin-bottom: 8px; box-sizing: border-box; }
-.session-input:focus { border-color: #6366F1; }
-.all-sessions { overflow-y: auto; flex: 1; }
-.all-session-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
-.all-session-item:hover { background: #F1F3F6; }
-.all-session-title { font-size: 14px; font-weight: 500; color: #1E1B3A; }
-.all-session-meta { display: flex; gap: 8px; font-size: 12px; color: #94A3B8; }
-.all-session-project { color: #6366F1; }
-.session-empty { color: #94A3B8; font-size: 13px; padding: 16px 0; text-align: center; }
-</style>

@@ -1,19 +1,20 @@
 <template>
-  <div class="picker-overlay" @click.self="$emit('close')">
-    <div class="picker-dialog">
-      <h3>选择项目</h3>
-      <div class="picker-search">
-        <input v-model="search" placeholder="输入项目路径..." class="picker-input" />
-        <button class="btn-browse" @click="browseFolder">浏览</button>
-        <button class="btn-open" @click="openPath" :disabled="!search.trim()">打开</button>
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]" @click.self="$emit('close')">
+    <div class="bg-surface-1 rounded-[10px] p-5 min-w-[420px] max-h-[60vh] flex flex-col shadow-dialog">
+      <h3 class="text-base font-semibold mb-3 text-text-primary">选择项目</h3>
+      <div class="flex gap-2 mb-3">
+        <input v-model="search" placeholder="输入项目路径..." class="flex-1 p-[6px_10px] border border-border-default rounded-md text-sm outline-none bg-surface-2 text-text-primary placeholder:text-text-muted focus:border-accent" />
+        <button class="px-3 py-[6px] border border-border-default rounded-md bg-transparent text-text-primary cursor-pointer text-[13px] hover:bg-surface-2" @click="browseFolder">浏览</button>
+        <button class="px-4 py-[6px] border-none rounded-md bg-accent text-white cursor-pointer text-[13px] disabled:bg-accent-muted disabled:cursor-not-allowed" @click="openPath" :disabled="!search.trim()">打开</button>
       </div>
-      <div class="picker-list">
+      <div class="overflow-y-auto flex-1">
         <div v-for="p in filteredProjects" :key="p.path"
-             class="picker-item" @click="selectProject(p.path)">
-          <span class="picker-name">{{ p.name }}</span>
-          <span class="picker-path">{{ p.path }}</span>
+             class="p-[8px_10px] rounded-md cursor-pointer flex flex-col gap-0.5 hover:bg-surface-2"
+             @click="selectProject(p.path)">
+          <span class="text-sm font-medium text-text-primary">{{ p.name }}</span>
+          <span class="text-xs text-text-muted">{{ p.path }}</span>
         </div>
-        <div v-if="!filteredProjects.length" class="picker-empty">
+        <div v-if="!filteredProjects.length" class="text-text-muted text-[13px] py-4 text-center">
           没有历史项目，请输入路径打开
         </div>
       </div>
@@ -55,22 +56,3 @@ async function browseFolder() {
   }
 }
 </script>
-
-<style scoped>
-.picker-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.picker-dialog { background: white; border-radius: 10px; padding: 20px; min-width: 420px; max-height: 60vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-.picker-dialog h3 { font-size: 16px; margin-bottom: 12px; }
-.picker-search { display: flex; gap: 8px; margin-bottom: 12px; }
-.picker-input { flex: 1; padding: 6px 10px; border: 1px solid #E2E6EC; border-radius: 6px; font-size: 14px; outline: none; }
-.picker-input:focus { border-color: #6366F1; }
-.btn-open { padding: 6px 16px; border: none; border-radius: 6px; background: #6366F1; color: white; cursor: pointer; font-size: 13px; }
-.btn-browse { padding: 6px 12px; border: 1px solid #E2E6EC; border-radius: 6px; background: white; color: #374151; cursor: pointer; font-size: 13px; }
-.btn-browse:hover { background: #F1F3F6; }
-.btn-open:disabled { background: #A5B4FC; cursor: not-allowed; }
-.picker-list { overflow-y: auto; flex: 1; }
-.picker-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-.picker-item:hover { background: #F1F3F6; }
-.picker-name { font-size: 14px; font-weight: 500; color: #1E1B3A; }
-.picker-path { font-size: 12px; color: #94A3B8; }
-.picker-empty { color: #94A3B8; font-size: 13px; padding: 16px 0; text-align: center; }
-</style>

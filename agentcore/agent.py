@@ -94,12 +94,19 @@ class Agent:
                                 input=b["input"])
                     for b in m["tool_use_blocks"]
                 ]
-            self.messages.append(Message(
-                role=m["role"],
-                content=m.get("content", ""),
-                tool_use_blocks=tool_use_blocks,
-                tool_use_id=m.get("tool_use_id"),
-            ))
+            kwargs: dict = {
+                "role": m["role"],
+                "content": m.get("content", ""),
+            }
+            if tool_use_blocks is not None:
+                kwargs["tool_use_blocks"] = tool_use_blocks
+            if m.get("tool_use_id"):
+                kwargs["tool_use_id"] = m["tool_use_id"]
+            if m.get("id"):
+                kwargs["id"] = m["id"]
+            if m.get("usage"):
+                kwargs["usage"] = m["usage"]
+            self.messages.append(Message(**kwargs))
 
     def snip_keep_last(self, keep_groups: int = 1) -> tuple[int, int, int]:
         """Snip: keep only the last keep_groups API-rounds. Returns (before, after, removed)."""

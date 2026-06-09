@@ -132,6 +132,8 @@ class SessionManager:
 
         master_state.controller.agent.bind_session(
             self._store, project_path, session_id)
+        master_state.controller.agent._agent_manager = mgr
+        master_state.controller.agent._agent_id = "master"
         master_state.controller.agent.restore_messages(messages)
         handler._debug_entries = list(debug_entries)
 
@@ -277,7 +279,10 @@ class SessionManager:
         has_running = False
         has_error = False
         for aid, state in slot.agent_manager.agents.items():
-            if state.status == "running":
+            if aid == "master":
+                if state.controller.agent._loop_running:
+                    has_running = True
+            elif state.status == "running":
                 has_running = True
             elif state.status == "failed":
                 has_error = True
