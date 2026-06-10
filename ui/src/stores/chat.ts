@@ -51,18 +51,6 @@ export interface ChatRoomInfo {
   createdAt: number
 }
 
-function hashColor(str: string): string {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const r = (hash >> 16) & 0xff
-  const g = (hash >> 8) & 0xff
-  const b = hash & 0xff
-  const brighten = (v: number) => Math.min(255, v + 60)
-  return `#${brighten(r).toString(16).padStart(2, '0')}${brighten(g).toString(16).padStart(2, '0')}${brighten(b).toString(16).padStart(2, '0')}`
-}
-
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([]);
   const thinking = ref(false);
@@ -185,7 +173,7 @@ export const useChatStore = defineStore('chat', () => {
     const agent = useAgentStore()
     const agentInfo = agent.agents.find(a => a.id === data.agent_id)
     const senderName = agentInfo?.name || data.agent_id
-    const senderColor = hashColor(data.agent_id)
+    const senderColor = agent.getAgentColor(data.agent_id)
 
     const lastMsg = msgs[msgs.length - 1]
     if (lastMsg && lastMsg.isStreaming && lastMsg.senderId === data.agent_id) {
