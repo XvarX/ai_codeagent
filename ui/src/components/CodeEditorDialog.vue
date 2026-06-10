@@ -131,18 +131,20 @@ const activeEditor = computed(() => {
   return fileBrowser.openEditors.get(activeTab.value) || null;
 });
 
-// Sync activeTab: respond to new editors and explicit focus requests
+// Sync activeTab when editor keys change (new file opened or existing re-focused)
 watch(
-  [() => [...fileBrowser.openEditors.keys()], () => fileBrowser.focusTick],
-  ([keys], [oldKeys]) => {
+  () => [...fileBrowser.openEditors.keys()],
+  (keys, oldKeys) => {
     if (keys.length === 0) {
       activeTab.value = null;
-    } else if (fileBrowser.focusTarget && fileBrowser.openEditors.has(fileBrowser.focusTarget)) {
-      activeTab.value = fileBrowser.focusTarget;
     } else {
-      const added = keys.filter((k: string) => !(oldKeys as string[]).includes(k));
+      const added = keys.filter((k: string) => !oldKeys.includes(k));
       if (added.length > 0) {
+        // New file opened → switch to it
         activeTab.value = added[added.length - 1];
+      } else if (oldKeys.length > 0 && keys[keys.length - 1] !== oldKeys[oldKeys.length - 1]) {
+        // Existing file re-focused (moved to end of Map)
+        activeTab.value = keys[keys.length - 1];
       } else if (!activeTab.value || !fileBrowser.openEditors.has(activeTab.value)) {
         activeTab.value = keys[keys.length - 1];
       }

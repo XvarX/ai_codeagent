@@ -123,17 +123,14 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     }
   }
 
-  const focusTarget = ref<string | null>(null);
-  const focusTick = ref(0);
-
-  function _requestFocus(path: string) {
-    focusTarget.value = path;
-    focusTick.value++;
-  }
-
   async function openEditor(path: string) {
     if (openEditors.value.has(path)) {
-      _requestFocus(path);
+      // Re-focus: move to end by replacing the entire Map (guaranteed reactivity)
+      const existing = openEditors.value.get(path)!;
+      const newMap = new Map(openEditors.value);
+      newMap.delete(path);
+      newMap.set(path, existing);
+      openEditors.value = newMap;
       return;
     }
     loading.value = true;
@@ -148,7 +145,6 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
         modified: data.modified,
         dirty: false,
       });
-      _requestFocus(path);
     } catch (e: any) {
       error.value = e.message;
     } finally {
@@ -228,7 +224,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
   return {
     tree, expandedDirs, selectedFile,
     previewContent, previewPath, previewLanguage, previewSize, previewModified,
-    openEditors, panelVisible, activeTab, focusTarget, focusTick, loading, error,
+    openEditors, panelVisible, activeTab, loading, error,
     searchResults, searchQuery,
     handleResponse,
     loadDir, selectFile, openEditor, saveFile, searchFiles,
