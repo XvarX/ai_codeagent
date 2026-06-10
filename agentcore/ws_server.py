@@ -1276,7 +1276,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     state = manager.agents.get(agent_id)
                     if state and state.message_queue:
                         formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
-                        state.message_queue.enqueue(formatted, source="room")
+                        state.message_queue.enqueue(formatted, source="room", room_id=room_id)
 
             elif msg_type == "file_list":
                 _s = session_mgr.get_active()
