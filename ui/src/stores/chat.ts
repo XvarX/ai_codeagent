@@ -1,5 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { agentWs } from '../services/agentWs';
+import { useAgentStore } from './agent';
 
 interface ToolCallEntry {
   name: string;
@@ -31,6 +33,36 @@ export interface DiffEntry {
   newContent: string;
 }
 
+export interface RoomMessage {
+  id: string
+  roomId: string
+  senderId: string
+  senderName: string
+  senderColor: string
+  content: string
+  timestamp: number
+  isStreaming: boolean
+}
+
+export interface ChatRoomInfo {
+  id: string
+  name: string
+  agentIds: string[]
+  createdAt: number
+}
+
+function hashColor(str: string): string {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const r = (hash >> 16) & 0xff
+  const g = (hash >> 8) & 0xff
+  const b = hash & 0xff
+  const brighten = (v: number) => Math.min(255, v + 60)
+  return `#${brighten(r).toString(16).padStart(2, '0')}${brighten(g).toString(16).padStart(2, '0')}${brighten(b).toString(16).padStart(2, '0')}`
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([]);
   const thinking = ref(false);
@@ -40,6 +72,10 @@ export const useChatStore = defineStore('chat', () => {
   const diffs = ref<DiffEntry[]>([]);
   const toolLabels = ref<ToolLabel[]>([]);
   const inputText = ref('');
+  const roomMessages = ref<Map<string, RoomMessage[]>>(new Map())
+  const rooms = ref<ChatRoomInfo[]>([])
+  const activeRoomId = ref<string | null>(null)
+  let _roomMsgId = 0
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
@@ -124,11 +160,86 @@ export const useChatStore = defineStore('chat', () => {
     inputText.value += (inputText.value ? ' ' : '') + text;
   }
 
+  function handleRoomCreated(room: ChatRoomInfo) {
+    rooms.value = [...rooms.value, room]
+  }
+
+  function handleRoomList(roomList: ChatRoomInfo[]) {
+    rooms.value = roomList
+  }
+
+  function handleRoomDestroyed(roomId: string) {
+    rooms.value = rooms.value.filter(r => r.id !== roomId)
+    roomMessages.value.delete(roomId)
+    if (activeRoomId.value === roomId) activeRoomId.value = null
+  }
+
+  function handleRoomUpdated(room: ChatRoomInfo) {
+    const idx = rooms.value.findIndex(r => r.id === room.id)
+    if (idx >= 0) rooms.value[idx] = room
+  }
+
+  function handleRoomBroadcast(data: { room_id: string; agent_id: string; token: string }) {
+    const msgs = roomMessages.value.get(data.room_id) || []
+    // Get agent info from agent store for name; generate color locally
+    const agent = useAgentStore()
+    const agentInfo = agent.agents.find(a => a.id === data.agent_id)
+    const senderName = agentInfo?.name || data.agent_id
+    const senderColor = hashColor(data.agent_id)
+
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg && lastMsg.isStreaming && lastMsg.senderId === data.agent_id) {
+      lastMsg.content += data.token
+    } else {
+      msgs.push({
+        id: `rm_${++_roomMsgId}`,
+        roomId: data.room_id,
+        senderId: data.agent_id,
+        senderName,
+        senderColor,
+        content: data.token,
+        timestamp: Date.now(),
+        isStreaming: true,
+      })
+    }
+    roomMessages.value.set(data.room_id, msgs)
+  }
+
+  function handleRoomDone(data: { room_id: string; agent_id: string }) {
+    const msgs = roomMessages.value.get(data.room_id) || []
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg && lastMsg.isStreaming && lastMsg.senderId === data.agent_id) {
+      lastMsg.isStreaming = false
+    }
+    roomMessages.value.set(data.room_id, msgs)
+  }
+
+  function sendRoomMessage(roomId: string, text: string) {
+    agentWs.send({ type: 'room_message', room_id: roomId, text })
+
+    const msgs = roomMessages.value.get(roomId) || []
+    msgs.push({
+      id: `rm_${++_roomMsgId}`,
+      roomId,
+      senderId: 'user',
+      senderName: '你',
+      senderColor: '#89b4fa',
+      content: text,
+      timestamp: Date.now(),
+      isStreaming: false,
+    })
+    roomMessages.value.set(roomId, msgs)
+  }
+
   return {
     messages, thinking, currentAssistantMsg, diffs, toolLabels,
     maxTokens, usageTokens,
     inputText, insertToInput,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
     addToolResult, addToolCall, addToolResultPreview, addDiff, updateUsage, loadMessages, clear,
+    // Room
+    roomMessages, rooms, activeRoomId,
+    handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
+    handleRoomBroadcast, handleRoomDone, sendRoomMessage,
   };
 });
