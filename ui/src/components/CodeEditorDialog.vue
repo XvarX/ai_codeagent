@@ -133,12 +133,12 @@ const activeEditor = computed(() => {
 
 // Sync activeTab: respond to new editors and explicit focus requests
 watch(
-  [() => [...fileBrowser.openEditors.keys()], () => fileBrowser.focusEditorPath],
-  ([keys, focusPath], [oldKeys]) => {
+  [() => [...fileBrowser.openEditors.keys()], () => fileBrowser.focusTick],
+  ([keys], [oldKeys]) => {
     if (keys.length === 0) {
       activeTab.value = null;
-    } else if (focusPath && fileBrowser.openEditors.has(focusPath)) {
-      activeTab.value = focusPath;
+    } else if (fileBrowser.focusTarget && fileBrowser.openEditors.has(fileBrowser.focusTarget)) {
+      activeTab.value = fileBrowser.focusTarget;
     } else {
       const added = keys.filter((k: string) => !(oldKeys as string[]).includes(k));
       if (added.length > 0) {

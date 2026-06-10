@@ -123,11 +123,17 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     }
   }
 
-  const focusEditorPath = ref<string | null>(null);
+  const focusTarget = ref<string | null>(null);
+  const focusTick = ref(0);
+
+  function _requestFocus(path: string) {
+    focusTarget.value = path;
+    focusTick.value++;
+  }
 
   async function openEditor(path: string) {
     if (openEditors.value.has(path)) {
-      focusEditorPath.value = path;
+      _requestFocus(path);
       return;
     }
     loading.value = true;
@@ -142,7 +148,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
         modified: data.modified,
         dirty: false,
       });
-      focusEditorPath.value = path;
+      _requestFocus(path);
     } catch (e: any) {
       error.value = e.message;
     } finally {
@@ -222,7 +228,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
   return {
     tree, expandedDirs, selectedFile,
     previewContent, previewPath, previewLanguage, previewSize, previewModified,
-    openEditors, panelVisible, activeTab, focusEditorPath, loading, error,
+    openEditors, panelVisible, activeTab, focusTarget, focusTick, loading, error,
     searchResults, searchQuery,
     handleResponse,
     loadDir, selectFile, openEditor, saveFile, searchFiles,
