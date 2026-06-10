@@ -76,8 +76,8 @@ class AgentMessageQueue:
                 async with self._controller._agent_lock:
                     await self._controller.send_message(text, room_id=room_id)
 
-                # Broadcast agent's response to other room members (not relayed messages)
-                if source == "room" and room_id and "|relay" not in text:
+                # Broadcast agent's response to other room members
+                if source == "room" and room_id:
                     agent = self._controller.agent
                     response_text = ""
                     for m in reversed(agent.messages):
@@ -95,7 +95,7 @@ class AgentMessageQueue:
                                     if aid != from_id:
                                         st = mgr.agents.get(aid)
                                         if st and st.message_queue:
-                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id}) |relay]\n{response_text}"
+                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id})]\n{response_text}"
                                             st.message_queue.enqueue(formatted, source="room", room_id=room_id)
             except asyncio.CancelledError:
                 break
