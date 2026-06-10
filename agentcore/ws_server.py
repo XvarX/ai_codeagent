@@ -1163,7 +1163,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 }, ensure_ascii=False))
 
             elif msg_type == "file_list":
-                cwd = str(session_mgr._config.cwd or Path.cwd())
+                _s = session_mgr.get_active()
+                cwd = str((_s.agent_manager.config.cwd if _s else None) or session_mgr._config.cwd or Path.cwd())
                 fb = FileBrowserHandler(cwd)
                 path = msg.get("path")
                 entries = fb.list_dir(path)
@@ -1176,7 +1177,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 }, ensure_ascii=False))
 
             elif msg_type == "file_read":
-                cwd = str(session_mgr._config.cwd or Path.cwd())
+                _s = session_mgr.get_active()
+                cwd = str((_s.agent_manager.config.cwd if _s else None) or session_mgr._config.cwd or Path.cwd())
                 fb = FileBrowserHandler(cwd)
                 file_path = msg.get("path", "")
                 request_id = msg.get("request_id", "")
@@ -1195,7 +1197,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     }, ensure_ascii=False))
 
             elif msg_type == "file_write":
-                cwd = str(session_mgr._config.cwd or Path.cwd())
+                active_slot = session_mgr.get_active()
+                cwd = str((active_slot.agent_manager.config.cwd if active_slot else None) or session_mgr._config.cwd or Path.cwd())
                 fb = FileBrowserHandler(cwd)
                 file_path = msg.get("path", "")
                 content = msg.get("content", "")
@@ -1218,7 +1221,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     }, ensure_ascii=False))
 
             elif msg_type == "file_search":
-                cwd = str(session_mgr._config.cwd or Path.cwd())
+                active_slot = session_mgr.get_active()
+                cwd = str((active_slot.agent_manager.config.cwd if active_slot else None) or session_mgr._config.cwd or Path.cwd())
                 fb = FileBrowserHandler(cwd)
                 query = msg.get("query", "")
                 request_id = msg.get("request_id", "")
