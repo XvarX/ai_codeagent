@@ -139,7 +139,8 @@ function onFileClick(node: TreeNode) {
       }
     }
   } else {
-    fileBrowser.selectFile(node.path);
+    // Single click only highlights, doesn't switch to preview tab
+    fileBrowser.selectedFile = node.path;
   }
 }
 

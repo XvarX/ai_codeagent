@@ -2,7 +2,7 @@
   <teleport to="body">
     <div v-for="[path, editor] in fileBrowser.openEditors" :key="path">
       <div
-        class="fixed bg-surface-1 border border-border-default rounded-lg flex flex-col overflow-hidden z-50"
+        class="fixed bg-surface-1 border border-border-default rounded-lg flex flex-col overflow-hidden z-50 relative"
         :style="dialogStyle"
       >
         <!-- Title bar -->
@@ -44,6 +44,16 @@
         <div v-if="editor.dirty" class="px-3 py-1 text-[10px] text-warning bg-warning-subtle border-t border-border-subtle shrink-0">
           未保存更改
         </div>
+
+        <!-- Resize handle (bottom-right corner) -->
+        <div
+          class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10"
+          @mousedown.prevent="startResize($event)"
+        >
+          <svg class="w-4 h-4 text-text-muted" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M14 14H10L14 10V14ZM14 6L6 14H8L14 8V6ZM14 2L2 14H4L14 4V2Z"/>
+          </svg>
+        </div>
       </div>
     </div>
   </teleport>
@@ -72,10 +82,12 @@ import { yaml } from '@codemirror/lang-yaml';
 const fileBrowser = useFileBrowserStore();
 const chatStore = useChatStore();
 
-const dialogX = ref(120);
-const dialogY = ref(60);
-const dialogWidth = ref(640);
-const dialogHeight = ref(480);
+const dialogX = ref(80);
+const dialogY = ref(40);
+const dialogWidth = ref(800);
+const dialogHeight = ref(560);
+const minWidth = 400;
+const minHeight = 300;
 
 const dialogStyle = computed(() => ({
   left: dialogX.value + 'px',
@@ -175,6 +187,23 @@ function startDrag(e: MouseEvent, _path: string) {
   function onMove(ev: MouseEvent) {
     dialogX.value = origX + (ev.clientX - startX);
     dialogY.value = Math.max(0, origY + (ev.clientY - startY));
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startResize(e: MouseEvent) {
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const origW = dialogWidth.value;
+  const origH = dialogHeight.value;
+  function onMove(ev: MouseEvent) {
+    dialogWidth.value = Math.max(minWidth, origW + (ev.clientX - startX));
+    dialogHeight.value = Math.max(minHeight, origH + (ev.clientY - startY));
   }
   function onUp() {
     document.removeEventListener('mousemove', onMove);
