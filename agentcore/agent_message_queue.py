@@ -38,6 +38,7 @@ class AgentMessageQueue:
         while True:
             text, source, room_id = await self._queue.get()
             try:
+                sender = ""  # initialized for room/agent branches
                 if source == "room":
                     room_match = re.match(r"\[Room: ([^\]]+)\]", text)
                     room_name = room_match.group(1).split("|")[0].strip() if room_match else "Unknown"
