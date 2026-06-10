@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useFileBrowserStore } from '../stores/fileBrowser';
 import { useChatStore } from '../stores/chat';
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
@@ -131,7 +131,7 @@ const activeEditor = computed(() => {
   return fileBrowser.openEditors.get(activeTab.value) || null;
 });
 
-// Sync activeTab when editor keys change (new file opened or existing re-focused)
+// Sync activeTab when editors change
 watch(
   () => [...fileBrowser.openEditors.keys()],
   (keys, oldKeys) => {
@@ -140,11 +140,7 @@ watch(
     } else {
       const added = keys.filter((k: string) => !oldKeys.includes(k));
       if (added.length > 0) {
-        // New file opened → switch to it
         activeTab.value = added[added.length - 1];
-      } else if (oldKeys.length > 0 && keys[keys.length - 1] !== oldKeys[oldKeys.length - 1]) {
-        // Existing file re-focused (moved to end of Map)
-        activeTab.value = keys[keys.length - 1];
       } else if (!activeTab.value || !fileBrowser.openEditors.has(activeTab.value)) {
         activeTab.value = keys[keys.length - 1];
       }
@@ -152,6 +148,13 @@ watch(
     nextTick(() => mountPendingEditors());
   }
 );
+
+// Direct callback for re-focusing already-open files (bypasses reactivity)
+onMounted(() => {
+  fileBrowser.onEditorFocus((path) => {
+    activeTab.value = path;
+  });
+});
 
 const dialogStyle = computed(() => ({
   left: dialogX.value + 'px',

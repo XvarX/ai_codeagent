@@ -38,6 +38,15 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
   const searchResults = ref<TreeNode[]>([]);
   const searchQuery = ref('');
 
+  // Direct callback for tab focus — bypasses reactivity
+  const _focusCallbacks: ((path: string) => void)[] = [];
+  function onEditorFocus(cb: (path: string) => void) {
+    _focusCallbacks.push(cb);
+  }
+  function _fireFocus(path: string) {
+    for (const cb of _focusCallbacks) cb(path);
+  }
+
   const pendingRequests = new Map<string, {
     resolve: (data: any) => void;
     reject: (err: Error) => void;
@@ -125,12 +134,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
 
   async function openEditor(path: string) {
     if (openEditors.value.has(path)) {
-      // Re-focus: move to end by replacing the entire Map (guaranteed reactivity)
-      const existing = openEditors.value.get(path)!;
-      const newMap = new Map(openEditors.value);
-      newMap.delete(path);
-      newMap.set(path, existing);
-      openEditors.value = newMap;
+      _fireFocus(path);
       return;
     }
     loading.value = true;
@@ -228,6 +232,6 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     searchResults, searchQuery,
     handleResponse,
     loadDir, selectFile, openEditor, saveFile, searchFiles,
-    closeEditor, togglePanel, closePreview,
+    closeEditor, togglePanel, closePreview, onEditorFocus,
   };
 });
