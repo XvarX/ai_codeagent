@@ -195,6 +195,22 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     openEditors.value.delete(path);
   }
 
+  function reset() {
+    tree.value = [];
+    expandedDirs.value = new Set();
+    selectedFile.value = null;
+    previewContent.value = null;
+    previewPath.value = null;
+    searchResults.value = [];
+    searchQuery.value = '';
+    error.value = null;
+    openEditors.value = new Map();
+    // Reload if panel is visible
+    if (panelVisible.value) {
+      loadDir();
+    }
+  }
+
   function togglePanel() {
     panelVisible.value = !panelVisible.value;
     if (panelVisible.value && tree.value.length === 0) {
@@ -232,6 +248,6 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     searchResults, searchQuery,
     handleResponse,
     loadDir, selectFile, openEditor, saveFile, searchFiles,
-    closeEditor, togglePanel, closePreview, onEditorFocus,
+    closeEditor, togglePanel, closePreview, onEditorFocus, reset,
   };
 });

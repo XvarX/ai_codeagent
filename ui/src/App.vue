@@ -146,10 +146,12 @@ onMounted(() => {
     sessionStore.setProjectOpened(d.path, d.sessions);
     chatStore.clear();
     debugStore.clear();
+    fileBrowserStore.reset();
   });
   agentWs.on('session_created', (d: any) => {
     sessionStore.setSessionCreated(d.session_id, d.title);
     chatStore.clear();
+    fileBrowserStore.reset();
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
@@ -159,6 +161,7 @@ onMounted(() => {
   });
   agentWs.on('session_loaded', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    fileBrowserStore.reset();
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
@@ -182,6 +185,7 @@ onMounted(() => {
   // Active session switched (from switch_session message)
   agentWs.on('active_session_switched', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    fileBrowserStore.reset();
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
