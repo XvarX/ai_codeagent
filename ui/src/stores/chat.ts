@@ -173,15 +173,22 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleRoomBroadcast(data: { room_id: string; agent_id: string; token: string }) {
     const msgs = roomMessages.value.get(data.room_id) || []
-    // Get agent info from agent store for name; generate color locally
     const agent = useAgentStore()
     const agentInfo = agent.agents.find(a => a.id === data.agent_id)
     const senderName = agentInfo?.name || data.agent_id
     const senderColor = agent.getAgentColor(data.agent_id)
 
-    const lastMsg = msgs[msgs.length - 1]
-    if (lastMsg && lastMsg.isStreaming && lastMsg.senderId === data.agent_id) {
-      lastMsg.content += data.token
+    // Find the last streaming message from this specific agent (handle concurrent agent responses)
+    let streamingIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
+        streamingIdx = i
+        break
+      }
+    }
+
+    if (streamingIdx >= 0) {
+      msgs[streamingIdx].content += data.token
     } else {
       msgs.push({
         id: `rm_${++_roomMsgId}`,
@@ -199,9 +206,11 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleRoomDone(data: { room_id: string; agent_id: string }) {
     const msgs = roomMessages.value.get(data.room_id) || []
-    const lastMsg = msgs[msgs.length - 1]
-    if (lastMsg && lastMsg.isStreaming && lastMsg.senderId === data.agent_id) {
-      lastMsg.isStreaming = false
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
+        msgs[i].isStreaming = false
+        break
+      }
     }
     roomMessages.value.set(data.room_id, msgs)
   }
