@@ -678,11 +678,13 @@ class Agent:
                             yield DoneEvent(final_text=assistant_text or "(no response)")
                             return
                         context = ToolContext(cwd=self.cwd, messages=list(self.messages))
+                        _suppressed_compact: list[bool] = []
                         for block in tool_use_blocks:
                             tool = self.registry.get(block.tool_name)
                             if tool is None:
                                 result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                                 is_error = True
+                                _suppressed_compact.append(False)
                             else:
                                 import time
                                 t0 = time.time()
@@ -696,6 +698,8 @@ class Agent:
                                     result_text = f"Tool error: {te}"
                                     is_error = True
                                 duration_ms = (time.time() - t0) * 1000
+                                _suppress = getattr(tool, 'suppress_reply', False) and not is_error
+                                _suppressed_compact.append(_suppress)
                             yield ToolDoneEvent(
                                 tool_name=block.tool_name,
                                 result=result_text,
@@ -709,6 +713,10 @@ class Agent:
                                 tool_use_id=block.tool_use_id,
                             ))
                             self._persist_message(self.messages[-1])
+                        # suppress_reply: skip next LLM call
+                        if _suppressed_compact and all(_suppressed_compact):
+                            yield DoneEvent(final_text=assistant_text or "(no response)")
+                            return
                         continue  # back to while loop top
                     except Exception as e2:
                         error_msg_text = f"Error calling LLM after compaction: {e2}"
@@ -751,12 +759,14 @@ class Agent:
 
             # Execute tools
             context = ToolContext(cwd=self.cwd, messages=list(self.messages))
+            _suppressed: list[bool] = []
             for block in tool_use_blocks:
                 tool = self.registry.get(block.tool_name)
                 if tool is None:
                     result_text = json.dumps({"error": f"Unknown tool: {block.tool_name}"})
                     is_error = True
                     duration_ms = 0
+                    _suppressed.append(False)
                 else:
                     import time
                     t0 = time.time()
@@ -770,6 +780,8 @@ class Agent:
                         result_text = f"Tool error: {e}"
                         is_error = True
                     duration_ms = (time.time() - t0) * 1000
+                    _suppress = getattr(tool, 'suppress_reply', False) and not is_error
+                    _suppressed.append(_suppress)
 
                 yield ToolDoneEvent(
                     tool_name=block.tool_name,
@@ -785,5 +797,11 @@ class Agent:
                     tool_use_id=block.tool_use_id,
                 ))
                 self._persist_message(self.messages[-1])
+
+            # If ALL tools requested suppress_reply and none errored,
+            # skip the next LLM call and finish directly (saves tokens).
+            if _suppressed and all(_suppressed):
+                yield DoneEvent(final_text=assistant_text or "(no response)")
+                return
 
         yield DoneEvent(final_text="Agent: max turns reached without completing the task.")

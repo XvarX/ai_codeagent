@@ -26,6 +26,7 @@ class Tool(ABC):
     description: str = ""
     parameters: dict[str, Any] = field(default_factory=dict)
     max_result_chars: int | None = 100_000  # 100k default, None = no limit
+    suppress_reply: bool = False  # True → skip LLM follow-up after success
 
     @abstractmethod
     async def call(self, input: dict[str, Any], context: ToolContext) -> str:

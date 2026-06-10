@@ -251,13 +251,12 @@ class WsEventHandler(EventHandler):
             await self._send_debug(
                 "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
+            self._has_pending_tool_results = False
 
     async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
         payload: dict = {"type": "text_delta", "token": token, "reasoning": reasoning}
-        r = self._get_room_id()
-        if r:
-            payload["room_id"] = r
-            payload["agent_id"] = agent_id or self._get_agent_id()
+        # Room chatroom no longer shows text_delta — only BroadcastRoom
+        # room_relay events populate the chatroom.
         await self._send(payload)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
@@ -461,6 +460,9 @@ class WsEventHandler(EventHandler):
             payload["room_id"] = r
             payload["agent_id"] = agent_id or self._get_agent_id()
         await self._send(payload)
+        # Clear stale pending flag so next iteration doesn't show
+        # a spurious "[Send Tool Result]" for already-handled tools
+        self._has_pending_tool_results = False
 
     async def on_error(self, message: str):
         await self._send({"type": "error", "message": message})
@@ -1224,6 +1226,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 slot = session_mgr.get_active()
                 if slot:
                     slot.agent_manager._rooms = rooms
+                    # Register BroadcastRoom tool on each member agent
+                    for aid in room.agent_ids:
+                        slot.agent_manager.register_broadcast_tool(aid)
                 await websocket.send(json.dumps({
                     "type": "room_created",
                     "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
@@ -1247,6 +1252,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 slot = session_mgr.get_active()
                 if slot:
                     slot.agent_manager._rooms = rooms
+                    # Register BroadcastRoom tool on the added agent
+                    slot.agent_manager.register_broadcast_tool(agent_id)
                 await websocket.send(json.dumps({
                     "type": "room_updated",
                     "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},

@@ -203,6 +203,7 @@ class AgentController:
         finally:
             self._current_task = None
             self.agent._loop_running = False
+            self.agent._current_room_id = ""  # Clear room context
             _update_agent_status(self.agent, "idle")
             _push_state_to_frontend(self.agent)
 
