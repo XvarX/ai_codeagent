@@ -33,6 +33,7 @@
     <ProjectPicker v-if="showProjectPicker" @close="showProjectPicker = false" />
     <AllSessionsDialog v-if="showAllSessions" @close="showAllSessions = false" />
     <CodeEditorDialog />
+    <ChatRoomDialog />
   </div>
 </template>
 
@@ -56,6 +57,7 @@ import McpDialog from './components/McpDialog.vue';
 import SkillDialog from './components/SkillDialog.vue';
 import FileTreePanel from './components/FileTreePanel.vue';
 import CodeEditorDialog from './components/CodeEditorDialog.vue';
+import ChatRoomDialog from './components/ChatRoomDialog.vue';
 
 const chatStore = useChatStore();
 const agentStore = useAgentStore();
@@ -80,17 +82,28 @@ let _toolCallIndex = 0;
 
 onMounted(() => {
   // Chat streaming events
-  agentWs.on('thinking', () => {
-    chatStore.startThinking();
-    agentStore.setBusy(true);
+  agentWs.on('thinking', (d: any) => {
+    if (!d.room_id) {
+      chatStore.startThinking();
+      agentStore.setBusy(true);
+    }
     _toolCallIndex = 0;
   });
-  agentWs.on('text_delta', (d: { token: string; reasoning?: boolean }) => {
-    if (!d.reasoning) chatStore.appendToken(d.token);
+  agentWs.on('text_delta', (d: { token: string; reasoning?: boolean; room_id?: string; agent_id?: string }) => {
+    if (d.reasoning) return; // Skip thinking/reasoning tokens
+    if (d.room_id) {
+      chatStore.handleRoomBroadcast({ room_id: d.room_id, agent_id: d.agent_id || '', token: d.token });
+    } else {
+      chatStore.appendToken(d.token);
+    }
   });
-  agentWs.on('done', () => {
-    chatStore.finalizeAssistantMessage();
-    agentStore.setBusy(false);
+  agentWs.on('done', (d: any) => {
+    if (d.room_id) {
+      chatStore.handleRoomDone({ room_id: d.room_id, agent_id: d.agent_id || '' });
+    } else {
+      chatStore.finalizeAssistantMessage();
+      agentStore.setBusy(false);
+    }
     _toolCallIndex = 0;
   });
 
@@ -207,6 +220,7 @@ onMounted(() => {
     sessionStore.removeSession(d.session_id);
     chatStore.clear();
     debugStore.clear();
+    fileBrowserStore.reset();
     if (wasCurrent) {
       agentStore.setAgentList([]);
       agentStore.setActiveAgent('master');
@@ -220,6 +234,7 @@ onMounted(() => {
     if (wasCurrent) {
       chatStore.clear();
       debugStore.clear();
+      fileBrowserStore.reset();
       agentStore.setAgentList([]);
       agentStore.setActiveAgent('master');
     }
@@ -259,6 +274,14 @@ onMounted(() => {
   agentWs.on('file_read', (d: any) => fileBrowserStore.handleResponse(d));
   agentWs.on('file_write', (d: any) => fileBrowserStore.handleResponse(d));
   agentWs.on('file_search', (d: any) => fileBrowserStore.handleResponse(d));
+
+  // Chat room events
+  agentWs.on('room_created', (d: any) => chatStore.handleRoomCreated(d.room));
+  agentWs.on('room_list', (d: any) => chatStore.handleRoomList(d.rooms));
+  agentWs.on('room_destroyed', (d: any) => chatStore.handleRoomDestroyed(d.room_id));
+  agentWs.on('room_updated', (d: any) => chatStore.handleRoomUpdated(d.room));
+  agentWs.on('room_broadcast', (d: any) => chatStore.handleRoomBroadcast(d));
+  agentWs.on('room_relay', (d: any) => chatStore.handleRoomRelay(d));
 
   agentWs.connect();
 });

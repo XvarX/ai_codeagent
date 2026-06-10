@@ -39,6 +39,7 @@
       >+</button>
 
       <div class="flex-1"></div>
+      <ChatRoomButton />
     </div>
 
     <!-- Expanded detail area -->
@@ -90,6 +91,7 @@
 import { ref, computed } from 'vue';
 import { useAgentStore } from '../stores/agent';
 import { agentWs } from '../services/agentWs';
+import ChatRoomButton from './ChatRoomButton.vue';
 
 const agentStore = useAgentStore();
 const expanded = ref(false);

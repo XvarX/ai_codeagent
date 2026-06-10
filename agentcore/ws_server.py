@@ -21,6 +21,16 @@ from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
 from agentcore.file_browser import FileBrowserHandler
 
+import uuid
+from dataclasses import dataclass, field
+
+@dataclass
+class ChatRoom:
+    id: str
+    name: str
+    agent_ids: list[str]
+    created_at: float = field(default_factory=lambda: __import__('time').time())
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +60,24 @@ class WsEventHandler(EventHandler):
     def set_controller(self, controller: AgentController):
         """Update the controller reference (used when switching agents)."""
         self._controller = controller
+
+    def _get_room_id(self) -> str:
+        try:
+            ctrl = self._controller
+            if ctrl and hasattr(ctrl.agent, '_current_room_id'):
+                return getattr(ctrl.agent, '_current_room_id', '')
+        except Exception:
+            pass
+        return ""
+
+    def _get_agent_id(self) -> str:
+        try:
+            ctrl = self._controller
+            if ctrl:
+                return getattr(ctrl.agent, '_subagent_id', '')
+        except Exception:
+            pass
+        return ""
 
     def get_snapshot(self) -> dict:
         """Return current debug state for saving when switching away."""
@@ -212,23 +240,36 @@ class WsEventHandler(EventHandler):
             "group_idx": group_idx,
         })
 
-    async def on_thinking(self):
-        await self._send({"type": "thinking"})
+    async def on_thinking(self, agent_id: str = ""):
+        payload: dict = {"type": "thinking"}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = agent_id or self._get_agent_id()
+        await self._send(payload)
         if self._has_pending_tool_results:
             await self._send_debug(
                 "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
 
-    async def on_text_delta(self, token: str, reasoning: bool = False):
-        await self._send({"type": "text_delta", "token": token, "reasoning": reasoning})
+    async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
+        payload: dict = {"type": "text_delta", "token": token, "reasoning": reasoning}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = agent_id or self._get_agent_id()
+        await self._send(payload)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tool_calls.append({
             "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
         })
-        await self._send({
-            "type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id,
-        })
+        payload: dict = {"type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
         # Pre-read old file for diff display
         if name in ("FileEdit", "FileWrite") and input_dict.get("file_path"):
@@ -290,7 +331,7 @@ class WsEventHandler(EventHandler):
             except (FileNotFoundError, IOError):
                 pass
 
-        await self._send({
+        payload = {
             "type": "tool_result", "name": name, "result": result,
             "is_error": is_error, "duration_ms": duration_ms, "id": tool_use_id,
             "diff": {
@@ -298,7 +339,12 @@ class WsEventHandler(EventHandler):
                 "old_content": old_content,
                 "new_content": new_content,
             } if file_path and old_content != new_content else None,
-        })
+        }
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
         # Attach diff to last assistant message for persistence
         if file_path and old_content != new_content:
@@ -408,8 +454,13 @@ class WsEventHandler(EventHandler):
             group_key=f"asst:{raw.get('id', '')}" if raw.get("id") else None,
         )
 
-    async def on_done(self, final_text: str):
-        await self._send({"type": "done", "final_text": final_text})
+    async def on_done(self, final_text: str, agent_id: str = ""):
+        payload: dict = {"type": "done", "final_text": final_text}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = agent_id or self._get_agent_id()
+        await self._send(payload)
 
     async def on_error(self, message: str):
         await self._send({"type": "error", "message": message})
@@ -728,6 +779,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
     await websocket.send(json.dumps({
         "type": "connected", "version": "0.1.0",
     }))
+
+    # Room registry (per-session, in-memory)
+    rooms: dict[str, ChatRoom] = {}
 
     async for raw_message in websocket:
         try:
@@ -1161,6 +1215,77 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 await websocket.send(json.dumps({
                     "type": "all_sessions", "sessions": all_sessions,
                 }, ensure_ascii=False))
+
+            elif msg_type == "room_create":
+                name = msg.get("name", "New Room")
+                agent_ids = msg.get("agent_ids", [])
+                room = ChatRoom(id=str(uuid.uuid4()), name=name, agent_ids=agent_ids)
+                rooms[room.id] = room
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
+                await websocket.send(json.dumps({
+                    "type": "room_created",
+                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_list":
+                room_list = [{"id": r.id, "name": r.name, "agent_ids": r.agent_ids, "created_at": r.created_at}
+                             for r in rooms.values()]
+                await websocket.send(json.dumps({
+                    "type": "room_list", "rooms": room_list,
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_add_agent":
+                room_id = msg.get("room_id", "")
+                agent_id = msg.get("agent_id", "")
+                room = rooms.get(room_id)
+                if not room:
+                    continue
+                if agent_id not in room.agent_ids:
+                    room.agent_ids.append(agent_id)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
+                await websocket.send(json.dumps({
+                    "type": "room_updated",
+                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_destroy":
+                room_id = msg.get("room_id", "")
+                rooms.pop(room_id, None)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
+                await websocket.send(json.dumps({
+                    "type": "room_destroyed", "room_id": room_id,
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_message":
+                room_id = msg.get("room_id", "")
+                text = msg.get("text", "")
+                room = rooms.get(room_id)
+                if not room:
+                    await websocket.send(json.dumps({
+                        "type": "error", "message": f"Room {room_id} not found",
+                    }))
+                    continue
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
+                manager = slot.agent_manager
+                # Build member names for context
+                member_names = []
+                for aid in room.agent_ids:
+                    st = manager.agents.get(aid)
+                    member_names.append(f"{st.name} (id:{aid})" if st else aid)
+                # Broadcast to all member agents in parallel
+                for agent_id in room.agent_ids:
+                    state = manager.agents.get(agent_id)
+                    if state and state.message_queue:
+                        formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
+                        state.message_queue.enqueue(formatted, source="room", room_id=room_id)
 
             elif msg_type == "file_list":
                 _s = session_mgr.get_active()

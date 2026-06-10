@@ -174,13 +174,30 @@ class _AgentHandler(EventHandler):
         if self._fwd_request:
             self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
-    async def on_thinking(self):
-        # _fwd_thinking handles sync + thinking animation; no debug entry needed
-        if self._fwd_thinking:
+    def _get_my_agent_id(self) -> str:
+        """Get this agent's subagent_id for room event forwarding."""
+        state = self.manager.agents.get(self.agent_id)
+        if state and state.controller:
+            return getattr(state.controller.agent, '_subagent_id', '') or self.agent_id
+        return self.agent_id
+
+    def _in_room_context(self) -> bool:
+        """Check if agent is currently responding in a room context."""
+        state = self.manager.agents.get(self.agent_id)
+        if state and state.controller:
+            return bool(getattr(state.controller.agent, '_current_room_id', ''))
+        return False
+
+    async def on_thinking(self, agent_id: str = ""):
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_thinking(agent_id=self._get_my_agent_id())
+        elif self._fwd_thinking:
             self._fwd_thinking()
 
-    async def on_text_delta(self, token: str, reasoning: bool = False):
-        if self._fwd_text_delta:
+    async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_text_delta(token, reasoning, agent_id=self._get_my_agent_id())
+        elif self._fwd_text_delta:
             self._fwd_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
@@ -299,11 +316,13 @@ class _AgentHandler(EventHandler):
         if self._fwd_error:
             self._fwd_error(message)
 
-    async def on_done(self, final_text: str):
+    async def on_done(self, final_text: str, agent_id: str = ""):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        if self._fwd_done:
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_done(final_text, agent_id=self._get_my_agent_id())
+        elif self._fwd_done:
             self._fwd_done(final_text)
 
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
@@ -344,6 +363,8 @@ class AgentManager:
         self.user_agents = user_agents or {}
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
+        self._agent_id_counter = 0
+        self._rooms: dict = {}  # room_id -> ChatRoom (set by ws_server)
         self.on_change = None  # set by UI to refresh sidebar
         self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
@@ -384,6 +405,8 @@ class AgentManager:
         state.message_queue = queue
         controller.agent._agent_manager = self
         controller.agent._agent_id = "master"
+        controller.agent._subagent_id = "master"
+        controller.agent._agent_name = "Master"
 
         # Register Agent tool and SendMessage tool on master
         from agentcore.tools.agent_tool import AgentTool
@@ -397,8 +420,8 @@ class AgentManager:
                     background: bool = False, keep_alive: bool = False,
                     name: str = "") -> str:
         """Spawn a new subagent. Returns agent_id."""
-        import time
-        agent_id = f"{definition.name.lower()}-{int(time.time() * 1000)}"
+        self._agent_id_counter += 1
+        agent_id = str(self._agent_id_counter)
 
         # Create state first so we can wire inbox
         state = SubagentState(
@@ -426,6 +449,8 @@ class AgentManager:
         state.message_queue = queue
         controller.agent._agent_manager = self
         controller.agent._agent_id = agent_id
+        controller.agent._subagent_id = agent_id
+        controller.agent._agent_name = name
 
         # Wire controller back to state
         state.controller = controller
@@ -569,22 +594,42 @@ class AgentManager:
         return self.agents[self.active_id]
 
     def get_alive_agents_text(self, for_agent_id: str = "master") -> str:
-        """Return alive agent info for injection into LLM context."""
+        """Return agent + room context for injection into LLM context."""
+        parts = []
+
+        # Agent list
         alive = [
             s for aid, s in self.agents.items()
             if aid != for_agent_id and (s.keep_alive or aid == "master")
         ]
-        if not alive:
-            return ""
-        lines = ["Alive agents (use SendMessage to communicate):"]
-        for s in alive:
-            running = s.controller.agent._loop_running if s.controller else False
-            status = "working" if running else "idle"
-            desc = s.definition.description or s.definition.name
-            if len(desc) > 80:
-                desc = desc[:77] + "..."
-            lines.append(f"  - {s.name}: {status} | {desc}")
-        return "\n".join(lines)
+        if alive:
+            lines = ["Alive agents (SendMessage to communicate):"]
+            for s in alive:
+                running = s.controller.agent._loop_running if s.controller else False
+                status = "working" if running else "idle"
+                desc = s.definition.description or s.definition.name
+                if len(desc) > 80:
+                    desc = desc[:77] + "..."
+                lines.append(f"  - {s.name} [id:{s.id}]: {status} | {desc}")
+            parts.append("\n".join(lines))
+
+        # Room membership
+        my_rooms = [
+            (rid, room) for rid, room in self._rooms.items()
+            if for_agent_id in room.agent_ids
+        ]
+        if my_rooms:
+            room_lines = ["Chat Rooms (你所在的聊天室):"]
+            for rid, room in my_rooms:
+                members = []
+                for aid in room.agent_ids:
+                    st = self.agents.get(aid)
+                    members.append(f"{st.name} [id:{aid}]" if st else aid)
+                room_lines.append(f"  「{room.name}」[id:{rid}]: 成员 {', '.join(members)}")
+                room_lines.append(f"    规则: 被 @提及 必须回复; 未被 @ 自行判断; 你的 text_delta 回复自动广播到房间")
+            parts.append("\n".join(room_lines))
+
+        return "\n\n".join(parts) if parts else ""
 
     async def send_message_to_agent(self, from_id: str, to_name_or_id: str, message: str):
         """Send a message from one agent to another via message queue."""
@@ -606,7 +651,7 @@ class AgentManager:
         target_state = self.agents[target_id]
         if not target_state.message_queue:
             raise ValueError(f"Agent '{to_name_or_id}' has no message queue")
-        formatted = f"[Message from {from_name}]\n{message}"
+        formatted = f"[Message from {from_name} (id:{from_id})]\n{message}"
         target_state.message_queue.enqueue(formatted, source="agent")
 
     def list_subagents(self) -> list[SubagentState]:

@@ -18,6 +18,20 @@ export const useAgentStore = defineStore('agent', () => {
   const activeAgentId = ref('master');
   const compacting = ref(false);
 
+  const AGENT_COLORS = [
+    '#89b4fa', '#a6e3a1', '#f9e2af', '#cba6f7',
+    '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
+  ]
+  const agentColors = ref<Map<string, string>>(new Map())
+
+  function getAgentColor(agentId: string): string {
+    if (!agentColors.value.has(agentId)) {
+      const idx = agentColors.value.size % AGENT_COLORS.length
+      agentColors.value.set(agentId, AGENT_COLORS[idx])
+    }
+    return agentColors.value.get(agentId)!
+  }
+
   function setFromStatus(data: any) {
     busy.value = data.busy ?? false;
     provider.value = data.config?.provider ?? '';
@@ -46,6 +60,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   return {
     busy, compacting, provider, model, agents, mcpInfo, skills, activeAgentId,
+    agentColors, getAgentColor,
     setFromStatus, setActiveAgent, setAgentList, setBusy,
   };
 });

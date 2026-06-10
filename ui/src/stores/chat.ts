@@ -1,5 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { agentWs } from '../services/agentWs';
+import { useAgentStore } from './agent';
 
 interface ToolCallEntry {
   name: string;
@@ -31,6 +33,24 @@ export interface DiffEntry {
   newContent: string;
 }
 
+export interface RoomMessage {
+  id: string
+  roomId: string
+  senderId: string
+  senderName: string
+  senderColor: string
+  content: string
+  timestamp: number
+  isStreaming: boolean
+}
+
+export interface ChatRoomInfo {
+  id: string
+  name: string
+  agentIds: string[]
+  createdAt: number
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([]);
   const thinking = ref(false);
@@ -40,6 +60,10 @@ export const useChatStore = defineStore('chat', () => {
   const diffs = ref<DiffEntry[]>([]);
   const toolLabels = ref<ToolLabel[]>([]);
   const inputText = ref('');
+  const roomMessages = ref<Map<string, RoomMessage[]>>(new Map())
+  const rooms = ref<ChatRoomInfo[]>([])
+  const activeRoomId = ref<string | null>(null)
+  let _roomMsgId = 0
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
@@ -124,11 +148,124 @@ export const useChatStore = defineStore('chat', () => {
     inputText.value += (inputText.value ? ' ' : '') + text;
   }
 
+  function _normalizeRoom(r: any): ChatRoomInfo {
+    return { id: r.id, name: r.name, agentIds: r.agent_ids || r.agentIds || [], createdAt: r.created_at || r.createdAt || 0 }
+  }
+
+  function handleRoomCreated(room: any) {
+    rooms.value = [...rooms.value, _normalizeRoom(room)]
+  }
+
+  function handleRoomList(roomList: any[]) {
+    rooms.value = roomList.map(_normalizeRoom)
+  }
+
+  function handleRoomDestroyed(roomId: string) {
+    rooms.value = rooms.value.filter(r => r.id !== roomId)
+    roomMessages.value.delete(roomId)
+    if (activeRoomId.value === roomId) activeRoomId.value = null
+  }
+
+  function handleRoomUpdated(room: any) {
+    const idx = rooms.value.findIndex(r => r.id === room.id)
+    if (idx >= 0) rooms.value[idx] = _normalizeRoom(room)
+  }
+
+  function handleRoomBroadcast(data: { room_id: string; agent_id: string; token: string }) {
+    const msgs = roomMessages.value.get(data.room_id) || []
+    const agent = useAgentStore()
+    const agentInfo = agent.agents.find(a => a.id === data.agent_id)
+    const senderName = agentInfo?.name || data.agent_id
+    const senderColor = agent.getAgentColor(data.agent_id)
+
+    // Find the last streaming message from this specific agent (handle concurrent agent responses)
+    let streamingIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
+        streamingIdx = i
+        break
+      }
+    }
+
+    if (streamingIdx >= 0) {
+      msgs[streamingIdx].content += data.token
+    } else {
+      msgs.push({
+        id: `rm_${++_roomMsgId}`,
+        roomId: data.room_id,
+        senderId: data.agent_id,
+        senderName,
+        senderColor,
+        content: data.token,
+        timestamp: Date.now(),
+        isStreaming: true,
+      })
+    }
+    roomMessages.value.set(data.room_id, msgs)
+  }
+
+  function handleRoomDone(data: { room_id: string; agent_id: string }) {
+    const msgs = roomMessages.value.get(data.room_id) || []
+    let finalizedContent = ''
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
+        msgs[i].isStreaming = false
+        finalizedContent = msgs[i].content
+        break
+      }
+    }
+    roomMessages.value.set(data.room_id, msgs)
+
+    // Also show agent's response in main chat with room label
+    if (finalizedContent) {
+      const room = rooms.value.find(r => r.id === data.room_id)
+      const agent = useAgentStore()
+      const agentInfo = agent.agents.find(a => a.id === data.agent_id)
+      const fromName = agentInfo?.name || data.agent_id
+      const roomLabel = room ? `[Room: ${room.name} ← ${fromName}]` : `[Room: ← ${fromName}]`
+      messages.value.push({ role: 'assistant', content: `${roomLabel}\n${finalizedContent}` })
+    }
+  }
+
+  function handleRoomRelay(data: { room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
+    const roomLabel = `[Room: ${data.room_name} ← ${data.from_name} | Reply to: ${data.reply_to}]`
+    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${data.text}` })
+  }
+
+  function sendRoomMessage(roomId: string, text: string) {
+    agentWs.send({ type: 'room_message', room_id: roomId, text })
+
+    const room = rooms.value.find(r => r.id === roomId)
+    const roomLabel = room ? `[Room: ${room.name} → All]` : `[Room: → All]`
+
+    // Add to room message stream
+    const msgs = roomMessages.value.get(roomId) || []
+    msgs.push({
+      id: `rm_${++_roomMsgId}`,
+      roomId,
+      senderId: 'user',
+      senderName: '你',
+      senderColor: '#89b4fa',
+      content: text,
+      timestamp: Date.now(),
+      isStreaming: false,
+    })
+    roomMessages.value.set(roomId, msgs)
+
+    // Also show in main chat with room label
+    currentAssistantMsg.value = ''
+    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${text}` })
+  }
+
   return {
     messages, thinking, currentAssistantMsg, diffs, toolLabels,
     maxTokens, usageTokens,
     inputText, insertToInput,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
     addToolResult, addToolCall, addToolResultPreview, addDiff, updateUsage, loadMessages, clear,
+    // Room
+    roomMessages, rooms, activeRoomId,
+    handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
+    handleRoomBroadcast, handleRoomDone, handleRoomRelay, sendRoomMessage,
   };
 });

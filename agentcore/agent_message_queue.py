@@ -1,6 +1,7 @@
 """AgentMessageQueue — per-agent sequential message queue."""
 
 import asyncio
+import re
 from agentcore.controller import AgentController
 
 
@@ -13,13 +14,13 @@ class AgentMessageQueue:
     """
 
     def __init__(self, controller: AgentController):
-        self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
         self._controller = controller
         self._consumer_task: asyncio.Task | None = None
 
-    def enqueue(self, text: str, source: str = "user") -> None:
+    def enqueue(self, text: str, source: str = "user", room_id: str = "") -> None:
         """Enqueue a message. Starts the consumer if not running."""
-        self._queue.put_nowait((text, source))
+        self._queue.put_nowait((text, source, room_id))
         self._ensure_consumer()
 
     def _ensure_consumer(self) -> None:
@@ -35,10 +36,29 @@ class AgentMessageQueue:
     async def _consumer_loop(self) -> None:
         """Process messages sequentially. Blocks on send_message per message."""
         while True:
-            text, source = await self._queue.get()
+            text, source, room_id = await self._queue.get()
             try:
-                if source == "agent":
-                    import re
+                sender = ""  # initialized for room/agent branches
+                if source == "room":
+                    room_match = re.match(r"\[Room: ([^\]]+)\]", text)
+                    room_name = room_match.group(1).split("|")[0].strip() if room_match else "Unknown"
+                    from_match = re.search(r"\[From: ([^\]]+)\]", text)
+                    sender = from_match.group(1).strip() if from_match else "Unknown"
+                    last_bracket = text.rfind("]")
+                    msg_body = text[last_bracket + 1:].strip() if last_bracket >= 0 else text
+
+                    # Log as request for debug panel consistency
+                    agent = self._controller.agent
+                    await self._controller.handler.on_request(
+                        f"[Room: {room_name} | From: {sender}]\n{msg_body}",
+                        len(agent.messages) + 1,
+                        agent.est_tokens() + len(msg_body) // 2,
+                        len(agent.registry.get_schemas()),
+                        agent.provider.model or "",
+                    )
+                    await self._controller.handler.on_enqueued(sender, msg_body, "room")
+
+                elif source == "agent":
                     m = re.match(r"\[Message from ([^\]]+)\]", text)
                     from_name = m.group(1) if m else "unknown"
                     msg_body = text[m.end():].strip() if m else text
@@ -54,7 +74,43 @@ class AgentMessageQueue:
                         agent.provider.model or "",
                     )
                 async with self._controller._agent_lock:
-                    await self._controller.send_message(text)
+                    await self._controller.send_message(text, room_id=room_id)
+
+                # Broadcast agent's response to other room members
+                if source == "room" and room_id:
+                    agent = self._controller.agent
+                    response_text = ""
+                    for m in reversed(agent.messages):
+                        if m.role == "assistant" and m.content:
+                            response_text = m.content
+                            break
+                    if response_text:
+                        from_name = getattr(agent, '_agent_name', '') or "unknown"
+                        from_id = getattr(agent, '_agent_id', '')
+                        mgr = getattr(agent, '_agent_manager', None)
+                        if mgr and hasattr(mgr, '_rooms'):
+                            room = mgr._rooms.get(room_id)
+                            if room:
+                                formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id}) | Reply to: {sender}]\n{response_text}"
+                                for aid in room.agent_ids:
+                                    if aid != from_id:
+                                        st = mgr.agents.get(aid)
+                                        if st and st.message_queue:
+                                            st.message_queue.enqueue(formatted, source="room", room_id=room_id)
+                                # Notify frontend main chat
+                                if mgr.master_handler:
+                                    try:
+                                        await mgr.master_handler._send({
+                                            "type": "room_relay",
+                                            "room_id": room_id,
+                                            "room_name": room.name,
+                                            "from_name": from_name,
+                                            "from_id": from_id,
+                                            "text": response_text,
+                                            "reply_to": sender,
+                                        })
+                                    except Exception:
+                                        pass
             except asyncio.CancelledError:
                 break
             except Exception:
