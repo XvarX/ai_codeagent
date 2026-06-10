@@ -1196,11 +1196,13 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 room_id = msg.get("room_id", "")
                 agent_id = msg.get("agent_id", "")
                 room = rooms.get(room_id)
-                if room and agent_id not in room.agent_ids:
+                if not room:
+                    continue
+                if agent_id not in room.agent_ids:
                     room.agent_ids.append(agent_id)
                 await websocket.send(json.dumps({
                     "type": "room_updated",
-                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at} if room else {},
+                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
                 }, ensure_ascii=False))
 
             elif msg_type == "room_destroy":
