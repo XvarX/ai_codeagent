@@ -131,20 +131,28 @@ interface ChatRoomInfo {
 ### 接收端 (Agent 消费队列)
 
 Agent 的 `_consumer_loop` 处理 `source="room"` 消息：
-- 房间上下文注入（拼在消息文本前面，不修改 system prompt）：
-  ```
-  [Room: {room_name} | Members: {member_list}]
-  [From: {sender_name}]
-  {message_text}
-  ```
-- 调用 `controller.send_message(text)` 进入 Agent 的 while-true 循环
-- 流式输出 text_delta 通过 WebSocket 推送，附加 `room_id` + `agent_id`
+
+**首次加入房间** — 注入一条系统消息到 `messages`（仅一次）：
+```
+[System] 你已加入聊天室「{房间名}」。
+成员：{列表}
+规则：
+- 被 @提及 时必须回复
+- 未被 @ 时可自行判断是否发言
+- 你的 text_delta 回复会自动广播给房间所有成员
+```
+
+后续每条消息带轻量上下文前缀：
+```
+[Room: {room_name} | From: {sender_name}]
+{message_text}
+```
 
 ### 房间上下文规则
 
-- Agent 看到每条消息都带房间名 + 成员列表，不需要在系统提示词层面记忆
-- 被 @提及 时必须回复，未被 @ 时可自行判断
+- 行为规则通过一次性系统消息注入，不放在每一条消息里（省 token）
 - 改动仅在 `agent_message_queue.py` 的 `source="room"` 分支，不改 Agent 核心循环
+- 用 `agent.room_joined: set[str]` 记录已加入房间，避免重复注入
 
 ### Agent 间通信（房间内）
 
