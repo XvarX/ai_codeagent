@@ -61,6 +61,24 @@ class WsEventHandler(EventHandler):
         """Update the controller reference (used when switching agents)."""
         self._controller = controller
 
+    def _get_room_id(self) -> str:
+        try:
+            ctrl = self._controller
+            if ctrl and hasattr(ctrl.agent, '_current_room_id'):
+                return getattr(ctrl.agent, '_current_room_id', '')
+        except Exception:
+            pass
+        return ""
+
+    def _get_agent_id(self) -> str:
+        try:
+            ctrl = self._controller
+            if ctrl:
+                return getattr(ctrl.agent, '_subagent_id', '')
+        except Exception:
+            pass
+        return ""
+
     def get_snapshot(self) -> dict:
         """Return current debug state for saving when switching away."""
         return {
@@ -223,22 +241,35 @@ class WsEventHandler(EventHandler):
         })
 
     async def on_thinking(self):
-        await self._send({"type": "thinking"})
+        payload: dict = {"type": "thinking"}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
         if self._has_pending_tool_results:
             await self._send_debug(
                 "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
-        await self._send({"type": "text_delta", "token": token, "reasoning": reasoning})
+        payload: dict = {"type": "text_delta", "token": token, "reasoning": reasoning}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tool_calls.append({
             "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
         })
-        await self._send({
-            "type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id,
-        })
+        payload: dict = {"type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
         # Pre-read old file for diff display
         if name in ("FileEdit", "FileWrite") and input_dict.get("file_path"):
@@ -300,7 +331,7 @@ class WsEventHandler(EventHandler):
             except (FileNotFoundError, IOError):
                 pass
 
-        await self._send({
+        payload = {
             "type": "tool_result", "name": name, "result": result,
             "is_error": is_error, "duration_ms": duration_ms, "id": tool_use_id,
             "diff": {
@@ -308,7 +339,12 @@ class WsEventHandler(EventHandler):
                 "old_content": old_content,
                 "new_content": new_content,
             } if file_path and old_content != new_content else None,
-        })
+        }
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
         # Attach diff to last assistant message for persistence
         if file_path and old_content != new_content:
@@ -419,7 +455,12 @@ class WsEventHandler(EventHandler):
         )
 
     async def on_done(self, final_text: str):
-        await self._send({"type": "done", "final_text": final_text})
+        payload: dict = {"type": "done", "final_text": final_text}
+        r = self._get_room_id()
+        if r:
+            payload["room_id"] = r
+            payload["agent_id"] = self._get_agent_id()
+        await self._send(payload)
 
     async def on_error(self, message: str):
         await self._send({"type": "error", "message": message})

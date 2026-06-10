@@ -426,6 +426,7 @@ class AgentManager:
         state.message_queue = queue
         controller.agent._agent_manager = self
         controller.agent._agent_id = agent_id
+        controller.agent._subagent_id = agent_id
 
         # Wire controller back to state
         state.controller = controller

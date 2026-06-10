@@ -155,9 +155,10 @@ class AgentController:
         )
         self.agent.skills_text = skills_text
 
-    async def send_message(self, text: str) -> None:
+    async def send_message(self, text: str, room_id: str = "") -> None:
         self._cancel_event.clear()
         self._current_task = asyncio.current_task()
+        self.agent._current_room_id = room_id
         self.agent._loop_running = True
         _update_agent_status(self.agent, "running")
         _push_state_to_frontend(self.agent)
