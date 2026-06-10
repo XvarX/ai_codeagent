@@ -74,6 +74,28 @@ class AgentMessageQueue:
                     )
                 async with self._controller._agent_lock:
                     await self._controller.send_message(text, room_id=room_id)
+
+                # Broadcast agent's response to other room members (only if original was from user)
+                if source == "room" and room_id and sender == "用户":
+                    agent = self._controller.agent
+                    response_text = ""
+                    for m in reversed(agent.messages):
+                        if m.role == "assistant" and m.content:
+                            response_text = m.content
+                            break
+                    if response_text:
+                        from_name = getattr(agent, '_agent_name', '') or "unknown"
+                        from_id = getattr(agent, '_agent_id', '')
+                        mgr = getattr(agent, '_agent_manager', None)
+                        if mgr and hasattr(mgr, '_rooms'):
+                            room = mgr._rooms.get(room_id)
+                            if room:
+                                for aid in room.agent_ids:
+                                    if aid != from_id:
+                                        st = mgr.agents.get(aid)
+                                        if st and st.message_queue:
+                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id})]\n{response_text}"
+                                            st.message_queue.enqueue(formatted, source="room", room_id=room_id)
             except asyncio.CancelledError:
                 break
             except Exception:
