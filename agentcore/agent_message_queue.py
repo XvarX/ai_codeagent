@@ -1,6 +1,7 @@
 """AgentMessageQueue — per-agent sequential message queue."""
 
 import asyncio
+import re
 from agentcore.controller import AgentController
 
 
@@ -13,13 +14,13 @@ class AgentMessageQueue:
     """
 
     def __init__(self, controller: AgentController):
-        self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
         self._controller = controller
         self._consumer_task: asyncio.Task | None = None
 
-    def enqueue(self, text: str, source: str = "user") -> None:
+    def enqueue(self, text: str, source: str = "user", room_id: str = "") -> None:
         """Enqueue a message. Starts the consumer if not running."""
-        self._queue.put_nowait((text, source))
+        self._queue.put_nowait((text, source, room_id))
         self._ensure_consumer()
 
     def _ensure_consumer(self) -> None:
@@ -35,10 +36,36 @@ class AgentMessageQueue:
     async def _consumer_loop(self) -> None:
         """Process messages sequentially. Blocks on send_message per message."""
         while True:
-            text, source = await self._queue.get()
+            text, source, room_id = await self._queue.get()
             try:
-                if source == "agent":
-                    import re
+                if source == "room":
+                    # Parse room context from message prefix
+                    room_match = re.match(r"\[Room: ([^\]]+)\]", text)
+                    room_name = room_match.group(1).split("|")[0].strip() if room_match else "Unknown"
+                    from_match = re.search(r"\[From: ([^\]]+)\]", text)
+                    sender = from_match.group(1).strip() if from_match else "Unknown"
+                    # Extract message body (text after the last "]" in prefix)
+                    last_bracket = text.rfind("]")
+                    msg_body = text[last_bracket + 1:].strip() if last_bracket >= 0 else text
+
+                    # Inject room rules on first join (once per room per agent)
+                    agent = self._controller.agent
+                    if room_name not in agent.room_joined:
+                        agent.room_joined.add(room_name)
+                        member_match = re.search(r"\| Members: ([^\]]+)", text)
+                        members = member_match.group(1).strip() if member_match else "unknown"
+                        from agentcore.core_types import Message
+                        join_notice = (
+                            f"[System] 你已加入聊天室「{room_name}」。\n"
+                            f"成员：{members}\n"
+                            f"规则：被 @提及 时必须回复；未被 @ 时可自行判断是否发言；"
+                            f"你的 text_delta 回复会自动广播给房间所有成员。"
+                        )
+                        agent.messages.append(Message(role="user", content=join_notice))
+
+                    await self._controller.handler.on_enqueued(sender, msg_body, "room")
+
+                elif source == "agent":
                     m = re.match(r"\[Message from ([^\]]+)\]", text)
                     from_name = m.group(1) if m else "unknown"
                     msg_body = text[m.end():].strip() if m else text
@@ -54,7 +81,7 @@ class AgentMessageQueue:
                         agent.provider.model or "",
                     )
                 async with self._controller._agent_lock:
-                    await self._controller.send_message(text)
+                    await self._controller.send_message(text, room_id=room_id)
             except asyncio.CancelledError:
                 break
             except Exception:

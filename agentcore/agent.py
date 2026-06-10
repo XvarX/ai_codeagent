@@ -123,6 +123,7 @@ class Agent:
         self._session_store = session_store
         self._session_project = session_project
         self._session_id = session_id
+        self.room_joined: set[str] = set()
 
     def bind_session(self, store, project: str, session_id: str):
         """Attach session store for message persistence."""
