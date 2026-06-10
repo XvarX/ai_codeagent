@@ -1212,6 +1212,31 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     "type": "room_destroyed", "room_id": room_id,
                 }, ensure_ascii=False))
 
+            elif msg_type == "room_message":
+                room_id = msg.get("room_id", "")
+                text = msg.get("text", "")
+                room = rooms.get(room_id)
+                if not room:
+                    await websocket.send(json.dumps({
+                        "type": "error", "message": f"Room {room_id} not found",
+                    }))
+                    continue
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
+                manager = slot.agent_manager
+                # Build member names for context
+                member_names = []
+                for aid in room.agent_ids:
+                    st = manager.agents.get(aid)
+                    member_names.append(st.name if st else aid)
+                # Broadcast to all member agents in parallel
+                for agent_id in room.agent_ids:
+                    state = manager.agents.get(agent_id)
+                    if state and state.message_queue:
+                        formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
+                        state.message_queue.enqueue(formatted, source="room")
+
             elif msg_type == "file_list":
                 _s = session_mgr.get_active()
                 cwd = str((_s.agent_manager.config.cwd if _s else None) or session_mgr._config.cwd or Path.cwd())
