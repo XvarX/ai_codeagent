@@ -220,6 +220,7 @@ onMounted(() => {
     sessionStore.removeSession(d.session_id);
     chatStore.clear();
     debugStore.clear();
+    fileBrowserStore.reset();
     if (wasCurrent) {
       agentStore.setAgentList([]);
       agentStore.setActiveAgent('master');
@@ -233,6 +234,7 @@ onMounted(() => {
     if (wasCurrent) {
       chatStore.clear();
       debugStore.clear();
+      fileBrowserStore.reset();
       agentStore.setAgentList([]);
       agentStore.setActiveAgent('master');
     }

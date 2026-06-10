@@ -206,18 +206,34 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleRoomDone(data: { room_id: string; agent_id: string }) {
     const msgs = roomMessages.value.get(data.room_id) || []
+    let finalizedContent = ''
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
         msgs[i].isStreaming = false
+        finalizedContent = msgs[i].content
         break
       }
     }
     roomMessages.value.set(data.room_id, msgs)
+
+    // Also show agent's response in main chat with room label
+    if (finalizedContent) {
+      const room = rooms.value.find(r => r.id === data.room_id)
+      const agent = useAgentStore()
+      const agentInfo = agent.agents.find(a => a.id === data.agent_id)
+      const fromName = agentInfo?.name || data.agent_id
+      const roomLabel = room ? `[Room: ${room.name} ← ${fromName}]` : `[Room: ← ${fromName}]`
+      messages.value.push({ role: 'assistant', content: `${roomLabel}\n${finalizedContent}` })
+    }
   }
 
   function sendRoomMessage(roomId: string, text: string) {
     agentWs.send({ type: 'room_message', room_id: roomId, text })
 
+    const room = rooms.value.find(r => r.id === roomId)
+    const roomLabel = room ? `[Room: ${room.name} → All]` : `[Room: → All]`
+
+    // Add to room message stream
     const msgs = roomMessages.value.get(roomId) || []
     msgs.push({
       id: `rm_${++_roomMsgId}`,
@@ -230,6 +246,10 @@ export const useChatStore = defineStore('chat', () => {
       isStreaming: false,
     })
     roomMessages.value.set(roomId, msgs)
+
+    // Also show in main chat with room label
+    currentAssistantMsg.value = ''
+    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${text}` })
   }
 
   return {
