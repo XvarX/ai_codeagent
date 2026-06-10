@@ -131,14 +131,16 @@ const activeEditor = computed(() => {
   return fileBrowser.openEditors.get(activeTab.value) || null;
 });
 
-// Sync activeTab when editors change
+// Sync activeTab: respond to new editors and explicit focus requests
 watch(
-  () => [...fileBrowser.openEditors.keys()],
-  (keys, oldKeys) => {
+  [() => [...fileBrowser.openEditors.keys()], () => fileBrowser.focusEditorPath],
+  ([keys, focusPath], [oldKeys]) => {
     if (keys.length === 0) {
       activeTab.value = null;
+    } else if (focusPath && fileBrowser.openEditors.has(focusPath)) {
+      activeTab.value = focusPath;
     } else {
-      const added = keys.filter(k => !oldKeys.includes(k));
+      const added = keys.filter((k: string) => !(oldKeys as string[]).includes(k));
       if (added.length > 0) {
         activeTab.value = added[added.length - 1];
       } else if (!activeTab.value || !fileBrowser.openEditors.has(activeTab.value)) {
@@ -146,16 +148,6 @@ watch(
       }
     }
     nextTick(() => mountPendingEditors());
-  }
-);
-
-// Respond to explicit focus requests (e.g. double-click already-open file)
-watch(
-  () => fileBrowser.focusEditorPath,
-  (path) => {
-    if (path && fileBrowser.openEditors.has(path)) {
-      activeTab.value = path;
-    }
   }
 );
 
