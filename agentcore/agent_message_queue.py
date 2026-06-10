@@ -95,7 +95,7 @@ class AgentMessageQueue:
                                     if aid != from_id:
                                         st = mgr.agents.get(aid)
                                         if st and st.message_queue:
-                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id})]\n{response_text}"
+                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id}) | Reply to: {sender}]\n{response_text}"
                                             st.message_queue.enqueue(formatted, source="room", room_id=room_id)
             except asyncio.CancelledError:
                 break
