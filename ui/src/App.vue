@@ -90,9 +90,10 @@ onMounted(() => {
     _toolCallIndex = 0;
   });
   agentWs.on('text_delta', (d: { token: string; reasoning?: boolean; room_id?: string; agent_id?: string }) => {
+    if (d.reasoning) return; // Skip thinking/reasoning tokens
     if (d.room_id) {
       chatStore.handleRoomBroadcast({ room_id: d.room_id, agent_id: d.agent_id || '', token: d.token });
-    } else if (!d.reasoning) {
+    } else {
       chatStore.appendToken(d.token);
     }
   });
