@@ -21,6 +21,16 @@ from agentcore.agent_definitions import load_user_agents, AgentDefinition
 from agentcore.compact.grouping import group_by_api_round
 from agentcore.file_browser import FileBrowserHandler
 
+import uuid
+from dataclasses import dataclass, field
+
+@dataclass
+class ChatRoom:
+    id: str
+    name: str
+    agent_ids: list[str]
+    created_at: float = field(default_factory=lambda: __import__('time').time())
+
 logger = logging.getLogger(__name__)
 
 
@@ -728,6 +738,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
     await websocket.send(json.dumps({
         "type": "connected", "version": "0.1.0",
     }))
+
+    # Room registry (per-session, in-memory)
+    rooms: dict[str, ChatRoom] = {}
 
     async for raw_message in websocket:
         try:
