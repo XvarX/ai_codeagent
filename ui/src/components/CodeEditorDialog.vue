@@ -2,8 +2,8 @@
   <teleport to="body">
     <div v-for="[path, editor] in fileBrowser.openEditors" :key="path">
       <div
-        class="fixed bg-surface-1 border border-border-default rounded-lg flex flex-col overflow-hidden z-50 relative"
-        :style="dialogStyle"
+        class="bg-surface-1 border border-border-default rounded-lg flex flex-col overflow-hidden"
+        :style="{ position: 'fixed', ...dialogStyle }"
       >
         <!-- Title bar -->
         <div
@@ -94,6 +94,7 @@ const dialogStyle = computed(() => ({
   top: dialogY.value + 'px',
   width: dialogWidth.value + 'px',
   height: dialogHeight.value + 'px',
+  zIndex: 50,
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
 }));
 
