@@ -2,13 +2,15 @@
   <teleport to="body">
     <div v-for="[path, editor] in fileBrowser.openEditors" :key="path">
       <div
-        class="bg-surface-1 border border-border-default rounded-lg flex flex-col"
+        class="bg-surface-1 border border-border-default flex flex-col"
+        :class="maximized ? '' : 'rounded-lg'"
         :style="{ position: 'fixed', ...dialogStyle }"
       >
         <!-- Title bar -->
         <div
           class="flex items-center justify-between px-3 py-2 bg-surface-2 border-b border-border-default cursor-move shrink-0"
           @mousedown.prevent="startDrag($event, path)"
+          @dblclick.prevent="toggleMaximize()"
         >
           <div class="flex items-center gap-2 min-w-0">
             <span class="font-mono text-sm text-text-primary truncate">{{ path.split('/').pop() }}</span>
@@ -47,12 +49,14 @@
 
         <!-- Bottom resize bar -->
         <div
+          v-if="!maximized"
           class="h-2 cursor-ns-resize hover:bg-accent/20 shrink-0"
           @mousedown.prevent="startResize($event, 'vertical')"
         ></div>
       </div>
       <!-- Right edge resize handle (outside overflow) -->
       <div
+        v-if="!maximized"
         class="fixed cursor-ew-resize hover:bg-accent/20"
         :style="{ top: dialogY + 'px', left: (dialogX + dialogWidth) + 'px', width: '5px', height: dialogHeight + 'px', zIndex: 51 }"
         @mousedown.prevent="startResize($event, 'horizontal')"
@@ -91,13 +95,38 @@ const dialogHeight = ref(560);
 const minWidth = 400;
 const minHeight = 300;
 
+const maximized = ref(false);
+const savedRect = { x: 80, y: 40, w: 800, h: 560 };
+
+function toggleMaximize() {
+  if (maximized.value) {
+    dialogX.value = savedRect.x;
+    dialogY.value = savedRect.y;
+    dialogWidth.value = savedRect.w;
+    dialogHeight.value = savedRect.h;
+    maximized.value = false;
+  } else {
+    savedRect.x = dialogX.value;
+    savedRect.y = dialogY.value;
+    savedRect.w = dialogWidth.value;
+    savedRect.h = dialogHeight.value;
+    dialogX.value = 0;
+    dialogY.value = 40; // header height
+    dialogWidth.value = window.innerWidth;
+    dialogHeight.value = window.innerHeight - 40 - 56; // header + inputbar
+    maximized.value = true;
+  }
+}
+
 const dialogStyle = computed(() => ({
   left: dialogX.value + 'px',
   top: dialogY.value + 'px',
   width: dialogWidth.value + 'px',
   height: dialogHeight.value + 'px',
   zIndex: 50,
-  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+  boxShadow: maximized.value ? 'none' : '0 8px 32px rgba(0, 0, 0, 0.12)',
+  borderRadius: maximized.value ? '0' : undefined,
+  transition: 'left 0.15s, top 0.15s, width 0.15s, height 0.15s',
 }));
 
 const editorViews = new Map<string, EditorView>();
