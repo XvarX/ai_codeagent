@@ -174,13 +174,23 @@ class _AgentHandler(EventHandler):
         if self._fwd_request:
             self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
+    def _in_room_context(self) -> bool:
+        """Check if agent is currently responding in a room context."""
+        state = self.manager.agents.get(self.agent_id)
+        if state and state.controller:
+            return bool(getattr(state.controller.agent, '_current_room_id', ''))
+        return False
+
     async def on_thinking(self):
-        # _fwd_thinking handles sync + thinking animation; no debug entry needed
-        if self._fwd_thinking:
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_thinking()
+        elif self._fwd_thinking:
             self._fwd_thinking()
 
     async def on_text_delta(self, token: str, reasoning: bool = False):
-        if self._fwd_text_delta:
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_text_delta(token, reasoning)
+        elif self._fwd_text_delta:
             self._fwd_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
@@ -303,7 +313,9 @@ class _AgentHandler(EventHandler):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        if self._fwd_done:
+        if self._in_room_context() and self.manager.master_handler:
+            await self.manager.master_handler.on_done(final_text)
+        elif self._fwd_done:
             self._fwd_done(final_text)
 
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
