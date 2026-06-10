@@ -587,7 +587,7 @@ class AgentManager:
             desc = s.definition.description or s.definition.name
             if len(desc) > 80:
                 desc = desc[:77] + "..."
-            lines.append(f"  - {s.name}: {status} | {desc}")
+            lines.append(f"  - {s.name} ({s.id}): {status} | {desc}")
         return "\n".join(lines)
 
     async def send_message_to_agent(self, from_id: str, to_name_or_id: str, message: str):
@@ -610,7 +610,7 @@ class AgentManager:
         target_state = self.agents[target_id]
         if not target_state.message_queue:
             raise ValueError(f"Agent '{to_name_or_id}' has no message queue")
-        formatted = f"[Message from {from_name}]\n{message}"
+        formatted = f"[Message from {from_name} ({from_id})]\n{message}"
         target_state.message_queue.enqueue(formatted, source="agent")
 
     def list_subagents(self) -> list[SubagentState]:
