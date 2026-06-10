@@ -2,6 +2,7 @@
   <div class="flex flex-col h-screen bg-surface-0">
     <header class="flex items-center h-10 px-3 border-b border-border-default bg-surface-1 gap-2">
       <button class="bg-transparent border-none text-lg cursor-pointer p-1 text-text-primary" @click="showSidebar = !showSidebar">&#9776;</button>
+      <button class="bg-transparent border border-border-default rounded-md px-2 py-1 cursor-pointer text-sm text-text-secondary hover:bg-surface-2" @click="fileBrowserStore.togglePanel()">📁</button>
       <button class="bg-transparent border border-border-default rounded-md px-[10px] py-1 cursor-pointer text-sm text-accent hover:bg-surface-2" @click="showProjectPicker = true">
         {{ sessionStore.currentProjectName || '选择项目' }}
       </button>
@@ -18,7 +19,8 @@
       <div v-if="showSidebar" class="flex flex-col border-r border-border-default bg-surface-1 min-w-[200px] max-w-[260px]">
         <SessionList @showMore="showAllSessions = true" />
       </div>
-      <div class="flex-1 flex flex-col overflow-hidden">
+      <FileTreePanel v-if="fileBrowserStore.panelVisible" />
+      <div id="chat-area" class="flex-1 flex flex-col overflow-hidden">
         <ChatView class="flex-1" />
         <AgentPanel />
       </div>
@@ -30,6 +32,7 @@
     <SkillDialog v-if="showSkill" @close="showSkill = false" />
     <ProjectPicker v-if="showProjectPicker" @close="showProjectPicker = false" />
     <AllSessionsDialog v-if="showAllSessions" @close="showAllSessions = false" />
+    <CodeEditorDialog />
   </div>
 </template>
 
@@ -39,6 +42,7 @@ import { useChatStore } from './stores/chat';
 import { useAgentStore } from './stores/agent';
 import { useDebugStore } from './stores/debug';
 import { useSessionStore } from './stores/session';
+import { useFileBrowserStore } from './stores/fileBrowser';
 import { agentWs } from './services/agentWs';
 import ProjectPicker from './components/ProjectPicker.vue';
 import SessionList from './components/SessionList.vue';
@@ -50,11 +54,14 @@ import AgentPanel from './components/AgentPanel.vue';
 import ConfigDialog from './components/ConfigDialog.vue';
 import McpDialog from './components/McpDialog.vue';
 import SkillDialog from './components/SkillDialog.vue';
+import FileTreePanel from './components/FileTreePanel.vue';
+import CodeEditorDialog from './components/CodeEditorDialog.vue';
 
 const chatStore = useChatStore();
 const agentStore = useAgentStore();
 const debugStore = useDebugStore();
 const sessionStore = useSessionStore();
+const fileBrowserStore = useFileBrowserStore();
 
 const showSidebar = ref(false);
 const showProjectPicker = ref(false);
@@ -139,10 +146,12 @@ onMounted(() => {
     sessionStore.setProjectOpened(d.path, d.sessions);
     chatStore.clear();
     debugStore.clear();
+    fileBrowserStore.reset();
   });
   agentWs.on('session_created', (d: any) => {
     sessionStore.setSessionCreated(d.session_id, d.title);
     chatStore.clear();
+    fileBrowserStore.reset();
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
@@ -152,6 +161,7 @@ onMounted(() => {
   });
   agentWs.on('session_loaded', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    fileBrowserStore.reset();
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
@@ -175,6 +185,7 @@ onMounted(() => {
   // Active session switched (from switch_session message)
   agentWs.on('active_session_switched', (d: any) => {
     sessionStore.setCurrentSession(d.session_id);
+    fileBrowserStore.reset();
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
@@ -242,6 +253,12 @@ onMounted(() => {
   agentWs.on('agent_list', (d: any) => {
     agentStore.setAgentList(d.agents);
   });
+
+  // File browser responses
+  agentWs.on('file_list', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_read', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_write', (d: any) => fileBrowserStore.handleResponse(d));
+  agentWs.on('file_search', (d: any) => fileBrowserStore.handleResponse(d));
 
   agentWs.connect();
 });

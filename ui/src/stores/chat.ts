@@ -39,6 +39,7 @@ export const useChatStore = defineStore('chat', () => {
   const usageTokens = ref(0);
   const diffs = ref<DiffEntry[]>([]);
   const toolLabels = ref<ToolLabel[]>([]);
+  const inputText = ref('');
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
@@ -119,9 +120,14 @@ export const useChatStore = defineStore('chat', () => {
     toolLabels.value = [];
   }
 
+  function insertToInput(text: string) {
+    inputText.value += (inputText.value ? ' ' : '') + text;
+  }
+
   return {
     messages, thinking, currentAssistantMsg, diffs, toolLabels,
     maxTokens, usageTokens,
+    inputText, insertToInput,
     addUserMessage, startThinking, appendToken, finalizeAssistantMessage,
     addToolResult, addToolCall, addToolResultPreview, addDiff, updateUsage, loadMessages, clear,
   };

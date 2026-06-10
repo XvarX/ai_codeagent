@@ -3,7 +3,7 @@
     <div class="flex-1 border border-border-default rounded-[10px] p-[10px_14px] bg-surface-2">
       <textarea
         ref="textareaRef"
-        v-model="text"
+        v-model="chatStore.inputText"
         class="w-full border-none outline-none resize-none text-[17px] text-text-primary font-sans bg-transparent min-h-6 max-h-[150px] placeholder:text-text-secondary disabled:text-text-muted"
         rows="1"
         :placeholder="agentStore.compacting ? 'Compacting...' : (agentStore.busy ? 'Working...' : '输入消息... (Ctrl+Enter 发送)')"
@@ -14,7 +14,7 @@
     </div>
     <div class="flex flex-col gap-1">
       <button v-if="agentStore.busy" class="w-[34px] h-[34px] rounded-[9px] border-none bg-danger text-white text-sm cursor-pointer" @click="stop" title="Stop">■</button>
-      <button class="w-[34px] h-[34px] rounded-[9px] border-none bg-accent text-white text-base cursor-pointer transition-colors disabled:bg-accent-muted disabled:cursor-not-allowed" :disabled="agentStore.busy || agentStore.compacting || !text.trim()" @click="send" title="Send">↑</button>
+      <button class="w-[34px] h-[34px] rounded-[9px] border-none bg-accent text-white text-base cursor-pointer transition-colors disabled:bg-accent-muted disabled:cursor-not-allowed" :disabled="agentStore.busy || agentStore.compacting || !chatStore.inputText.trim()" @click="send" title="Send">↑</button>
     </div>
   </div>
 </template>
@@ -27,7 +27,6 @@ import { agentWs } from '../services/agentWs';
 
 const agentStore = useAgentStore();
 const chatStore = useChatStore();
-const text = ref('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 function autoResize() {
@@ -45,20 +44,20 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function send() {
-  const msg = text.value.trim();
+  const msg = chatStore.inputText.trim();
   if (!msg) return;
 
   // Intercept /compact command
   if (msg === '/compact') {
     agentWs.send({ type: 'compact' });
-    text.value = '';
+    chatStore.inputText = '';
     resetTextareaHeight();
     return;
   }
 
   chatStore.addUserMessage(msg);
   agentWs.send({ type: 'send_message', text: msg });
-  text.value = '';
+  chatStore.inputText = '';
   resetTextareaHeight();
 }
 
