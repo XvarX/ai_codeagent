@@ -45,6 +45,16 @@ class AgentMessageQueue:
                     sender = from_match.group(1).strip() if from_match else "Unknown"
                     last_bracket = text.rfind("]")
                     msg_body = text[last_bracket + 1:].strip() if last_bracket >= 0 else text
+
+                    # Log as request for debug panel consistency
+                    agent = self._controller.agent
+                    await self._controller.handler.on_request(
+                        f"[Room: {room_name} | From: {sender}]\n{msg_body}",
+                        len(agent.messages) + 1,
+                        agent.est_tokens() + len(msg_body) // 2,
+                        len(agent.registry.get_schemas()),
+                        agent.provider.model or "",
+                    )
                     await self._controller.handler.on_enqueued(sender, msg_body, "room")
 
                 elif source == "agent":
