@@ -1221,6 +1221,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 agent_ids = msg.get("agent_ids", [])
                 room = ChatRoom(id=str(uuid.uuid4()), name=name, agent_ids=agent_ids)
                 rooms[room.id] = room
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
                 await websocket.send(json.dumps({
                     "type": "room_created",
                     "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
@@ -1241,6 +1244,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     continue
                 if agent_id not in room.agent_ids:
                     room.agent_ids.append(agent_id)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
                 await websocket.send(json.dumps({
                     "type": "room_updated",
                     "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
@@ -1249,6 +1255,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
             elif msg_type == "room_destroy":
                 room_id = msg.get("room_id", "")
                 rooms.pop(room_id, None)
+                slot = session_mgr.get_active()
+                if slot:
+                    slot.agent_manager._rooms = rooms
                 await websocket.send(json.dumps({
                     "type": "room_destroyed", "room_id": room_id,
                 }, ensure_ascii=False))

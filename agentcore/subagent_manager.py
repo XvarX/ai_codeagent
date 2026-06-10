@@ -357,6 +357,7 @@ class AgentManager:
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
         self._agent_id_counter = 0
+        self._rooms: dict = {}  # room_id -> ChatRoom (set by ws_server)
         self.on_change = None  # set by UI to refresh sidebar
         self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
@@ -586,22 +587,42 @@ class AgentManager:
         return self.agents[self.active_id]
 
     def get_alive_agents_text(self, for_agent_id: str = "master") -> str:
-        """Return alive agent info for injection into LLM context."""
+        """Return agent + room context for injection into LLM context."""
+        parts = []
+
+        # Agent list
         alive = [
             s for aid, s in self.agents.items()
             if aid != for_agent_id and (s.keep_alive or aid == "master")
         ]
-        if not alive:
-            return ""
-        lines = ["Alive agents (use SendMessage to communicate):"]
-        for s in alive:
-            running = s.controller.agent._loop_running if s.controller else False
-            status = "working" if running else "idle"
-            desc = s.definition.description or s.definition.name
-            if len(desc) > 80:
-                desc = desc[:77] + "..."
-            lines.append(f"  - {s.name} [id:{s.id}]: {status} | {desc}")
-        return "\n".join(lines)
+        if alive:
+            lines = ["Alive agents (SendMessage to communicate):"]
+            for s in alive:
+                running = s.controller.agent._loop_running if s.controller else False
+                status = "working" if running else "idle"
+                desc = s.definition.description or s.definition.name
+                if len(desc) > 80:
+                    desc = desc[:77] + "..."
+                lines.append(f"  - {s.name} [id:{s.id}]: {status} | {desc}")
+            parts.append("\n".join(lines))
+
+        # Room membership
+        my_rooms = [
+            (rid, room) for rid, room in self._rooms.items()
+            if for_agent_id in room.agent_ids
+        ]
+        if my_rooms:
+            room_lines = ["Chat Rooms (你所在的聊天室):"]
+            for rid, room in my_rooms:
+                members = []
+                for aid in room.agent_ids:
+                    st = self.agents.get(aid)
+                    members.append(f"{st.name} [id:{aid}]" if st else aid)
+                room_lines.append(f"  「{room.name}」[id:{rid}]: 成员 {', '.join(members)}")
+                room_lines.append(f"    规则: 被 @提及 必须回复; 未被 @ 自行判断; 你的 text_delta 回复自动广播到房间")
+            parts.append("\n".join(room_lines))
+
+        return "\n\n".join(parts) if parts else ""
 
     async def send_message_to_agent(self, from_id: str, to_name_or_id: str, message: str):
         """Send a message from one agent to another via message queue."""
