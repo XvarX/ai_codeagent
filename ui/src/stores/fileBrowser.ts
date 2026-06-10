@@ -123,8 +123,13 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
     }
   }
 
+  const focusEditorPath = ref<string | null>(null);
+
   async function openEditor(path: string) {
-    if (openEditors.value.has(path)) return;
+    if (openEditors.value.has(path)) {
+      focusEditorPath.value = path;
+      return;
+    }
     loading.value = true;
     error.value = null;
     try {
@@ -137,6 +142,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
         modified: data.modified,
         dirty: false,
       });
+      focusEditorPath.value = path;
     } catch (e: any) {
       error.value = e.message;
     } finally {
@@ -216,7 +222,7 @@ export const useFileBrowserStore = defineStore('fileBrowser', () => {
   return {
     tree, expandedDirs, selectedFile,
     previewContent, previewPath, previewLanguage, previewSize, previewModified,
-    openEditors, panelVisible, activeTab, loading, error,
+    openEditors, panelVisible, activeTab, focusEditorPath, loading, error,
     searchResults, searchQuery,
     handleResponse,
     loadDir, selectFile, openEditor, saveFile, searchFiles,

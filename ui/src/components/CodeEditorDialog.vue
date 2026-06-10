@@ -134,14 +134,28 @@ const activeEditor = computed(() => {
 // Sync activeTab when editors change
 watch(
   () => [...fileBrowser.openEditors.keys()],
-  (keys) => {
+  (keys, oldKeys) => {
     if (keys.length === 0) {
       activeTab.value = null;
-    } else if (!activeTab.value || !fileBrowser.openEditors.has(activeTab.value)) {
-      activeTab.value = keys[keys.length - 1];
+    } else {
+      const added = keys.filter(k => !oldKeys.includes(k));
+      if (added.length > 0) {
+        activeTab.value = added[added.length - 1];
+      } else if (!activeTab.value || !fileBrowser.openEditors.has(activeTab.value)) {
+        activeTab.value = keys[keys.length - 1];
+      }
     }
-    // Ensure new editors get their CM instances mounted
     nextTick(() => mountPendingEditors());
+  }
+);
+
+// Respond to explicit focus requests (e.g. double-click already-open file)
+watch(
+  () => fileBrowser.focusEditorPath,
+  (path) => {
+    if (path && fileBrowser.openEditors.has(path)) {
+      activeTab.value = path;
+    }
   }
 );
 
