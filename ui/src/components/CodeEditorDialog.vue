@@ -2,7 +2,7 @@
   <teleport to="body">
     <div v-for="[path, editor] in fileBrowser.openEditors" :key="path">
       <div
-        class="bg-surface-1 border border-border-default rounded-lg flex flex-col overflow-hidden"
+        class="bg-surface-1 border border-border-default rounded-lg flex flex-col"
         :style="{ position: 'fixed', ...dialogStyle }"
       >
         <!-- Title bar -->
@@ -45,16 +45,18 @@
           未保存更改
         </div>
 
-        <!-- Resize handle (bottom-right corner) -->
+        <!-- Bottom resize bar -->
         <div
-          class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10"
-          @mousedown.prevent="startResize($event)"
-        >
-          <svg class="w-4 h-4 text-text-muted" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M14 14H10L14 10V14ZM14 6L6 14H8L14 8V6ZM14 2L2 14H4L14 4V2Z"/>
-          </svg>
-        </div>
+          class="h-2 cursor-ns-resize hover:bg-accent/20 shrink-0"
+          @mousedown.prevent="startResize($event, 'vertical')"
+        ></div>
       </div>
+      <!-- Right edge resize handle (outside overflow) -->
+      <div
+        class="fixed cursor-ew-resize hover:bg-accent/20"
+        :style="{ top: dialogY + 'px', left: (dialogX + dialogWidth) + 'px', width: '5px', height: dialogHeight + 'px', zIndex: 51 }"
+        @mousedown.prevent="startResize($event, 'horizontal')"
+      ></div>
     </div>
   </teleport>
 </template>
@@ -197,14 +199,17 @@ function startDrag(e: MouseEvent, _path: string) {
   document.addEventListener('mouseup', onUp);
 }
 
-function startResize(e: MouseEvent) {
+function startResize(e: MouseEvent, direction: 'vertical' | 'horizontal') {
   const startX = e.clientX;
   const startY = e.clientY;
   const origW = dialogWidth.value;
   const origH = dialogHeight.value;
   function onMove(ev: MouseEvent) {
-    dialogWidth.value = Math.max(minWidth, origW + (ev.clientX - startX));
-    dialogHeight.value = Math.max(minHeight, origH + (ev.clientY - startY));
+    if (direction === 'horizontal') {
+      dialogWidth.value = Math.max(minWidth, origW + (ev.clientX - startX));
+    } else {
+      dialogHeight.value = Math.max(minHeight, origH + (ev.clientY - startY));
+    }
   }
   function onUp() {
     document.removeEventListener('mousemove', onMove);
