@@ -1175,6 +1175,41 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     "type": "all_sessions", "sessions": all_sessions,
                 }, ensure_ascii=False))
 
+            elif msg_type == "room_create":
+                name = msg.get("name", "New Room")
+                agent_ids = msg.get("agent_ids", [])
+                room = ChatRoom(id=str(uuid.uuid4()), name=name, agent_ids=agent_ids)
+                rooms[room.id] = room
+                await websocket.send(json.dumps({
+                    "type": "room_created",
+                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_list":
+                room_list = [{"id": r.id, "name": r.name, "agent_ids": r.agent_ids, "created_at": r.created_at}
+                             for r in rooms.values()]
+                await websocket.send(json.dumps({
+                    "type": "room_list", "rooms": room_list,
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_add_agent":
+                room_id = msg.get("room_id", "")
+                agent_id = msg.get("agent_id", "")
+                room = rooms.get(room_id)
+                if room and agent_id not in room.agent_ids:
+                    room.agent_ids.append(agent_id)
+                await websocket.send(json.dumps({
+                    "type": "room_updated",
+                    "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at} if room else {},
+                }, ensure_ascii=False))
+
+            elif msg_type == "room_destroy":
+                room_id = msg.get("room_id", "")
+                rooms.pop(room_id, None)
+                await websocket.send(json.dumps({
+                    "type": "room_destroyed", "room_id": room_id,
+                }, ensure_ascii=False))
+
             elif msg_type == "file_list":
                 _s = session_mgr.get_active()
                 cwd = str((_s.agent_manager.config.cwd if _s else None) or session_mgr._config.cwd or Path.cwd())
