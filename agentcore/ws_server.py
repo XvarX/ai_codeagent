@@ -240,24 +240,24 @@ class WsEventHandler(EventHandler):
             "group_idx": group_idx,
         })
 
-    async def on_thinking(self):
+    async def on_thinking(self, agent_id: str = ""):
         payload: dict = {"type": "thinking"}
         r = self._get_room_id()
         if r:
             payload["room_id"] = r
-            payload["agent_id"] = self._get_agent_id()
+            payload["agent_id"] = agent_id or self._get_agent_id()
         await self._send(payload)
         if self._has_pending_tool_results:
             await self._send_debug(
                 "[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
                 group_key=self._last_tool_group_key)
 
-    async def on_text_delta(self, token: str, reasoning: bool = False):
+    async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
         payload: dict = {"type": "text_delta", "token": token, "reasoning": reasoning}
         r = self._get_room_id()
         if r:
             payload["room_id"] = r
-            payload["agent_id"] = self._get_agent_id()
+            payload["agent_id"] = agent_id or self._get_agent_id()
         await self._send(payload)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
@@ -454,12 +454,12 @@ class WsEventHandler(EventHandler):
             group_key=f"asst:{raw.get('id', '')}" if raw.get("id") else None,
         )
 
-    async def on_done(self, final_text: str):
+    async def on_done(self, final_text: str, agent_id: str = ""):
         payload: dict = {"type": "done", "final_text": final_text}
         r = self._get_room_id()
         if r:
             payload["room_id"] = r
-            payload["agent_id"] = self._get_agent_id()
+            payload["agent_id"] = agent_id or self._get_agent_id()
         await self._send(payload)
 
     async def on_error(self, message: str):

@@ -174,6 +174,13 @@ class _AgentHandler(EventHandler):
         if self._fwd_request:
             self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
+    def _get_my_agent_id(self) -> str:
+        """Get this agent's subagent_id for room event forwarding."""
+        state = self.manager.agents.get(self.agent_id)
+        if state and state.controller:
+            return getattr(state.controller.agent, '_subagent_id', '') or self.agent_id
+        return self.agent_id
+
     def _in_room_context(self) -> bool:
         """Check if agent is currently responding in a room context."""
         state = self.manager.agents.get(self.agent_id)
@@ -181,15 +188,15 @@ class _AgentHandler(EventHandler):
             return bool(getattr(state.controller.agent, '_current_room_id', ''))
         return False
 
-    async def on_thinking(self):
+    async def on_thinking(self, agent_id: str = ""):
         if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_thinking()
+            await self.manager.master_handler.on_thinking(agent_id=self._get_my_agent_id())
         elif self._fwd_thinking:
             self._fwd_thinking()
 
-    async def on_text_delta(self, token: str, reasoning: bool = False):
+    async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
         if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_text_delta(token, reasoning)
+            await self.manager.master_handler.on_text_delta(token, reasoning, agent_id=self._get_my_agent_id())
         elif self._fwd_text_delta:
             self._fwd_text_delta(token, reasoning)
 
@@ -309,12 +316,12 @@ class _AgentHandler(EventHandler):
         if self._fwd_error:
             self._fwd_error(message)
 
-    async def on_done(self, final_text: str):
+    async def on_done(self, final_text: str, agent_id: str = ""):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
         if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_done(final_text)
+            await self.manager.master_handler.on_done(final_text, agent_id=self._get_my_agent_id())
         elif self._fwd_done:
             self._fwd_done(final_text)
 

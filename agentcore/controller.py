@@ -110,12 +110,12 @@ def _build_provider(config: AgentConfig):
 class EventHandler:
     """Base event handler — override methods in UI layer."""
 
-    async def on_thinking(self): pass
-    async def on_text_delta(self, token: str, reasoning: bool = False): pass
+    async def on_thinking(self, agent_id: str = ""): pass
+    async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""): pass
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""): pass
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""): pass
     async def on_response_done(self, raw: dict): pass
-    async def on_done(self, final_text: str): pass
+    async def on_done(self, final_text: str, agent_id: str = ""): pass
     async def on_error(self, message: str): pass
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int): pass
     async def on_compact(self, pre_tokens: int, post_tokens: int, trigger: str, summary: str = ""): pass
