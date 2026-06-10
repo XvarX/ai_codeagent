@@ -281,6 +281,7 @@ onMounted(() => {
   agentWs.on('room_destroyed', (d: any) => chatStore.handleRoomDestroyed(d.room_id));
   agentWs.on('room_updated', (d: any) => chatStore.handleRoomUpdated(d.room));
   agentWs.on('room_broadcast', (d: any) => chatStore.handleRoomBroadcast(d));
+  agentWs.on('room_relay', (d: any) => chatStore.handleRoomRelay(d));
 
   agentWs.connect();
 });

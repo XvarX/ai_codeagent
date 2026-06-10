@@ -91,12 +91,26 @@ class AgentMessageQueue:
                         if mgr and hasattr(mgr, '_rooms'):
                             room = mgr._rooms.get(room_id)
                             if room:
+                                formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id}) | Reply to: {sender}]\n{response_text}"
                                 for aid in room.agent_ids:
                                     if aid != from_id:
                                         st = mgr.agents.get(aid)
                                         if st and st.message_queue:
-                                            formatted = f"[Room: {room.name} | From: {from_name} (id:{from_id}) | Reply to: {sender}]\n{response_text}"
                                             st.message_queue.enqueue(formatted, source="room", room_id=room_id)
+                                # Notify frontend main chat
+                                if mgr.master_handler:
+                                    try:
+                                        await mgr.master_handler._send({
+                                            "type": "room_relay",
+                                            "room_id": room_id,
+                                            "room_name": room.name,
+                                            "from_name": from_name,
+                                            "from_id": from_id,
+                                            "text": response_text,
+                                            "reply_to": sender,
+                                        })
+                                    except Exception:
+                                        pass
             except asyncio.CancelledError:
                 break
             except Exception:

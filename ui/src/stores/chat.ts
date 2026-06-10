@@ -227,6 +227,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function handleRoomRelay(data: { room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
+    const roomLabel = `[Room: ${data.room_name} ← ${data.from_name} | Reply to: ${data.reply_to}]`
+    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${data.text}` })
+  }
+
   function sendRoomMessage(roomId: string, text: string) {
     agentWs.send({ type: 'room_message', room_id: roomId, text })
 
@@ -261,6 +266,6 @@ export const useChatStore = defineStore('chat', () => {
     // Room
     roomMessages, rooms, activeRoomId,
     handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
-    handleRoomBroadcast, handleRoomDone, sendRoomMessage,
+    handleRoomBroadcast, handleRoomDone, handleRoomRelay, sendRoomMessage,
   };
 });
