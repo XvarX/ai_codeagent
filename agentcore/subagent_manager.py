@@ -344,6 +344,7 @@ class AgentManager:
         self.user_agents = user_agents or {}
         self.agents: dict[str, SubagentState] = {}
         self.active_id: str = "master"
+        self._agent_id_counter = 0
         self.on_change = None  # set by UI to refresh sidebar
         self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
@@ -399,8 +400,8 @@ class AgentManager:
                     background: bool = False, keep_alive: bool = False,
                     name: str = "") -> str:
         """Spawn a new subagent. Returns agent_id."""
-        import time
-        agent_id = f"{definition.name.lower()}-{int(time.time() * 1000)}"
+        self._agent_id_counter += 1
+        agent_id = str(self._agent_id_counter)
 
         # Create state first so we can wire inbox
         state = SubagentState(
