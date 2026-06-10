@@ -110,10 +110,19 @@ function toggleMaximize() {
     savedRect.y = dialogY.value;
     savedRect.w = dialogWidth.value;
     savedRect.h = dialogHeight.value;
-    dialogX.value = 0;
-    dialogY.value = 40; // header height
-    dialogWidth.value = window.innerWidth;
-    dialogHeight.value = window.innerHeight - 40 - 56; // header + inputbar
+    const chatArea = document.getElementById('chat-area');
+    if (chatArea) {
+      const rect = chatArea.getBoundingClientRect();
+      dialogX.value = rect.left;
+      dialogY.value = rect.top;
+      dialogWidth.value = rect.width;
+      dialogHeight.value = rect.height;
+    } else {
+      dialogX.value = 0;
+      dialogY.value = 40;
+      dialogWidth.value = window.innerWidth;
+      dialogHeight.value = window.innerHeight - 96;
+    }
     maximized.value = true;
   }
 }

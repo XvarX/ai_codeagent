@@ -20,7 +20,7 @@
         <SessionList @showMore="showAllSessions = true" />
       </div>
       <FileTreePanel v-if="fileBrowserStore.panelVisible" />
-      <div class="flex-1 flex flex-col overflow-hidden">
+      <div id="chat-area" class="flex-1 flex flex-col overflow-hidden">
         <ChatView class="flex-1" />
         <AgentPanel />
       </div>
