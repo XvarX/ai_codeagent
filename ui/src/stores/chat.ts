@@ -148,12 +148,16 @@ export const useChatStore = defineStore('chat', () => {
     inputText.value += (inputText.value ? ' ' : '') + text;
   }
 
-  function handleRoomCreated(room: ChatRoomInfo) {
-    rooms.value = [...rooms.value, room]
+  function _normalizeRoom(r: any): ChatRoomInfo {
+    return { id: r.id, name: r.name, agentIds: r.agent_ids || r.agentIds || [], createdAt: r.created_at || r.createdAt || 0 }
   }
 
-  function handleRoomList(roomList: ChatRoomInfo[]) {
-    rooms.value = roomList
+  function handleRoomCreated(room: any) {
+    rooms.value = [...rooms.value, _normalizeRoom(room)]
+  }
+
+  function handleRoomList(roomList: any[]) {
+    rooms.value = roomList.map(_normalizeRoom)
   }
 
   function handleRoomDestroyed(roomId: string) {
@@ -162,9 +166,9 @@ export const useChatStore = defineStore('chat', () => {
     if (activeRoomId.value === roomId) activeRoomId.value = null
   }
 
-  function handleRoomUpdated(room: ChatRoomInfo) {
+  function handleRoomUpdated(room: any) {
     const idx = rooms.value.findIndex(r => r.id === room.id)
-    if (idx >= 0) rooms.value[idx] = room
+    if (idx >= 0) rooms.value[idx] = _normalizeRoom(room)
   }
 
   function handleRoomBroadcast(data: { room_id: string; agent_id: string; token: string }) {
