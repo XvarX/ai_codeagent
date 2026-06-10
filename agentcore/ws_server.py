@@ -1270,7 +1270,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 member_names = []
                 for aid in room.agent_ids:
                     st = manager.agents.get(aid)
-                    member_names.append(f"{st.name} ({aid})" if st else aid)
+                    member_names.append(f"{st.name} (id:{aid})" if st else aid)
                 # Broadcast to all member agents in parallel
                 for agent_id in room.agent_ids:
                     state = manager.agents.get(agent_id)
