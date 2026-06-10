@@ -54,12 +54,16 @@ class AgentMessageQueue:
                         agent.room_joined.add(room_name)
                         member_match = re.search(r"\| Members: ([^\]]+)", text)
                         members = member_match.group(1).strip() if member_match else "unknown"
+                        my_name = getattr(agent, '_agent_name', '') or sender
                         from agentcore.core_types import Message
                         join_notice = (
                             f"[System] 你已加入聊天室「{room_name}」。\n"
-                            f"成员：{members}\n"
-                            f"规则：被 @提及 时必须回复；未被 @ 时可自行判断是否发言；"
-                            f"你的 text_delta 回复会自动广播给房间所有成员。"
+                            f"你的名字是「{my_name}」\n"
+                            f"房间成员：{members}\n"
+                            f"规则：\n"
+                            f"- 被 @提及 时必须回复\n"
+                            f"- 未被 @ 时可自行判断是否发言\n"
+                            f"- 你的 reply 会自动广播给房间所有成员"
                         )
                         agent.messages.append(Message(role="user", content=join_notice))
 

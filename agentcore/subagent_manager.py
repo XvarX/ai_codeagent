@@ -384,6 +384,8 @@ class AgentManager:
         state.message_queue = queue
         controller.agent._agent_manager = self
         controller.agent._agent_id = "master"
+        controller.agent._subagent_id = "master"
+        controller.agent._agent_name = "Master"
 
         # Register Agent tool and SendMessage tool on master
         from agentcore.tools.agent_tool import AgentTool
@@ -427,6 +429,7 @@ class AgentManager:
         controller.agent._agent_manager = self
         controller.agent._agent_id = agent_id
         controller.agent._subagent_id = agent_id
+        controller.agent._agent_name = name
 
         # Wire controller back to state
         state.controller = controller
