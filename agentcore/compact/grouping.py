@@ -63,6 +63,90 @@ def group_by_user_round(messages: list[Message]) -> list[list[Message]]:
     return groups
 
 
+def compute_group_idx(
+    messages: list[Message],
+    existing_entries: list[dict],
+    group_key: str | None,
+) -> int | None:
+    """Compute persistent group G-number for a debug entry.
+
+    Uses a two-level gi->gid mapping so that entries surviving compact/snip
+    keep their original G-number while new groups get incremented IDs.
+    """
+    if not group_key:
+        return None
+
+    groups = group_by_api_round(messages)
+
+    # Build ID -> gi lookups from current messages
+    asst_id_to_gi: dict[str, int] = {}
+    tool_id_to_gi: dict[str, int] = {}
+    user_msg_groups: list[int] = []
+    for gi, g in enumerate(groups):
+        for m in g:
+            if m.role == "assistant" and m.id:
+                asst_id_to_gi[m.id] = gi
+            elif m.role == "user" and m.tool_use_id:
+                tool_id_to_gi[m.tool_use_id] = gi
+            elif m.role == "user" and not m.is_tool_result and not m.tool_use_id:
+                content = m.content or ""
+                if not content.startswith("[Context compressed"):
+                    user_msg_groups.append(gi)
+
+    # Rebuild persistent gi->gid map from surviving existing entries
+    persistent: dict[int, int] = {}
+    for entry in existing_entries:
+        gid = entry.get("group_idx")
+        if gid is None or gid < 0 or entry.get("opacity", 1.0) < 1.0:
+            continue
+        key = entry.get("group_key") or ""
+        gi = None
+        if key.startswith("asst:"):
+            gi = asst_id_to_gi.get(key[5:])
+        elif key.startswith("tool:"):
+            gi = tool_id_to_gi.get(key[5:])
+        if gi is not None:
+            persistent[gi] = gid
+
+    max_persistent = max(
+        (e.get("group_idx", -1) for e in existing_entries
+         if e.get("group_idx") is not None and e.get("group_idx", -1) >= 0
+         and e.get("opacity", 1.0) >= 1.0),
+        default=-1)
+    next_gid = max_persistent + 1
+
+    # Count already-assigned entries to skip
+    user_idx = sum(1 for e in existing_entries
+                   if e.get("group_key") == "user"
+                   and e.get("group_idx") is not None
+                   and e.get("opacity", 1.0) >= 1.0)
+
+    # Compute gi for this entry
+    gi = None
+    if group_key == "user":
+        if user_idx < len(user_msg_groups):
+            gi = user_msg_groups[user_idx]
+        else:
+            gi = len(groups)
+    elif group_key.startswith("asst:"):
+        gi = asst_id_to_gi.get(group_key[5:])
+    elif group_key.startswith("tool:"):
+        gi = tool_id_to_gi.get(group_key[5:])
+        if gi is None:
+            for _gi, g in enumerate(groups):
+                for m in g:
+                    for b in (getattr(m, "tool_use_blocks", None) or []):
+                        if b.tool_use_id == group_key[5:]:
+                            gi = _gi
+                            break
+
+    if gi is None:
+        return None
+
+    gid = persistent.get(gi, next_gid)
+    return gid
+
+
 def _normalize_usage(usage: dict) -> dict:
     """Normalize usage to OpenAI format {prompt_tokens, completion_tokens, total_tokens}."""
     if not usage:

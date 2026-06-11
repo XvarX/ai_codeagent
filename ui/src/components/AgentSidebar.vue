@@ -20,13 +20,13 @@
             <div class="flex flex-col min-w-0">
               <span class="font-medium text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.name }}</span>
               <div class="flex items-center gap-[6px] mt-px">
-                <span v-if="agent.id === 'master'" class="text-[11px] text-text-muted">主 Agent</span>
+                <span v-if="agent.id === '1'" class="text-[11px] text-text-muted">主 Agent</span>
                 <span v-if="agent.est_tokens" class="text-[11px] text-accent">~{{ agent.est_tokens }}t</span>
               </div>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
               <span class="w-2 h-2 rounded flex-shrink-0" :style="{ backgroundColor: statusColor(agent.status) }"></span>
-              <button v-if="agent.id !== 'master'" class="bg-transparent border-none text-text-muted cursor-pointer text-sm px-0.5 hover:text-danger" @click.stop="kill(agent.id)" title="Kill">&times;</button>
+              <button v-if="agent.id !== '1'" class="bg-transparent border-none text-text-muted cursor-pointer text-sm px-0.5 hover:text-danger" @click.stop="kill(agent.id)" title="Kill">&times;</button>
             </div>
           </div>
         </div>

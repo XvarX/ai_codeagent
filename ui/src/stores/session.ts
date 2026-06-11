@@ -171,9 +171,6 @@ export const useSessionStore = defineStore('session', () => {
       if (idx >= 0) op.sessions.splice(idx, 1);
     }
     delete sessionStatuses.value[sessionId];
-    if (currentSessionId.value === sessionId) {
-      currentSessionId.value = '';
-    }
   }
 
   function createSession(title: string = 'New Chat') {

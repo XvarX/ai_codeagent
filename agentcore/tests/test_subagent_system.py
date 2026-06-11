@@ -43,7 +43,7 @@ def test_general_purpose_has_all_tools():
 
 def test_subagent_manager_creates_master(monkeypatch):
     """Test AgentManager with mocked provider creation."""
-    from agentcore.subagent_manager import AgentManager
+    from agentcore.agent_manager import AgentManager
 
     # Mock _build_provider to avoid needing API keys
     def mock_build_provider(config):
@@ -52,17 +52,17 @@ def test_subagent_manager_creates_master(monkeypatch):
         m.model = "test-model"
         return m
 
-    monkeypatch.setattr("agentcore.subagent_manager._build_provider", mock_build_provider)
+    monkeypatch.setattr("agentcore.agent_manager._build_provider", mock_build_provider)
     monkeypatch.setattr("agentcore.controller._build_provider", mock_build_provider)
 
     config = AgentConfig(provider="glm")
     mgr = AgentManager(config)
 
-    assert "master" in mgr.agents
-    assert mgr.active_id == "master"
-    master = mgr.get_active()
-    assert master.name == "Master"
-    assert master.status == "idle"
+    assert "1" in mgr.agents
+    assert mgr.active_id == "1"
+    main = mgr.get_active()
+    assert main.name == "main"
+    assert main.status == "idle"
 
 
 def test_list_all_agents():

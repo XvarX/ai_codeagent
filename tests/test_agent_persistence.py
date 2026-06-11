@@ -146,9 +146,9 @@ class TestPersistMessage:
         }
         agent._persist_llm_log(log_entry)
 
-        # Read the raw file via DataDir
+        # Read the raw file via DataDir (per-agent path)
         dd = store._dd
-        log_path = dd.llm_log_path(project, sid)
+        log_path = dd.agent_dir(project, sid, "1") / "llm_log.json"
         assert log_path.exists()
         logs = json.loads(log_path.read_text(encoding="utf-8"))
         assert len(logs) == 1

@@ -25,7 +25,7 @@
         <span class="text-text-primary whitespace-nowrap">{{ agent.name }}</span>
         <span v-if="agent.est_tokens" class="text-[11px] text-text-muted ml-1">~{{ agent.est_tokens }}t</span>
         <button
-          v-if="agent.id !== 'master'"
+          v-if="agent.id !== '1'"
           class="bg-transparent border-none text-text-muted cursor-pointer text-sm leading-none px-1 hover:text-danger ml-1"
           @click.stop="kill(agent.id)"
           title="Kill"

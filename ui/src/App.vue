@@ -99,7 +99,7 @@ onMounted(() => {
   });
   agentWs.on('done', (d: any) => {
     if (d.room_id) {
-      chatStore.handleRoomDone({ room_id: d.room_id, agent_id: d.agent_id || '' });
+      chatStore.handleRoomDone({ room_id: d.room_id, agent_id: d.agent_id || '', final_text: d.final_text || '' });
     } else {
       chatStore.finalizeAssistantMessage();
       agentStore.setBusy(false);
@@ -223,7 +223,7 @@ onMounted(() => {
     fileBrowserStore.reset();
     if (wasCurrent) {
       agentStore.setAgentList([]);
-      agentStore.setActiveAgent('master');
+      agentStore.setActiveAgent('1');
     }
   });
 
@@ -236,7 +236,7 @@ onMounted(() => {
       debugStore.clear();
       fileBrowserStore.reset();
       agentStore.setAgentList([]);
-      agentStore.setActiveAgent('master');
+      agentStore.setActiveAgent('1');
     }
   });
 

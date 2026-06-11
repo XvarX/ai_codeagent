@@ -217,6 +217,25 @@ class AnthropicProvider(BaseProvider):
             yield ResponseDoneEvent(raw=raw)
 
         except Exception as e:
+            import sys
+            err_str = str(e)
+            if "400" in err_str and ("tool_use" in err_str or "tool_result" in err_str):
+                print(f"[Provider] Anthropic 400 tool error: {e}", file=sys.stderr)
+                print(f"[Provider] API messages ({len(api_messages)} total):", file=sys.stderr)
+                for mi, am in enumerate(api_messages[-15:]):
+                    role = am.get("role", "?")
+                    content = am.get("content", "")
+                    if isinstance(content, list):
+                        cids = [c.get("id", c.get("tool_use_id", "")) for c in content]
+                        content_preview = f"blocks: {cids}"
+                    elif isinstance(content, str):
+                        content_preview = repr(content[:100])
+                    else:
+                        content_preview = repr(content)[:100]
+                    print(
+                        f"  [{mi}] role={role} content={content_preview}",
+                        file=sys.stderr,
+                    )
             yield ErrorEvent(message=f"Provider error: {e}")
 
 

@@ -18,6 +18,7 @@ export interface ChatMessage {
   toolCalls?: ToolCallEntry[];
   toolLabels?: ToolLabel[];
   diffs?: DiffEntry[];
+  roomInfo?: RoomInfo;
 }
 
 export interface ToolLabel {
@@ -31,6 +32,15 @@ export interface DiffEntry {
   filePath: string;
   oldContent: string;
   newContent: string;
+}
+
+export interface RoomInfo {
+  roomId: string
+  roomName: string
+  senderName?: string
+  senderId?: string
+  direction: 'in' | 'out'
+  replyTo?: string
 }
 
 export interface RoomMessage {
@@ -64,6 +74,15 @@ export const useChatStore = defineStore('chat', () => {
   const rooms = ref<ChatRoomInfo[]>([])
   const activeRoomId = ref<string | null>(null)
   let _roomMsgId = 0
+  // Deduplicate room_relay events (multiple agents may each emit one for the same broadcast)
+  const _roomRelaySeen = new Set<string>()
+  // Buffer for non-active-agent relays — flushed when active agent finishes
+  let _relayBuffer: ChatMessage[] = []
+  // Track active agent busy state (room + non-room) for relay buffering
+  let _busyCounter = 0
+
+
+
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
@@ -77,12 +96,14 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function addUserMessage(text: string) {
+    _flushRelayBuffer();
     messages.value.push({ role: 'user', content: text });
     currentAssistantMsg.value = '';
   }
 
   function startThinking() {
     thinking.value = true;
+    _busyCounter++;
   }
 
   function appendToken(token: string) {
@@ -90,7 +111,18 @@ export const useChatStore = defineStore('chat', () => {
     currentAssistantMsg.value += token;
   }
 
+  function _flushRelayBuffer() {
+    if (_relayBuffer.length === 0) return
+    for (const msg of _relayBuffer) {
+      messages.value.push(msg)
+    }
+    _relayBuffer = []
+  }
+
   function finalizeAssistantMessage() {
+    // Flush buffered relays BEFORE the agent's own response — other agents'
+    // broadcasts happened earlier and should appear first.
+    _flushRelayBuffer();
     if (currentAssistantMsg.value) {
       messages.value.push({
         role: 'assistant',
@@ -103,6 +135,7 @@ export const useChatStore = defineStore('chat', () => {
       diffs.value = [];
     }
     thinking.value = false;
+    if (_busyCounter > 0) _busyCounter--;
   }
 
   function addToolResult(name: string, result: string, isError: boolean, durationMs: number) {
@@ -126,14 +159,18 @@ export const useChatStore = defineStore('chat', () => {
     diffs.value.push({ filePath, oldContent, newContent });
   }
 
-  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[] }>) {
+  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[]; roomInfo?: RoomInfo }>) {
     messages.value = msgs.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
       diffs: m.diffs,
+      roomInfo: m.roomInfo,
     }));
     currentAssistantMsg.value = '';
     thinking.value = false;
+    _relayBuffer = [];
+    _roomRelaySeen.clear();
+    _busyCounter = 0;
   }
 
   function clear() {
@@ -142,6 +179,12 @@ export const useChatStore = defineStore('chat', () => {
     thinking.value = false;
     diffs.value = [];
     toolLabels.value = [];
+    rooms.value = [];
+    roomMessages.value = new Map();
+    activeRoomId.value = null;
+    _roomRelaySeen.clear();
+    _relayBuffer = [];
+    _busyCounter = 0;
   }
 
   function insertToInput(text: string) {
@@ -162,7 +205,9 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleRoomDestroyed(roomId: string) {
     rooms.value = rooms.value.filter(r => r.id !== roomId)
-    roomMessages.value.delete(roomId)
+    const newMap = new Map(roomMessages.value)
+    newMap.delete(roomId)
+    roomMessages.value = newMap
     if (activeRoomId.value === roomId) activeRoomId.value = null
   }
 
@@ -171,12 +216,21 @@ export const useChatStore = defineStore('chat', () => {
     if (idx >= 0) rooms.value[idx] = _normalizeRoom(room)
   }
 
+  function _setRoomMessages(roomId: string, msgs: RoomMessage[]) {
+    roomMessages.value = new Map(roomMessages.value).set(roomId, msgs)
+  }
+
   function handleRoomBroadcast(data: { room_id: string; agent_id: string; token: string }) {
     const msgs = roomMessages.value.get(data.room_id) || []
     const agent = useAgentStore()
     const agentInfo = agent.agents.find(a => a.id === data.agent_id)
     const senderName = agentInfo?.name || data.agent_id
     const senderColor = agent.getAgentColor(data.agent_id)
+
+    // Track active agent's room processing for relay buffering
+    if (data.agent_id === agent.activeAgentId) {
+      _busyCounter++
+    }
 
     // Find the last streaming message from this specific agent (handle concurrent agent responses)
     let streamingIdx = -1
@@ -201,40 +255,81 @@ export const useChatStore = defineStore('chat', () => {
         isStreaming: true,
       })
     }
-    roomMessages.value.set(data.room_id, msgs)
+    _setRoomMessages(data.room_id, msgs)
   }
 
-  function handleRoomDone(data: { room_id: string; agent_id: string }) {
+  function handleRoomDone(data: { room_id: string; agent_id: string; final_text?: string }) {
+    // Clear any leftover streaming state from main chat
+    currentAssistantMsg.value = ''
+    thinking.value = false
+    toolLabels.value = []
+    diffs.value = []
+
     const msgs = roomMessages.value.get(data.room_id) || []
-    let finalizedContent = ''
+    let finalizedContent = (data.final_text && data.final_text !== '(no response)') ? data.final_text : ''
+    // Also finalize any streaming message if present
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].senderId === data.agent_id && msgs[i].isStreaming) {
         msgs[i].isStreaming = false
-        finalizedContent = msgs[i].content
+        if (!finalizedContent) finalizedContent = msgs[i].content
         break
       }
     }
-    roomMessages.value.set(data.room_id, msgs)
+    _setRoomMessages(data.room_id, msgs)
 
-    // Also show agent's response in main chat with room label
-    if (finalizedContent) {
-      const room = rooms.value.find(r => r.id === data.room_id)
-      const agent = useAgentStore()
-      const agentInfo = agent.agents.find(a => a.id === data.agent_id)
-      const fromName = agentInfo?.name || data.agent_id
-      const roomLabel = room ? `[Room: ${room.name} ← ${fromName}]` : `[Room: ← ${fromName}]`
-      messages.value.push({ role: 'assistant', content: `${roomLabel}\n${finalizedContent}` })
+    // Flush buffered relays FIRST — other agents' broadcasts happened earlier
+    // and should appear before the active agent's own response.
+    const agent = useAgentStore()
+    if (data.agent_id === agent.activeAgentId) {
+      if (_busyCounter > 0) _busyCounter--
+      _flushRelayBuffer()
+    }
+    // Only show in main chat if this is the ACTIVE agent's own response.
+    if (finalizedContent && data.agent_id === agent.activeAgentId) {
+      messages.value.push({ role: 'assistant', content: finalizedContent })
     }
   }
 
   function handleRoomRelay(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
-    // Show in main chat area with room label
-    const roomLabel = `[Room: ${data.room_name} ← ${data.from_name}${data.reply_to ? ` | Reply to: ${data.reply_to}` : ''}]`
-    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${data.text}` })
+    const agent = useAgentStore()
 
-    // Also add to chatroom message stream
+    // Deduplicate: same broadcast may arrive twice (once from BroadcastRoom,
+    // once from _consumer_loop).  Only process the first.
+    const dedupeKey = `${data.room_id}:${data.from_id}:${data.text}`
+    if (_roomRelaySeen.has(dedupeKey)) return
+    _roomRelaySeen.add(dedupeKey)
+    if (_roomRelaySeen.size > 200) {
+      const iter = _roomRelaySeen.values()
+      for (let i = 0; i < 100; i++) _roomRelaySeen.delete(iter.next().value)
+    }
+
+    const isActiveAgent = data.from_id === agent.activeAgentId
+    const relayMsg: ChatMessage = {
+      role: (isActiveAgent ? 'assistant' : 'user') as 'user' | 'assistant',
+      content: data.text,
+      roomInfo: {
+        roomId: data.room_id,
+        roomName: data.room_name,
+        senderName: data.from_name,
+        senderId: data.from_id,
+        direction: 'in' as const,
+        replyTo: data.reply_to || undefined,
+      },
+    }
+
+    // Active agent's own broadcast → show immediately.
+    // Other agents' broadcasts when active agent is busy → buffer.
+    // Other agents' broadcasts when active agent is idle → show immediately.
+    if (isActiveAgent) {
+      messages.value.push(relayMsg)
+    } else if (_busyCounter > 0) {
+      _relayBuffer.push(relayMsg)
+    } else {
+      messages.value.push(relayMsg)
+    }
+
+    // Always add to chatroom message stream
     if (data.room_id) {
-      const agent = useAgentStore()
       const msgs = roomMessages.value.get(data.room_id) || []
       msgs.push({
         id: `rm_${++_roomMsgId}`,
@@ -246,17 +341,17 @@ export const useChatStore = defineStore('chat', () => {
         timestamp: Date.now(),
         isStreaming: false,
       })
-      roomMessages.value.set(data.room_id, msgs)
+      _setRoomMessages(data.room_id, msgs)
     }
   }
 
   function sendRoomMessage(roomId: string, text: string) {
+    // Flush any stale buffered relays first — new interaction starts now
+    _flushRelayBuffer()
     agentWs.send({ type: 'room_message', room_id: roomId, text })
 
     const room = rooms.value.find(r => r.id === roomId)
-    const roomLabel = room ? `[Room: ${room.name} → All]` : `[Room: → All]`
-
-    // Add to room message stream
+    // Add to chatroom message stream
     const msgs = roomMessages.value.get(roomId) || []
     msgs.push({
       id: `rm_${++_roomMsgId}`,
@@ -268,11 +363,19 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
       isStreaming: false,
     })
-    roomMessages.value.set(roomId, msgs)
+    _setRoomMessages(roomId, msgs)
 
-    // Also show in main chat with room label
+    // Show in main chat (right side — user message)
     currentAssistantMsg.value = ''
-    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${text}` })
+    messages.value.push({
+      role: 'user',
+      content: text,
+      roomInfo: {
+        roomId,
+        roomName: room?.name || '',
+        direction: 'out',
+      },
+    })
   }
 
   return {

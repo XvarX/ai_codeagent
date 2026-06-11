@@ -1,4 +1,7 @@
-"""AgentManager — manages multiple AgentController instances."""
+"""AgentManager — manages multiple AgentController instances.
+
+All agents are equal. Sequential IDs (1, 2, 3...). First agent is named "main".
+"""
 
 import asyncio
 import json
@@ -8,11 +11,12 @@ from pathlib import Path
 from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler, _build_registry, _build_provider
 from agentcore.agent_definitions import AgentDefinition
+from agentcore.compact.grouping import compute_group_idx
 
 
 @dataclass
-class SubagentState:
-    """Runtime state for one subagent."""
+class AgentState:
+    """Runtime state for one agent."""
     id: str
     name: str
     definition: AgentDefinition
@@ -86,10 +90,10 @@ def _build_tool_registry_for_agent(config: AgentConfig, definition: AgentDefinit
 
 
 class _AgentHandler(EventHandler):
-    """EventHandler that captures subagent events and optionally forwards to app pipeline.
+    """EventHandler that captures agent events and optionally forwards to WebSocket.
 
-    When forwarding IS wired (active agent): events go through app._on_* methods
-    which write to debug drawer and chat view identically to master.
+    When forwarding IS wired (active agent): events go through ws_handler
+    which writes to debug drawer and chat view.
     When forwarding is NOT wired (inactive): events are stored in debug_events
     for replay when the user switches to this agent.
     """
@@ -99,6 +103,7 @@ class _AgentHandler(EventHandler):
         self.manager = manager
         self.agent_id = agent_id
         self._pending_tools = 0  # track tool calls to distinguish [Response] vs [Final Response]
+        self._pending_tool_calls: list[dict] = []  # mirror WsEventHandler for debug detail
         self._fwd_thinking: callable | None = None
         self._fwd_text_delta: callable | None = None
         self._fwd_tool_use: callable | None = None
@@ -142,35 +147,79 @@ class _AgentHandler(EventHandler):
                      '_fwd_enqueued', '_fwd_request'):
             setattr(self, attr, None)
 
+    def _compute_group_idx(self, group_key: str | None) -> int | None:
+        """Compute persistent group G-number using shared logic."""
+        state = self.manager.agents.get(self.agent_id)
+        if not state or not state.controller:
+            return None
+        return compute_group_idx(
+            state.controller.agent.messages,
+            state.debug_events,
+            group_key,
+        )
+
     def _record(self, prefix: str, message: str, color: str = "#94A3B8",
                 event_data: dict | None = None, group_key: str | None = None):
-        """Store event for later replay (only when NOT forwarding to app)."""
+        """Store event in the same format as ws_server._send_debug().
+
+        Only used when NOT forwarding to the main handler.
+        When forwarding IS active, the main handler stores events instead.
+        """
         if self._is_forwarding:
-            return  # app._on_* methods already write to debug drawer
+            return  # main handler already stores via _send_debug()
         state = self.manager.agents.get(self.agent_id)
         if state:
+            group_idx = self._compute_group_idx(group_key)
             state.debug_events.append({
-                "prefix": prefix, "message": message, "color": color,
-                "event_data": event_data, "group_key": group_key,
+                "prefix": prefix,
+                "message": message,
+                "color": color,
+                "data": event_data,
+                "group_key": group_key,
+                "group_idx": group_idx,
+                "opacity": 1.0,
             })
 
     async def on_request(self, text: str, msg_count: int, est_tokens: int,
                          tools_count: int, model: str = ""):
+        # Match WsEventHandler.on_request formatting for consistent debug display
+        state = self.manager.agents.get(self.agent_id)
+        agent = state.controller.agent if state and state.controller else None
+        msgs = agent.messages if agent else []
         msg_lines = [
             f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools",
-            f"  [new] user: {text[:200]}",
+            f"  [new] user: {text[:80]}",
         ]
+        for i, m in enumerate(msgs[-5:]):
+            role = m.role
+            content_preview = (m.content or "")[:50].replace("\n", " ")
+            if m.tool_use_id:
+                msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
+            else:
+                msg_lines.append(f"  [{i}] {role}: {content_preview}")
+        if len(msgs) > 5:
+            msg_lines.append(f"  ... +{len(msgs) - 5} earlier messages")
+        event_data = {
+            "type": "Request",
+            "provider": model,
+            "model": model,
+            "message_count": msg_count,
+            "est_tokens": est_tokens,
+            "tools_count": tools_count,
+            "user_message": text,
+            "formatted": "\n".join(msg_lines),
+            "messages": [
+                {"role": m.role, "content": m.content or "",
+                 "tool_use_id": getattr(m, "tool_use_id", ""),
+                 "tool_use_blocks": [
+                    {"tool_name": b.tool_name, "input": b.input}
+                    for b in (getattr(m, "tool_use_blocks", None) or [])
+                 ]}
+                for m in msgs
+            ],
+        }
         self._record("[Request]", "\n".join(msg_lines), "#569cd6",
-                     event_data={
-                         "type": "Request",
-                         "model": model,
-                         "message_count": msg_count,
-                         "est_tokens": est_tokens,
-                         "tools_count": tools_count,
-                         "user_message": text,
-                         "formatted": "\n".join(msg_lines),
-                     },
-                     group_key="user")
+                     event_data=event_data, group_key="user")
         if self._fwd_request:
             self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
@@ -178,7 +227,7 @@ class _AgentHandler(EventHandler):
         """Get this agent's subagent_id for room event forwarding."""
         state = self.manager.agents.get(self.agent_id)
         if state and state.controller:
-            return getattr(state.controller.agent, '_subagent_id', '') or self.agent_id
+            return getattr(state.controller.agent, '_session_agent_id', '') or self.agent_id
         return self.agent_id
 
     def _in_room_context(self) -> bool:
@@ -189,39 +238,82 @@ class _AgentHandler(EventHandler):
         return False
 
     async def on_thinking(self, agent_id: str = ""):
-        if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_thinking(agent_id=self._get_my_agent_id())
-        elif self._fwd_thinking:
+        if self._in_room_context():
+            return  # Suppress — room context handled by room_relay/room_done
+        if self._fwd_thinking:
             self._fwd_thinking()
 
     async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
-        if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_text_delta(token, reasoning, agent_id=self._get_my_agent_id())
-        elif self._fwd_text_delta:
+        if self._in_room_context():
+            return  # Suppress — room context handled by room_relay/room_done
+        if self._fwd_text_delta:
             self._fwd_text_delta(token, reasoning)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tools += 1
+        self._pending_tool_calls.append({
+            "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
+        })
+        if self._in_room_context():
+            return  # Suppress — room context doesn't need tool events in main chat
         if self._fwd_tool_use:
             self._fwd_tool_use(name, input_dict, tool_use_id)
 
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         if self._pending_tools > 0:
             self._pending_tools -= 1
-        color = "#EF4444" if is_error else "#8B5CF6"
-        status_icon = "X" if is_error else "OK"
-        event_data = {
-            "type": "Tool",
-            "name": name,
-            "result": result,
-            "is_error": is_error,
-            "formatted": f"Tool: {name}\nStatus: {'ERROR' if is_error else 'OK'}\n\n{result[:2000]}",
-            "raw_json": json.dumps({"tool": name, "result": result, "is_error": is_error},
-                                   ensure_ascii=False, indent=2),
-        }
-        self._record(f"[Tool] {name} {status_icon}", f"{result[:200]}", color,
-                     event_data=event_data,
-                     group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+        # Pop matching tool call for debug detail (same logic as WsEventHandler)
+        tc = self._pending_tool_calls.pop(0) if self._pending_tool_calls else None
+        input_dict = tc["input_dict"] if tc else {}
+        if not tool_use_id and tc:
+            tool_use_id = tc.get("tool_use_id", "")
+        # Build debug entry in try-except — must never break the agent loop
+        # or tool results won't be appended to messages, causing 400 errors.
+        try:
+            call_detail = "\n".join(
+                f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
+            )
+            dur_str = f"{duration_ms:.0f}ms" if duration_ms else ""
+            size_line = f"size: {len(result)} chars"
+            color = "#EF4444" if is_error else "#10B981"
+            status_icon = "X" if is_error else "OK"
+            message = (
+                f"{call_detail}\n---\n"
+                f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
+                f"{'  |  ' + dur_str if dur_str else ''}\n"
+                f"{result[:200]}"
+            )
+            event_data = {
+                "type": "Tool",
+                "name": name,
+                "input": input_dict,
+                "result": result,
+                "is_error": is_error,
+                "duration_ms": duration_ms,
+                "formatted": (
+                    f"━━━ Tool Call ━━━\nTool: {name}\n\n" +
+                    "\n".join(f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()) +
+                    f"\n\n━━━ Tool Result ━━━\n"
+                    f"Status: {'ERROR' if is_error else 'OK'}\n"
+                    f"Duration: {dur_str or 'N/A'}\n"
+                    f"Size: {len(result)} chars\n\n{result[:5000]}"
+                ),
+                "raw_json": json.dumps({
+                    "tool": name,
+                    "input": {k: str(v)[:1000] for k, v in input_dict.items()},
+                    "result": result[:10000],
+                    "is_error": is_error,
+                    "duration_ms": duration_ms,
+                }, ensure_ascii=False, indent=2, default=str),
+            }
+            self._record(f"[Tool] {name} {status_icon}", message, color,
+                         event_data=event_data,
+                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+        except Exception:
+            self._record(f"[Tool] {name}", result[:200], "#10B981",
+                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+        if self._in_room_context():
+            return  # Suppress — room context doesn't need tool events in main chat
         if self._fwd_tool_result:
             self._fwd_tool_result(name, result, is_error, duration_ms, tool_use_id)
 
@@ -297,6 +389,8 @@ class _AgentHandler(EventHandler):
 
         self._record(prefix, "\n".join(resp_lines), color,
                      event_data=event_data, group_key=group_key)
+        if self._in_room_context():
+            return  # Suppress — room context doesn't need response events in main chat
         if self._fwd_response_done:
             self._fwd_response_done(raw)
 
@@ -317,9 +411,22 @@ class _AgentHandler(EventHandler):
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
-        if self._in_room_context() and self.manager.master_handler:
-            await self.manager.master_handler.on_done(final_text, agent_id=self._get_my_agent_id())
-        elif self._fwd_done:
+        if self._in_room_context():
+            # Bypass ws_handler.on_done which checks the ACTIVE agent's room_id.
+            # Send directly with our own room_id so frontend gets proper room_done.
+            ws_handler = self.manager.ws_handler
+            if ws_handler and hasattr(ws_handler, '_send'):
+                room_id = getattr(
+                    state.controller.agent, '_current_room_id', ''
+                ) if state else ''
+                await ws_handler._send({
+                    "type": "done",
+                    "final_text": final_text,
+                    "room_id": room_id,
+                    "agent_id": self._get_my_agent_id(),
+                })
+            return
+        if self._fwd_done:
             self._fwd_done(final_text)
 
     async def on_compact_call(self, old_msg_count: int, pre_tokens: int):
@@ -352,22 +459,22 @@ class _AgentHandler(EventHandler):
 
 
 class AgentManager:
-    """Manages the lifecycle of all agents (master + subagents)."""
+    """Manages the lifecycle of all agents."""
 
     def __init__(self, config: AgentConfig,
                  user_agents: dict[str, AgentDefinition] | None = None):
         self.config = config
         self.user_agents = user_agents or {}
-        self.agents: dict[str, SubagentState] = {}
-        self.active_id: str = "master"
-        self._agent_id_counter = 0
+        self.agents: dict[str, AgentState] = {}
+        self.active_id: str = "1"
+        self._agent_id_counter = 1
         self._rooms: dict = {}  # room_id -> ChatRoom (set by ws_server)
         self.on_change = None  # set by UI to refresh sidebar
         self.on_spawn = None   # set externally: async fn(agent_id, state) for persistence
 
-        self._create_master()
-        # master_handler exposed for _run_background notifications
-        self.master_handler = self.agents["master"].controller.handler
+        self._create_initial_agent()
+        # ws_handler exposed for _run_background notifications
+        self.ws_handler = self.agents["1"].controller.handler
 
     @staticmethod
     async def _emit_request(controller, text: str):
@@ -380,15 +487,15 @@ class AgentManager:
         model = agent.provider.model or ""
         await handler.on_request(text, msg_count, est_tokens, tools_count, model)
 
-    def _create_master(self):
-        """Create the master agent controller."""
-        handler = _AgentHandler(self, "master")
+    def _create_initial_agent(self):
+        """Create the initial agent (id=1, name=main)."""
+        handler = _AgentHandler(self, "1")
         controller = AgentController(self.config, handler)
-        state = SubagentState(
-            id="master",
-            name="Master",
+        state = AgentState(
+            id="1",
+            name="main",
             definition=AgentDefinition(
-                name="Master", description="Main agent",
+                name="main", description="Main agent",
                 agent_type="built-in", system_prompt="",
                 tools=None, source="built-in",
             ),
@@ -396,21 +503,21 @@ class AgentManager:
             message_queue=None,
             status="idle",
         )
-        self.agents["master"] = state
+        self.agents["1"] = state
         from agentcore.agent_message_queue import AgentMessageQueue
         queue = AgentMessageQueue(controller)
         state.message_queue = queue
         controller.agent._agent_manager = self
-        controller.agent._agent_id = "master"
-        controller.agent._subagent_id = "master"
-        controller.agent._agent_name = "Master"
+        controller.agent._agent_id = "1"
+        controller.agent._session_agent_id = "1"
+        controller.agent._agent_name = "main"
 
-        # Register Agent tool and SendMessage tool on master
+        # Register Agent tool and SendMessage tool
         from agentcore.tools.agent_tool import AgentTool
         agent_tool = AgentTool(self, self.user_agents)
         controller.registry.register(agent_tool)
         from agentcore.tools.send_message_tool import SendMessageTool
-        send_tool = SendMessageTool(self, "master")
+        send_tool = SendMessageTool(self, "1")
         controller.registry.register(send_tool)
 
     async def spawn(self, definition: AgentDefinition, prompt: str,
@@ -421,7 +528,7 @@ class AgentManager:
         agent_id = str(self._agent_id_counter)
 
         # Create state first so we can wire inbox
-        state = SubagentState(
+        state = AgentState(
             id=agent_id,
             name=name or definition.name,
             definition=definition,
@@ -446,7 +553,7 @@ class AgentManager:
         state.message_queue = queue
         controller.agent._agent_manager = self
         controller.agent._agent_id = agent_id
-        controller.agent._subagent_id = agent_id
+        controller.agent._session_agent_id = agent_id
         controller.agent._agent_name = name
 
         # Wire controller back to state
@@ -491,9 +598,9 @@ class AgentManager:
             if not keep_alive:
                 await self._cleanup_agent(agent_id)
 
-            # Notify master of completion (updates persisted meta + frontend)
+            # Notify ws_handler of completion (updates persisted meta + frontend)
             try:
-                await self.master_handler.on_subagent_done(
+                await self.ws_handler.on_subagent_done(
                     agent_id, state.status, state.result)
             except Exception:
                 pass
@@ -536,7 +643,7 @@ class AgentManager:
             if not state.keep_alive:
                 await self._cleanup_agent(agent_id)
             try:
-                await self.master_handler.on_subagent_done(
+                await self.ws_handler.on_subagent_done(
                     agent_id, state.status, state.result)
             except Exception:
                 pass
@@ -547,9 +654,9 @@ class AgentManager:
                     pass
 
     async def _cleanup_agent(self, agent_id: str):
-        """Remove a completed agent and notify master."""
+        """Remove a completed agent."""
         state = self.agents.get(agent_id)
-        if not state or agent_id == "master":
+        if not state or agent_id == "1":
             return
         # Cancel any pending task
         if state.background_task and not state.background_task.done():
@@ -568,8 +675,8 @@ class AgentManager:
             state.est_tokens = state.controller.agent.est_tokens()
 
     async def kill(self, agent_id: str):
-        """Kill a running subagent."""
-        if agent_id == "master":
+        """Kill a running agent."""
+        if agent_id == "1":
             return
         state = self.agents.get(agent_id)
         if not state:
@@ -579,25 +686,25 @@ class AgentManager:
             state.background_task.cancel()
         state.status = "killed"
 
-    def switch(self, agent_id: str) -> SubagentState | None:
+    def switch(self, agent_id: str) -> AgentState | None:
         """Switch the active agent view."""
         if agent_id not in self.agents:
             return None
         self.active_id = agent_id
         return self.agents[agent_id]
 
-    def get_active(self) -> SubagentState:
+    def get_active(self) -> AgentState:
         """Get current active agent state."""
         return self.agents[self.active_id]
 
-    def get_alive_agents_text(self, for_agent_id: str = "master") -> str:
+    def get_alive_agents_text(self, for_agent_id: str = "1") -> str:
         """Return agent + room context for injection into LLM context."""
         parts = []
 
         # Agent list
         alive = [
             s for aid, s in self.agents.items()
-            if aid != for_agent_id and (s.keep_alive or aid == "master")
+            if aid != for_agent_id and (s.keep_alive or aid == "1")
         ]
         if alive:
             lines = ["Alive agents (SendMessage to communicate):"]
@@ -651,9 +758,9 @@ class AgentManager:
         formatted = f"[Message from {from_name} (id:{from_id})]\n{message}"
         target_state.message_queue.enqueue(formatted, source="agent")
 
-    def list_subagents(self) -> list[SubagentState]:
-        """Return all subagents (excluding master)."""
-        return [s for aid, s in self.agents.items() if aid != "master"]
+    def list_other_agents(self) -> list[AgentState]:
+        """Return all agents except the initial one."""
+        return [s for aid, s in self.agents.items() if aid != "1"]
 
     def register_broadcast_tool(self, agent_id: str) -> None:
         """Register BroadcastRoom tool on an agent when it joins a room."""

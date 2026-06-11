@@ -15,7 +15,7 @@ export const useAgentStore = defineStore('agent', () => {
   const agents = ref<AgentInfo[]>([]);
   const mcpInfo = ref<any>(null);
   const skills = ref<string>('');
-  const activeAgentId = ref('master');
+  const activeAgentId = ref('1');
   const compacting = ref(false);
 
   const AGENT_COLORS = [

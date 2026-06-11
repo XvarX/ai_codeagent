@@ -95,8 +95,8 @@ def test_create_session_creates_meta_and_messages_files():
         assert "created_at" in meta
         assert "updated_at" in meta
 
-        # messages.json must exist and be an empty array
-        msgs_path = dd.messages_path(r"D:\my_project", sid)
+        # messages.json must exist and be an empty array under agents/1/
+        msgs_path = dd.agent_dir(r"D:\my_project", sid, "1") / "messages.json"
         assert msgs_path.exists()
         msgs = json.loads(msgs_path.read_text(encoding="utf-8"))
         assert msgs == []
@@ -113,13 +113,13 @@ def test_load_session_returns_all_messages_and_meta():
         sid = store.create_session(r"D:\my_project", title="Loaded Chat")
 
         # Simulate conversation messages
-        store.append_message(r"D:\my_project", sid, {
+        store.append_message(r"D:\my_project", sid, "1", {
             "role": "user", "content": "Hello, world!"
         })
-        store.append_message(r"D:\my_project", sid, {
+        store.append_message(r"D:\my_project", sid, "1", {
             "role": "assistant", "content": "Hi there!"
         })
-        store.append_message(r"D:\my_project", sid, {
+        store.append_message(r"D:\my_project", sid, "1", {
             "role": "user", "content": "How are you?"
         })
 
@@ -190,11 +190,11 @@ def test_sessions_from_different_projects_do_not_mix():
         sid_y = store.create_session(r"D:\proj_y", title="Y-Chat")
 
         # Add messages to project X only
-        store.append_message(r"D:\proj_x", sid_x, {"role": "user", "content": "X msg"})
-        store.append_message(r"D:\proj_x", sid_x, {"role": "assistant", "content": "X reply"})
+        store.append_message(r"D:\proj_x", sid_x, "1", {"role": "user", "content": "X msg"})
+        store.append_message(r"D:\proj_x", sid_x, "1", {"role": "assistant", "content": "X reply"})
 
         # Add messages to project Y only
-        store.append_message(r"D:\proj_y", sid_y, {"role": "user", "content": "Y msg"})
+        store.append_message(r"D:\proj_y", sid_y, "1", {"role": "user", "content": "Y msg"})
 
         # Load separately — each project sees only its own messages
         msgs_x = store.load_messages(r"D:\proj_x", sid_x)

@@ -9,6 +9,8 @@ import logging
 import re
 from pathlib import Path
 
+from agentcore.room_parser import _parse_room_prefix
+
 import websockets
 from websockets.asyncio.server import serve, ServerConnection
 
@@ -16,9 +18,9 @@ from agentcore.config import AgentConfig
 from agentcore.controller import AgentController, EventHandler
 from agentcore.data_dir import DataDir
 from agentcore.session_store import SessionStore
-from agentcore.subagent_manager import AgentManager, _AgentHandler
+from agentcore.agent_manager import AgentManager, _AgentHandler
 from agentcore.agent_definitions import load_user_agents, AgentDefinition
-from agentcore.compact.grouping import group_by_api_round
+from agentcore.compact.grouping import group_by_api_round, compute_group_idx
 from agentcore.file_browser import FileBrowserHandler
 
 import uuid
@@ -74,7 +76,7 @@ class WsEventHandler(EventHandler):
         try:
             ctrl = self._controller
             if ctrl:
-                return getattr(ctrl.agent, '_subagent_id', '')
+                return getattr(ctrl.agent, '_session_agent_id', '1')
         except Exception:
             pass
         return ""
@@ -115,84 +117,12 @@ class WsEventHandler(EventHandler):
             print(f"[ws_server] _send error: {e}")
 
     def _compute_group_idx(self, group_key: str | None) -> int | None:
-        """Compute persistent group G-number matching Flet's sync_groups.
-
-        Uses a two-level gi→gid mapping so that entries surviving compact/snip
-        keep their original G-number while new groups get incremented IDs.
-        """
-        if not group_key:
-            return None
-
-        groups = group_by_api_round(self._controller.agent.messages)
-
-        # Build ID → gi lookups from current messages
-        asst_id_to_gi: dict[str, int] = {}
-        tool_id_to_gi: dict[str, int] = {}
-        user_msg_groups: list[int] = []
-        for gi, g in enumerate(groups):
-            for m in g:
-                if m.role == "assistant" and m.id:
-                    asst_id_to_gi[m.id] = gi
-                elif m.role == "user" and m.tool_use_id:
-                    tool_id_to_gi[m.tool_use_id] = gi
-                elif m.role == "user" and not m.is_tool_result and not m.tool_use_id:
-                    content = m.content or ""
-                    if not content.startswith("[Context compressed"):
-                        user_msg_groups.append(gi)
-
-        # Rebuild persistent gi→gid map from surviving existing entries
-        persistent: dict[int, int] = {}
-        for entry in self._debug_entries:
-            gid = entry.get("group_idx")
-            if gid is None or gid < 0 or entry.get("opacity", 1.0) < 1.0:
-                continue
-            key = entry.get("group_key") or ""
-            gi = None
-            if key.startswith("asst:"):
-                gi = asst_id_to_gi.get(key[5:])
-            elif key.startswith("tool:"):
-                gi = tool_id_to_gi.get(key[5:])
-            if gi is not None:
-                persistent[gi] = gid
-
-        max_persistent = max(
-            (e.get("group_idx", -1) for e in self._debug_entries
-             if e.get("group_idx") is not None and e.get("group_idx", -1) >= 0
-             and e.get("opacity", 1.0) >= 1.0),
-            default=-1)
-        next_gid = max_persistent + 1
-
-        # Count already-assigned entries to skip
-        user_idx = sum(1 for e in self._debug_entries
-                       if e.get("group_key") == "user"
-                       and e.get("group_idx") is not None
-                       and e.get("opacity", 1.0) >= 1.0)
-
-        # Compute gi for this entry
-        gi = None
-        if group_key == "user":
-            if user_idx < len(user_msg_groups):
-                gi = user_msg_groups[user_idx]
-            else:
-                gi = len(groups)  # new user message starts next group
-        elif group_key.startswith("asst:"):
-            gi = asst_id_to_gi.get(group_key[5:])
-        elif group_key.startswith("tool:"):
-            gi = tool_id_to_gi.get(group_key[5:])
-            if gi is None:
-                # Tool result not yet in messages — check tool_use_blocks on assistant
-                for _gi, g in enumerate(groups):
-                    for m in g:
-                        for b in (getattr(m, "tool_use_blocks", None) or []):
-                            if b.tool_use_id == group_key[5:]:
-                                gi = _gi
-                                break
-
-        if gi is None:
-            return None
-
-        gid = persistent.get(gi, next_gid)
-        return gid
+        """Compute persistent group G-number matching Flet's sync_groups."""
+        return compute_group_idx(
+            self._controller.agent.messages,
+            self._debug_entries,
+            group_key,
+        )
 
     async def _send_debug(self, prefix: str, message: str, color: str,
                           event_data: dict | None = None,
@@ -215,7 +145,8 @@ class WsEventHandler(EventHandler):
         if self._store and self._session_id:
             try:
                 self._store.append_debug_entry(
-                    self._session_project, self._session_id, entry)
+                    self._session_project, self._session_id,
+                    self._get_agent_id() or "1", entry)
             except Exception:
                 pass
         # Notify frontend about session status changes
@@ -254,21 +185,23 @@ class WsEventHandler(EventHandler):
             self._has_pending_tool_results = False
 
     async def on_text_delta(self, token: str, reasoning: bool = False, agent_id: str = ""):
+        # In room context, suppress text_delta entirely — the chatroom panel
+        # is populated by BroadcastRoom room_relay events, not streaming tokens.
+        # This prevents room agent output from leaking into the main chat stream.
+        if self._get_room_id():
+            return
         payload: dict = {"type": "text_delta", "token": token, "reasoning": reasoning}
-        # Room chatroom no longer shows text_delta — only BroadcastRoom
-        # room_relay events populate the chatroom.
         await self._send(payload)
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tool_calls.append({
             "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
         })
-        payload: dict = {"type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id}
         r = self._get_room_id()
-        if r:
-            payload["room_id"] = r
-            payload["agent_id"] = self._get_agent_id()
-        await self._send(payload)
+        # In room context, don't send tool_use to main chat
+        if not r:
+            payload: dict = {"type": "tool_use", "name": name, "input": input_dict, "id": tool_use_id}
+            await self._send(payload)
 
         # Pre-read old file for diff display
         if name in ("FileEdit", "FileWrite") and input_dict.get("file_path"):
@@ -340,10 +273,9 @@ class WsEventHandler(EventHandler):
             } if file_path and old_content != new_content else None,
         }
         r = self._get_room_id()
-        if r:
-            payload["room_id"] = r
-            payload["agent_id"] = self._get_agent_id()
-        await self._send(payload)
+        # In room context, don't send tool_result to main chat
+        if not r:
+            await self._send(payload)
 
         # Attach diff to last assistant message for persistence
         if file_path and old_content != new_content:
@@ -375,11 +307,11 @@ class WsEventHandler(EventHandler):
                 ),
                 "raw_json": json.dumps({
                     "tool": name,
-                    "input": input_dict,
+                    "input": {k: str(v)[:1000] for k, v in input_dict.items()},
                     "result": result[:10000],
                     "is_error": is_error,
                     "duration_ms": duration_ms,
-                }, ensure_ascii=False, indent=2),
+                }, ensure_ascii=False, indent=2, default=str),
             },
             group_key=tool_gk,
         )
@@ -515,18 +447,18 @@ class WsEventHandler(EventHandler):
     async def on_subagent_done(self, agent_id: str, status: str, result: str):
         # Update persisted subagent status + debug events
         if self._store and self._session_project and self._session_id:
-            meta = self._store.load_subagent_meta(
+            meta = self._store.load_agent_meta(
                 self._session_project, self._session_id, agent_id)
             if meta:
                 meta["status"] = status
                 meta["result"] = result
-                self._store.save_subagent_meta(
+                self._store.save_agent_meta(
                     self._session_project, self._session_id, agent_id, meta)
             # Persist subagent debug events
             mgr = getattr(self._controller.agent, '_agent_manager', None)
             if mgr and agent_id in mgr.agents:
                 state = mgr.agents[agent_id]
-                self._store.save_subagent_debug_log(
+                self._store.save_agent_debug_log(
                     self._session_project, self._session_id, agent_id,
                     state.debug_events or [])
         await self._send({
@@ -731,15 +663,71 @@ class WsEventHandler(EventHandler):
 
 
 def _serialize_messages(agent) -> list[dict]:
-    """Serialize agent messages for frontend, excluding tool_result rows."""
+    """Serialize agent messages for frontend, excluding tool_result rows.
+
+    BroadcastRoom tool calls are expanded into visible messages with roomInfo
+    metadata so they survive agent switches and render with full room styling.
+    Also detects legacy [Room: ...] text-prefix messages and converts them.
+    """
+    mgr = getattr(agent, '_agent_manager', None)
+    agent_name = getattr(agent, '_agent_name', '') or ''
+    agent_id = getattr(agent, '_agent_id', '') or ''
     result = []
     for m in agent.messages:
         if m.is_tool_result:
             continue
-        d: dict = {"role": m.role, "content": m.content or ""}
-        if m.diffs:
-            d["diffs"] = m.diffs
-        result.append(d)
+        # Expand BroadcastRoom tool calls into visible messages with roomInfo
+        if m.tool_use_blocks:
+            broadcast_blocks = [
+                b for b in m.tool_use_blocks if b.tool_name == "BroadcastRoom"
+            ]
+            if broadcast_blocks:
+                # Keep assistant text (if any) as a separate message
+                text = (m.content or "").strip()
+                if text:
+                    d = {"role": m.role, "content": text}
+                    if m.diffs:
+                        d["diffs"] = m.diffs
+                    result.append(d)
+                # Add each broadcast with roomInfo metadata
+                for b in broadcast_blocks:
+                    msg_text = b.input.get("message", "")
+                    room_id = b.input.get("room_id", "")
+                    reply_to = b.input.get("reply_to", "") or ""
+                    room_name = ""
+                    if mgr and hasattr(mgr, '_rooms') and room_id:
+                        room = mgr._rooms.get(room_id)
+                        room_name = room.name if room else ""
+                    ri: dict = {
+                        "roomId": room_id,
+                        "roomName": room_name,
+                        "senderName": agent_name,
+                        "senderId": agent_id,
+                        "direction": "in",
+                    }
+                    if reply_to:
+                        ri["replyTo"] = reply_to
+                    result.append({
+                        "role": m.role,
+                        "content": msg_text,
+                        "roomInfo": ri,
+                    })
+                continue
+
+        content_text = m.content or ""
+        # Detect legacy [Room: ...] text-prefix messages and convert to roomInfo
+        clean_content, room_info = _parse_room_prefix(content_text)
+        if room_info:
+            result.append({
+                "role": m.role,
+                "content": clean_content,
+                "roomInfo": room_info,
+            })
+        else:
+            d: dict = {"role": m.role, "content": content_text}
+            if m.diffs:
+                d["diffs"] = m.diffs
+            result.append(d)
     return result
 
 
@@ -749,7 +737,7 @@ async def _send_agent_list(ws: ServerConnection, manager: AgentManager):
     for aid, s in manager.agents.items():
         status = s.status
         # Master agent: use _loop_running for live status
-        if aid == "master":
+        if aid == "1":
             status = "running" if s.controller.agent._loop_running else "idle"
         agents.append({
             "id": aid,
@@ -815,7 +803,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     continue
                 text = msg.get("text", "")
                 queue = active_state.message_queue
-                # Push agent_list before sending (master → running)
+                # Push agent_list before sending (agent → running)
                 await _send_agent_list(websocket, manager)
                 if queue:
                     queue.enqueue(text, source="user")
@@ -945,16 +933,17 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     continue
                 manager = slot.agent_manager
                 handler = slot.handler
-                target_id = msg.get("agent_id", "master")
+                target_id = msg.get("agent_id", "1")
                 if target_id != manager.active_id and target_id in manager.agents:
                     old_state = manager.get_active()
-                    old_state.debug_events = list(handler._debug_entries)
-                    # Persist old subagent debug events to disk
-                    if manager.active_id != "master":
-                        store.save_subagent_debug_log(
+                    # handler._debug_entries IS old_state.debug_events (shared reference)
+                    # No copy needed — they're the same list
+                    # Persist non-initial agent debug events to disk
+                    if manager.active_id != "1":
+                        store.save_agent_debug_log(
                             slot.project_path, slot.session_id,
                             manager.active_id,
-                            old_state.debug_events or [])
+                            old_state.debug_events)
                     old_native = getattr(old_state, '_native_handler', None)
                     if old_native is not None:
                         old_native._clear_forwarding()
@@ -970,11 +959,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     new_state.controller.handler = handler
                     handler.set_controller(new_state.controller)
 
-                    if new_state.debug_events:
-                        handler._debug_entries = list(new_state.debug_events)
-                        handler._entry_id = len(new_state.debug_events)
-                    else:
-                        handler.clear_entries()
+                    # Repoint handler to new agent's debug_events (no copy)
+                    handler._debug_entries = new_state.debug_events
+                    handler._entry_id = len(new_state.debug_events)
 
                     agent = new_state.controller.agent
                     messages_data = _serialize_messages(agent)
@@ -983,7 +970,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         "agent_id": target_id,
                         "name": new_state.name,
                         "messages": messages_data,
-                        "debug_events": new_state.debug_events or [],
+                        "debug_events": handler._debug_entries,
                         "est_tokens": agent.est_tokens(),
                     }, ensure_ascii=False))
 
@@ -1091,8 +1078,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if slot:
                     slot.handler._session_manager = session_mgr
                     # Send initial system debug events
-                    slot_config = slot.agent_manager.agents["master"].controller.config
-                    registry = slot.agent_manager.agents["master"].controller.registry
+                    slot_config = slot.agent_manager.agents["1"].controller.config
+                    registry = slot.agent_manager.agents["1"].controller.registry
                     await slot.handler._send_debug(
                         "[System]",
                         f"Provider: {slot_config.provider}  |  Model: {slot_config.model or 'default'}\n"
@@ -1115,12 +1102,12 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 old_slot = session_mgr.get_active()
                 if old_slot and old_slot.session_id != session_id:
                     old_active = old_slot.agent_manager.get_active()
-                    if old_active and old_slot.agent_manager.active_id != "master":
-                        old_active.debug_events = list(old_slot.handler._debug_entries)
-                        store.save_subagent_debug_log(
+                    if old_active and old_slot.agent_manager.active_id != "1":
+                        # handler._debug_entries IS old_active.debug_events (shared ref)
+                        store.save_agent_debug_log(
                             old_slot.project_path, old_slot.session_id,
                             old_slot.agent_manager.active_id,
-                            old_active.debug_events or [])
+                            old_active.debug_events)
                 await session_mgr.load_session(project_path, session_id)
                 slot = session_mgr.get_active()
                 if slot:
@@ -1129,7 +1116,7 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     agent = active_state.controller.agent
                     messages_data = _serialize_messages(agent)
                     est_tokens = agent.est_tokens()
-                    debug_evts = active_state.debug_events or list(slot.handler._debug_entries)
+                    debug_evts = active_state.debug_events
                     await _send_agent_list(websocket, slot.agent_manager)
                     await websocket.send(json.dumps({
                         "type": "session_loaded",
@@ -1148,19 +1135,19 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                     old_slot = session_mgr.get_active()
                     if old_slot:
                         old_active = old_slot.agent_manager.get_active()
-                        old_active.debug_events = list(old_slot.handler._debug_entries)
-                        if old_slot.agent_manager.active_id != "master":
-                            store.save_subagent_debug_log(
+                        # handler._debug_entries IS old_active.debug_events (shared ref)
+                        if old_slot.agent_manager.active_id != "1":
+                            store.save_agent_debug_log(
                                 old_slot.project_path, old_slot.session_id,
                                 old_slot.agent_manager.active_id,
-                                old_active.debug_events or [])
+                                old_active.debug_events)
                     # Switch
                     session_mgr.switch_session(session_id)
                     new_slot = session_mgr.get_active()
                     if new_slot:
                         new_active = new_slot.agent_manager.get_active()
                         agent = new_active.controller.agent
-                        debug_evts = new_active.debug_events or []
+                        debug_evts = new_active.debug_events
                         await _send_agent_list(websocket, new_slot.agent_manager)
                         await websocket.send(json.dumps({
                             "type": "active_session_switched",
@@ -1287,11 +1274,10 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 for aid in room.agent_ids:
                     st = manager.agents.get(aid)
                     member_names.append(f"{st.name} (id:{aid})" if st else aid)
-                # Broadcast to all member agents in parallel
+                formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
                 for agent_id in room.agent_ids:
                     state = manager.agents.get(agent_id)
                     if state and state.message_queue:
-                        formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
                         state.message_queue.enqueue(formatted, source="room", room_id=room_id)
 
             elif msg_type == "file_list":
