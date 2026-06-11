@@ -78,6 +78,8 @@ export const useChatStore = defineStore('chat', () => {
   const _roomRelaySeen = new Set<string>()
   // Buffer for non-active-agent relays — flushed when active agent finishes
   let _relayBuffer: ChatMessage[] = []
+  // Track active agent busy state (room + non-room) for relay buffering
+  let _busyCounter = 0
 
 
 
@@ -101,6 +103,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function startThinking() {
     thinking.value = true;
+    _busyCounter++;
   }
 
   function appendToken(token: string) {
@@ -132,6 +135,7 @@ export const useChatStore = defineStore('chat', () => {
       diffs.value = [];
     }
     thinking.value = false;
+    if (_busyCounter > 0) _busyCounter--;
   }
 
   function addToolResult(name: string, result: string, isError: boolean, durationMs: number) {
@@ -166,6 +170,7 @@ export const useChatStore = defineStore('chat', () => {
     thinking.value = false;
     _relayBuffer = [];
     _roomRelaySeen.clear();
+    _busyCounter = 0;
   }
 
   function clear() {
@@ -179,6 +184,7 @@ export const useChatStore = defineStore('chat', () => {
     activeRoomId.value = null;
     _roomRelaySeen.clear();
     _relayBuffer = [];
+    _busyCounter = 0;
   }
 
   function insertToInput(text: string) {
@@ -220,6 +226,11 @@ export const useChatStore = defineStore('chat', () => {
     const agentInfo = agent.agents.find(a => a.id === data.agent_id)
     const senderName = agentInfo?.name || data.agent_id
     const senderColor = agent.getAgentColor(data.agent_id)
+
+    // Track active agent's room processing for relay buffering
+    if (data.agent_id === agent.activeAgentId) {
+      _busyCounter++
+    }
 
     // Find the last streaming message from this specific agent (handle concurrent agent responses)
     let streamingIdx = -1
@@ -270,6 +281,7 @@ export const useChatStore = defineStore('chat', () => {
     // and should appear before the active agent's own response.
     const agent = useAgentStore()
     if (data.agent_id === agent.activeAgentId) {
+      if (_busyCounter > 0) _busyCounter--
       _flushRelayBuffer()
     }
     // Only show in main chat if this is the ACTIVE agent's own response.
@@ -306,11 +318,14 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // Active agent's own broadcast → show immediately.
-    // Other agents' broadcasts → buffer until active agent finishes.
+    // Other agents' broadcasts when active agent is busy → buffer.
+    // Other agents' broadcasts when active agent is idle → show immediately.
     if (isActiveAgent) {
       messages.value.push(relayMsg)
-    } else {
+    } else if (_busyCounter > 0) {
       _relayBuffer.push(relayMsg)
+    } else {
+      messages.value.push(relayMsg)
     }
 
     // Always add to chatroom message stream
