@@ -49,6 +49,9 @@ class AnthropicProvider(BaseProvider):
             elif msg.role == "user":
                 api_messages.append({"role": "user", "content": msg.content})
             elif msg.role == "assistant":
+                # Skip empty assistant messages (no text, no tool_use blocks)
+                if not msg.content and not msg.tool_use_blocks:
+                    continue
                 api_messages.append(_assistant_to_anthropic(msg))
 
         # Build API-format tools (管道二: structured schema)
@@ -139,6 +142,8 @@ class AnthropicProvider(BaseProvider):
             elif msg.role == "user":
                 api_messages.append({"role": "user", "content": msg.content})
             elif msg.role == "assistant":
+                if not msg.content and not msg.tool_use_blocks:
+                    continue
                 api_messages.append(_assistant_to_anthropic(msg))
 
         api_tools = None

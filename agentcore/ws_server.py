@@ -693,7 +693,7 @@ def _serialize_messages(agent) -> list[dict]:
                 for b in broadcast_blocks:
                     msg_text = b.input.get("message", "")
                     room_id = b.input.get("room_id", "")
-                    reply_to = b.input.get("reply_to", "") or ""
+                    reply_to = b.input.get("to", "") or b.input.get("reply_to", "") or ""
                     room_name = ""
                     if mgr and hasattr(mgr, '_rooms') and room_id:
                         room = mgr._rooms.get(room_id)
@@ -797,6 +797,8 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 if handler._controller is not active_state.controller:
                     handler.set_controller(active_state.controller)
                     active_state.controller.handler = handler
+                # Keep manager.ws_handler in sync so BroadcastRoom can send room_relay
+                manager.ws_handler = handler
                 handler._has_pending_tool_results = False
                 if getattr(active_state.controller.agent, '_compacting', False):
                     await handler._send_debug("[Blocked]", "正在压缩中，请稍候...", "#F59E0B")
@@ -958,6 +960,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                         new_native._wire_forwarding(handler)
                     new_state.controller.handler = handler
                     handler.set_controller(new_state.controller)
+
+                    # Keep manager.ws_handler in sync for BroadcastRoom room_relay
+                    manager.ws_handler = handler
 
                     # Repoint handler to new agent's debug_events (no copy)
                     handler._debug_entries = new_state.debug_events

@@ -20,8 +20,9 @@ class SendMessageTool(Tool):
     def __init__(self, manager, from_agent_id: str):
         self.name = "SendMessage"
         self.description = (
-            "Send a message to another agent by name. "
-            "Use to share information, coordinate, delegate tasks, or send follow-up instructions."
+            "向其他 Agent 发送私聊消息。用于分享信息、协调分工、委派任务或发送跟进指令。"
+            "注意：如果目标 Agent 与你在同一个聊天室中，且话题是聊天室内的公开讨论，"
+            "应使用 BroadcastRoom 向房间广播而非私聊，让所有成员都能看到。"
         )
         self.parameters = {
             "type": "object",

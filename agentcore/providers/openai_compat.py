@@ -72,6 +72,10 @@ class OpenAICompatProvider(BaseProvider):
             elif msg.role == "user":
                 api_messages.append({"role": "user", "content": msg.content})
             elif msg.role == "assistant":
+                # Skip empty assistant messages — some providers (DeepSeek/GLM)
+                # reject null content without tool_calls (400 error)
+                if not msg.content and not msg.tool_use_blocks:
+                    continue
                 api_messages.append(_assistant_to_openai(msg))
 
         # Build OpenAI-format tools
@@ -141,6 +145,9 @@ class OpenAICompatProvider(BaseProvider):
             elif msg.role == "user":
                 api_messages.append({"role": "user", "content": msg.content})
             elif msg.role == "assistant":
+                # Skip empty assistant messages — some providers reject null content
+                if not msg.content and not msg.tool_use_blocks:
+                    continue
                 api_messages.append(_assistant_to_openai(msg))
 
         openai_tools = None
@@ -280,8 +287,10 @@ def _assistant_to_openai(msg: Message) -> dict:
     result: dict = {"role": "assistant"}
     if msg.content:
         result["content"] = msg.content
+    elif msg.tool_use_blocks:
+        result["content"] = None  # valid: assistant with tool_calls can have null content
     else:
-        result["content"] = None
+        result["content"] = ""  # must not be null — API rejects null content without tool_calls
     if msg.tool_use_blocks:
         result["tool_calls"] = [
             {

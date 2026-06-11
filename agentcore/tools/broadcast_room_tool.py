@@ -14,8 +14,8 @@ def _safe_print(msg: str) -> None:
         print(msg.encode(enc, errors="replace").decode(enc), flush=True)
 
 
-def _resolve_reply_to(raw: str, room, mgr) -> str:
-    """Validate and normalize LLM-provided reply_to value.
+def _resolve_to(raw: str, room, mgr) -> str:
+    """Validate and normalize the `to` target agent/user.
 
     Returns the member's display name if valid, empty string otherwise.
     """
@@ -45,10 +45,10 @@ class BroadcastRoomTool(Tool):
     def __init__(self, manager, from_agent_id: str):
         self.name = "BroadcastRoom"
         self.description = (
-            "将你的回复广播给房间其他成员。收到用户消息时优先调用此工具，"
-            "让房间内所有成员看到你的回复。"
-            "注意：不要在每次收到其他 Agent 的中继消息时都调用此工具。"
-            "仅在以下情况主动调用：需要纠正错误信息、补充关键遗漏、"
+            "向聊天室发送消息，让房间内其他成员看到。"
+            "收到用户从聊天室发送的消息，要回复时优先调用此工具。"
+            "注意：你能看到聊天室里其他成员的消息，这些消息目标可能不是你，不需要调用此工具回应"
+            "在以下情况主动调用：在聊天室里跟用户或其他Agent讨论，需要纠正错误信息、补充关键遗漏、"
             "或用户明确要求你回应。如果讨论已达成共识或你只是认可对方的观点，"
             "不要调用。可通过 room_id 参数指定目标房间。"
         )
@@ -63,31 +63,20 @@ class BroadcastRoomTool(Tool):
                     "type": "string",
                     "description": "目标房间 ID（多房间时必须指定，单房间可省略）",
                 },
-                "reply_to": {
+                "to": {
                     "type": "string",
-                    "description": "回复对象。可填 '用户' 或房间成员的名字/id。留空则自动从最近一条用户消息判断。",
+                    "description": "消息发送给谁。可填 '用户' 或房间成员的名字/id。留空则自动从当前对话上下文判断。",
                 },
             },
             "required": ["message"],
         }
         self._manager = manager
         self._from_id = from_agent_id
-        self._has_broadcast: bool = False
 
     def is_read_only(self) -> bool:
         return True
 
-    def reset_broadcast_flag(self) -> None:
-        """Reset the per-turn broadcast flag. Called before each room message."""
-        self._has_broadcast = False
-
     async def call(self, input: dict, context: ToolContext) -> str:
-        # ── Guard: one broadcast per turn ──
-        if self._has_broadcast:
-            # Don't suppress reply on error — let LLM see the message
-            self.suppress_reply = False
-            return "本轮已广播过一次，不可重复调用 BroadcastRoom。"
-
         message = input["message"]
         room_id = input.get("room_id", "")
 
@@ -121,13 +110,13 @@ class BroadcastRoomTool(Tool):
             self.suppress_reply = False
             return f"你不在这个房间中（{room.name}）。"
 
-        # ── Resolve reply_to ──
+        # ── Resolve target (to) ──
         from_name = getattr(agent, "_agent_name", "") or "unknown"
-        reply_to = input.get("reply_to", "") or ""
+        reply_to = input.get("to", "") or input.get("reply_to", "") or ""
 
-        # A: LLM-specified reply_to — validate and normalize
+        # A: LLM-specified `to` — validate and normalize
         if reply_to:
-            resolved = _resolve_reply_to(reply_to, room, mgr)
+            resolved = _resolve_to(reply_to, room, mgr)
             if resolved:
                 reply_to = resolved
             else:
@@ -172,14 +161,13 @@ class BroadcastRoomTool(Tool):
                 )
                 target_count += 1
 
-        self._has_broadcast = True
         self.suppress_reply = True  # success → suppress LLM follow-up
 
-        # Notify frontend immediately — the broadcasting agent's own message
-        # should appear right away.  For OTHER agents' views, a second
-        # room_relay fires from _consumer_loop when they process the queued
-        # message (frontend dedup handles duplicates).
-        ws_handler = mgr.ws_handler
+        # Push to frontend via THIS agent's own handler. Only the active
+        # agent's handler (WsEventHandler) has _send — non-active agents
+        # use _AgentHandler which doesn't, so their broadcasts reach the
+        # frontend only when the active agent dequeues them in consumer_loop.
+        ws_handler = agent_state.controller.handler
         if ws_handler and hasattr(ws_handler, "_send"):
             try:
                 await ws_handler._send({
