@@ -1,6 +1,17 @@
 """SendMessageTool — inter-agent messaging."""
 
+import sys
+
 from agentcore.tools.base import Tool, ToolContext
+
+
+def _safe_print(msg: str) -> None:
+    """Print that survives Windows GBK encoding for emoji / non-ASCII."""
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", "utf-8") or "utf-8"
+        print(msg.encode(enc, errors="replace").decode(enc), flush=True)
 
 
 class SendMessageTool(Tool):
@@ -35,11 +46,11 @@ class SendMessageTool(Tool):
     async def call(self, input: dict, context: ToolContext) -> str:
         to = input["to"]
         message = input["message"]
-        print(f"[SendMessage] {self._from_id} -> {to}: {message[:100]}", flush=True)
+        _safe_print(f"[SendMessage] {self._from_id} -> {to}: {message[:100]}")
         try:
             await self._manager.send_message_to_agent(self._from_id, to, message)
-            print(f"[SendMessage] delivered to {to}", flush=True)
+            _safe_print(f"[SendMessage] delivered to {to}")
             return f"Message sent to '{to}'."
         except ValueError as e:
-            print(f"[SendMessage] failed: {e}", flush=True)
+            _safe_print(f"[SendMessage] failed: {e}")
             return str(e)

@@ -227,9 +227,27 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function handleRoomRelay(data: { room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
-    const roomLabel = `[Room: ${data.room_name} ← ${data.from_name} | Reply to: ${data.reply_to}]`
+  function handleRoomRelay(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
+    // Show in main chat area with room label
+    const roomLabel = `[Room: ${data.room_name} ← ${data.from_name}${data.reply_to ? ` | Reply to: ${data.reply_to}` : ''}]`
     messages.value.push({ role: 'assistant', content: `${roomLabel}\n${data.text}` })
+
+    // Also add to chatroom message stream
+    if (data.room_id) {
+      const agent = useAgentStore()
+      const msgs = roomMessages.value.get(data.room_id) || []
+      msgs.push({
+        id: `rm_${++_roomMsgId}`,
+        roomId: data.room_id,
+        senderId: data.from_id,
+        senderName: data.from_name,
+        senderColor: agent.getAgentColor(data.from_id),
+        content: data.text,
+        timestamp: Date.now(),
+        isStreaming: false,
+      })
+      roomMessages.value.set(data.room_id, msgs)
+    }
   }
 
   function sendRoomMessage(roomId: string, text: string) {

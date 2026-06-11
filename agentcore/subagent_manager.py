@@ -202,10 +202,6 @@ class _AgentHandler(EventHandler):
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tools += 1
-        self._record(f"[Tool] {name}",
-                     ", ".join(f"{k}={str(v)[:50]}" for k, v in input_dict.items()),
-                     "#22C55E",
-                     group_key=f"tool:{tool_use_id}" if tool_use_id else None)
         if self._fwd_tool_use:
             self._fwd_tool_use(name, input_dict, tool_use_id)
 
@@ -213,6 +209,7 @@ class _AgentHandler(EventHandler):
         if self._pending_tools > 0:
             self._pending_tools -= 1
         color = "#EF4444" if is_error else "#8B5CF6"
+        status_icon = "X" if is_error else "OK"
         event_data = {
             "type": "Tool",
             "name": name,
@@ -222,7 +219,7 @@ class _AgentHandler(EventHandler):
             "raw_json": json.dumps({"tool": name, "result": result, "is_error": is_error},
                                    ensure_ascii=False, indent=2),
         }
-        self._record("[Send Tool Result]", f"{name}  |  {result[:200]}", color,
+        self._record(f"[Tool] {name} {status_icon}", f"{result[:200]}", color,
                      event_data=event_data,
                      group_key=f"tool:{tool_use_id}" if tool_use_id else None)
         if self._fwd_tool_result:
@@ -626,7 +623,7 @@ class AgentManager:
                     st = self.agents.get(aid)
                     members.append(f"{st.name} [id:{aid}]" if st else aid)
                 room_lines.append(f"  「{room.name}」[id:{rid}]: 成员 {', '.join(members)}")
-                room_lines.append(f"    规则: 被 @提及 必须回复; 未被 @ 自行判断; 你的 text_delta 回复自动广播到房间")
+                room_lines.append(f"    规则: 被 @提及 必须回复; 未被 @ 自行判断; 使用 BroadcastRoom 工具将回复分享给房间其他成员; 收到用户消息时优先调用; 收到 Agent 中继时默认不调用，仅在需要纠正错误或补充关键信息时才主动调用; 讨论达成共识后停止调用，不要无意义地来回广播")
             parts.append("\n".join(room_lines))
 
         return "\n\n".join(parts) if parts else ""
@@ -657,3 +654,14 @@ class AgentManager:
     def list_subagents(self) -> list[SubagentState]:
         """Return all subagents (excluding master)."""
         return [s for aid, s in self.agents.items() if aid != "master"]
+
+    def register_broadcast_tool(self, agent_id: str) -> None:
+        """Register BroadcastRoom tool on an agent when it joins a room."""
+        state = self.agents.get(agent_id)
+        if not state or not state.controller:
+            return
+        if state.controller.registry.get("BroadcastRoom") is not None:
+            return  # already registered
+        from agentcore.tools.broadcast_room_tool import BroadcastRoomTool
+        tool = BroadcastRoomTool(self, agent_id)
+        state.controller.registry.register(tool)
