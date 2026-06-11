@@ -176,6 +176,45 @@ class Agent:
         post_tok = estimate_tokens_with_usage(self.messages)
         return pre_tok, post_tok, pre - len(self.messages)
 
+    def _validate_messages(self) -> list[Message]:
+        """Ensure no orphaned tool_calls — each assistant tool_use_block must
+        have a following user message with matching tool_use_id.
+
+        If orphans are found, inject synthetic error tool_results to prevent
+        API 400 errors about insufficient tool messages.
+        """
+        msgs = list(self.messages)
+        covered: set[str] = set()
+
+        # Collect all tool_use_ids from assistant messages and their covered results
+        for m in msgs:
+            if m.role == "assistant" and m.has_tool_uses:
+                for b in m.tool_use_blocks:
+                    covered.add(b.tool_use_id)
+            elif m.is_tool_result and m.tool_use_id:
+                covered.discard(m.tool_use_id)
+
+        # Remaining in 'covered' are tool_calls without matching results
+        if covered:
+            import sys
+            print(
+                f"[Agent] WARNING: {len(covered)} orphaned tool_calls detected "
+                f"({', '.join(list(covered)[:5])}), injecting synthetic results",
+                file=sys.stderr, flush=True,
+            )
+            # Find the last asst message position and inject results after it
+            result_msgs = []
+            for tid in covered:
+                result_msgs.append(Message(
+                    role="user",
+                    content=f"[internal] Tool result lost (id={tid}) — auto-repaired",
+                    tool_use_id=tid,
+                ))
+            # Append at the end so they follow their asst messages
+            msgs = msgs + result_msgs
+
+        return msgs
+
     def _call_messages(self) -> list:
         """Return messages for LLM call, injecting skill and agent reminders each turn.
 
@@ -183,6 +222,7 @@ class Agent:
         each turn, so the LLM always sees current context without it being
         baked into the system prompt.
         """
+        validated = self._validate_messages()
         inserts = []
         if self.skills_text:
             inserts.append(Message(
@@ -200,8 +240,19 @@ class Agent:
                 content=self.agents_text,
             ))
         if inserts:
-            return list(self.messages[:-1]) + inserts + [self.messages[-1]]
-        return list(self.messages)
+            # Scan backward for a "stopping point" (assistant message or
+            # tool_result user message), then insert reminders right after it.
+            # This mirrors Claude Code's reorderAttachmentsForAPI:
+            # attachments bubble up until they hit assistant or tool_result.
+            # Guarantees tool_use/tool_result pairs are never split by inserts.
+            insert_pos = 0
+            for i in range(len(validated) - 1, -1, -1):
+                m = validated[i]
+                if m.role == "assistant" or (m.role == "user" and m.is_tool_result):
+                    insert_pos = i + 1
+                    break
+            return list(validated[:insert_pos]) + inserts + list(validated[insert_pos:])
+        return validated
 
     def _refresh_agents_text(self):
         """Update agents_text from the AgentManager if available."""
@@ -556,8 +607,8 @@ class Agent:
             tool_use_blocks: list[ToolUseBlock] = []
             _streaming_asst_added = False
 
+            call_msgs = self._call_messages()
             try:
-                call_msgs = self._call_messages()
                 async for event in self.provider.call_stream(
                     messages=call_msgs,
                     tools=tools_schema,
@@ -731,6 +782,19 @@ class Agent:
                         yield DoneEvent(final_text=error_msg_text)
                         return
                 else:
+                    # Log the exact messages that caused the error
+                    import sys
+                    print(f"[Agent] LLM call FAILED: {e}", file=sys.stderr)
+                    print(f"[Agent] Messages sent ({len(call_msgs)} total):", file=sys.stderr)
+                    for mi, cm in enumerate(call_msgs[-10:]):
+                        tids = [b.tool_use_id for b in (cm.tool_use_blocks or [])]
+                        print(
+                            f"  [{mi}] role={cm.role} "
+                            f"tool_use_id={cm.tool_use_id or '-'} "
+                            f"tool_calls={tids or '-'} "
+                            f"content={repr((cm.content or '')[:80])}",
+                            file=sys.stderr,
+                        )
                     error_msg_text = f"Error calling LLM: {e}"
                     self.messages.append(Message(
                         role="assistant",

@@ -103,6 +103,7 @@ class _AgentHandler(EventHandler):
         self.manager = manager
         self.agent_id = agent_id
         self._pending_tools = 0  # track tool calls to distinguish [Response] vs [Final Response]
+        self._pending_tool_calls: list[dict] = []  # mirror WsEventHandler for debug detail
         self._fwd_thinking: callable | None = None
         self._fwd_text_delta: callable | None = None
         self._fwd_tool_use: callable | None = None
@@ -181,21 +182,44 @@ class _AgentHandler(EventHandler):
 
     async def on_request(self, text: str, msg_count: int, est_tokens: int,
                          tools_count: int, model: str = ""):
+        # Match WsEventHandler.on_request formatting for consistent debug display
+        state = self.manager.agents.get(self.agent_id)
+        agent = state.controller.agent if state and state.controller else None
+        msgs = agent.messages if agent else []
         msg_lines = [
             f"Messages: {msg_count}  |  ~{est_tokens} tokens  |  {tools_count} tools",
-            f"  [new] user: {text[:200]}",
+            f"  [new] user: {text[:80]}",
         ]
+        for i, m in enumerate(msgs[-5:]):
+            role = m.role
+            content_preview = (m.content or "")[:50].replace("\n", " ")
+            if m.tool_use_id:
+                msg_lines.append(f"  [{i}] tool({m.tool_use_id[:12]}): {content_preview}")
+            else:
+                msg_lines.append(f"  [{i}] {role}: {content_preview}")
+        if len(msgs) > 5:
+            msg_lines.append(f"  ... +{len(msgs) - 5} earlier messages")
+        event_data = {
+            "type": "Request",
+            "provider": model,
+            "model": model,
+            "message_count": msg_count,
+            "est_tokens": est_tokens,
+            "tools_count": tools_count,
+            "user_message": text,
+            "formatted": "\n".join(msg_lines),
+            "messages": [
+                {"role": m.role, "content": m.content or "",
+                 "tool_use_id": getattr(m, "tool_use_id", ""),
+                 "tool_use_blocks": [
+                    {"tool_name": b.tool_name, "input": b.input}
+                    for b in (getattr(m, "tool_use_blocks", None) or [])
+                 ]}
+                for m in msgs
+            ],
+        }
         self._record("[Request]", "\n".join(msg_lines), "#569cd6",
-                     event_data={
-                         "type": "Request",
-                         "model": model,
-                         "message_count": msg_count,
-                         "est_tokens": est_tokens,
-                         "tools_count": tools_count,
-                         "user_message": text,
-                         "formatted": "\n".join(msg_lines),
-                     },
-                     group_key="user")
+                     event_data=event_data, group_key="user")
         if self._fwd_request:
             self._fwd_request(text, msg_count, est_tokens, tools_count, model)
 
@@ -227,6 +251,9 @@ class _AgentHandler(EventHandler):
 
     async def on_tool_use(self, name: str, input_dict: dict, tool_use_id: str = ""):
         self._pending_tools += 1
+        self._pending_tool_calls.append({
+            "name": name, "input_dict": input_dict, "tool_use_id": tool_use_id,
+        })
         if self._in_room_context():
             return  # Suppress — room context doesn't need tool events in main chat
         if self._fwd_tool_use:
@@ -235,20 +262,56 @@ class _AgentHandler(EventHandler):
     async def on_tool_result(self, name: str, result: str, is_error: bool, duration_ms: float = 0, tool_use_id: str = ""):
         if self._pending_tools > 0:
             self._pending_tools -= 1
-        color = "#EF4444" if is_error else "#8B5CF6"
-        status_icon = "X" if is_error else "OK"
-        event_data = {
-            "type": "Tool",
-            "name": name,
-            "result": result,
-            "is_error": is_error,
-            "formatted": f"Tool: {name}\nStatus: {'ERROR' if is_error else 'OK'}\n\n{result[:2000]}",
-            "raw_json": json.dumps({"tool": name, "result": result, "is_error": is_error},
-                                   ensure_ascii=False, indent=2),
-        }
-        self._record(f"[Tool] {name} {status_icon}", f"{result[:200]}", color,
-                     event_data=event_data,
-                     group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+        # Pop matching tool call for debug detail (same logic as WsEventHandler)
+        tc = self._pending_tool_calls.pop(0) if self._pending_tool_calls else None
+        input_dict = tc["input_dict"] if tc else {}
+        if not tool_use_id and tc:
+            tool_use_id = tc.get("tool_use_id", "")
+        # Build debug entry in try-except — must never break the agent loop
+        # or tool results won't be appended to messages, causing 400 errors.
+        try:
+            call_detail = "\n".join(
+                f"{k}: {str(v)[:200]}" for k, v in input_dict.items()
+            )
+            dur_str = f"{duration_ms:.0f}ms" if duration_ms else ""
+            size_line = f"size: {len(result)} chars"
+            color = "#EF4444" if is_error else "#10B981"
+            status_icon = "X" if is_error else "OK"
+            message = (
+                f"{call_detail}\n---\n"
+                f"status: {'ERROR' if is_error else 'OK'}  |  {size_line}"
+                f"{'  |  ' + dur_str if dur_str else ''}\n"
+                f"{result[:200]}"
+            )
+            event_data = {
+                "type": "Tool",
+                "name": name,
+                "input": input_dict,
+                "result": result,
+                "is_error": is_error,
+                "duration_ms": duration_ms,
+                "formatted": (
+                    f"━━━ Tool Call ━━━\nTool: {name}\n\n" +
+                    "\n".join(f"  {k}: {str(v)[:200]}" for k, v in input_dict.items()) +
+                    f"\n\n━━━ Tool Result ━━━\n"
+                    f"Status: {'ERROR' if is_error else 'OK'}\n"
+                    f"Duration: {dur_str or 'N/A'}\n"
+                    f"Size: {len(result)} chars\n\n{result[:5000]}"
+                ),
+                "raw_json": json.dumps({
+                    "tool": name,
+                    "input": {k: str(v)[:1000] for k, v in input_dict.items()},
+                    "result": result[:10000],
+                    "is_error": is_error,
+                    "duration_ms": duration_ms,
+                }, ensure_ascii=False, indent=2, default=str),
+            }
+            self._record(f"[Tool] {name} {status_icon}", message, color,
+                         event_data=event_data,
+                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+        except Exception:
+            self._record(f"[Tool] {name}", result[:200], "#10B981",
+                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
         if self._in_room_context():
             return  # Suppress — room context doesn't need tool events in main chat
         if self._fwd_tool_result:

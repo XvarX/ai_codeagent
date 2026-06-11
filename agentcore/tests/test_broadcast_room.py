@@ -66,6 +66,7 @@ async def test_broadcast_success():
         rooms={"r1": room},
         agents={"A": state_a, "B": state_b, "C": state_c, "1": main_state},
     )
+    mgr.ws_handler = ws_handler
 
     tool = BroadcastRoomTool(mgr, "A")
     ctx = ToolContext(cwd="/tmp", messages=[])
@@ -81,7 +82,14 @@ async def test_broadcast_success():
     assert "Alice" in call_args[0][0]
     assert "Hello room!" in call_args[0][0]
 
-    # Should have sent room_relay event via master's current handler
+    # relay_meta carries structured info for deferred room_relay in _consumer_loop
+    relay_meta = call_args[1]["relay_meta"]
+    assert relay_meta["room_name"] == "Room1"
+    assert relay_meta["from_name"] == "Alice"
+    assert relay_meta["from_id"] == "A"
+    assert relay_meta["text"] == "Hello room!"
+
+    # room_relay is also sent immediately for the broadcasting agent's own display
     ws_handler._send.assert_called_once()
     relay_data = ws_handler._send.call_args[0][0]
     assert relay_data["type"] == "room_relay"

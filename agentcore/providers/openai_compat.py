@@ -249,6 +249,29 @@ class OpenAICompatProvider(BaseProvider):
             yield ResponseDoneEvent(raw=raw)
 
         except Exception as e:
+            import sys, json as _json
+            err_str = str(e)
+            if "400" in err_str and "tool_calls" in err_str:
+                # Compact dump: roles + tool IDs + content snippet per message
+                summary = []
+                for am in api_messages:
+                    try:
+                        role = am.get("role", "?")
+                        tc_id = am.get("tool_call_id", "")
+                        tcs = [tc.get("id", "") for tc in am.get("tool_calls", [])]
+                        content = str(am.get("content", ""))
+                        summary.append({
+                            "role": role,
+                            "tool_call_id": tc_id or None,
+                            "tool_calls": tcs or None,
+                            "content": content[:120],
+                        })
+                    except Exception:
+                        summary.append({"role": "?", "error": "failed to serialize"})
+                print(
+                    f"[Provider] 400 tool_calls error. Messages:\n{_json.dumps(summary, indent=2, ensure_ascii=False, default=str)}",
+                    file=sys.stderr, flush=True,
+                )
             yield ErrorEvent(message=f"Provider error: {e}")
 
 

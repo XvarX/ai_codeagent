@@ -14,6 +14,24 @@ def _safe_print(msg: str) -> None:
         print(msg.encode(enc, errors="replace").decode(enc), flush=True)
 
 
+def _resolve_reply_to(raw: str, room, mgr) -> str:
+    """Validate and normalize LLM-provided reply_to value.
+
+    Returns the member's display name if valid, empty string otherwise.
+    """
+    raw = raw.strip()
+    if raw == "用户":
+        return raw
+    # Try id exact match first, then name fuzzy match
+    for aid in room.agent_ids:
+        st = mgr.agents.get(aid)
+        if not st:
+            continue
+        if raw == aid or raw == st.name:
+            return st.name
+    return ""
+
+
 class BroadcastRoomTool(Tool):
     """Broadcast a message to other agents in your chat room.
 
@@ -44,6 +62,10 @@ class BroadcastRoomTool(Tool):
                 "room_id": {
                     "type": "string",
                     "description": "目标房间 ID（多房间时必须指定，单房间可省略）",
+                },
+                "reply_to": {
+                    "type": "string",
+                    "description": "回复对象。可填 '用户' 或房间成员的名字/id。留空则自动从最近一条用户消息判断。",
                 },
             },
             "required": ["message"],
@@ -99,13 +121,46 @@ class BroadcastRoomTool(Tool):
             self.suppress_reply = False
             return f"你不在这个房间中（{room.name}）。"
 
-        # ── Format and broadcast ──
+        # ── Resolve reply_to ──
         from_name = getattr(agent, "_agent_name", "") or "unknown"
+        reply_to = input.get("reply_to", "") or ""
+
+        # A: LLM-specified reply_to — validate and normalize
+        if reply_to:
+            resolved = _resolve_reply_to(reply_to, room, mgr)
+            if resolved:
+                reply_to = resolved
+            else:
+                reply_to = ""  # invalid → fallback to auto-detect
+
+        # B: Auto-detect from last user message
+        if not reply_to:
+            for m in reversed(agent.messages):
+                if m.role == "user" and m.content:
+                    import re
+                    fm = re.search(r"\|\s*From:\s*([^|\]]+)", m.content)
+                    if fm:
+                        raw = fm.group(1).strip()
+                        reply_to = re.sub(r"\s*\(id:[^)]*\)\s*$", "", raw).strip()
+                    break
+            if not reply_to:
+                reply_to = "用户"
+
+        # ── Format and broadcast ──
         formatted = (
-            f"[Room: {room.name} | From: {from_name} (id:{self._from_id})]\n{message}"
+            f"[Room: {room.name} | From: {from_name}"
+            f" | To: {reply_to}]\n{message}"
         )
 
         target_count = 0
+        relay_meta = {
+            "room_id": room_id,
+            "room_name": room.name,
+            "from_name": from_name,
+            "from_id": self._from_id,
+            "text": message,
+            "reply_to": reply_to,
+        }
         for aid in room.agent_ids:
             if aid == self._from_id:
                 continue
@@ -113,12 +168,17 @@ class BroadcastRoomTool(Tool):
             if st and st.message_queue:
                 st.message_queue.enqueue(
                     formatted, source="room", room_id=room_id, relay=True,
+                    relay_meta=relay_meta,
                 )
                 target_count += 1
 
-        # ── Notify frontend via room_relay event ──
-        # Use mgr.ws_handler (always WsEventHandler) instead of a specific
-        # agent's controller.handler which may be _AgentHandler after switch.
+        self._has_broadcast = True
+        self.suppress_reply = True  # success → suppress LLM follow-up
+
+        # Notify frontend immediately — the broadcasting agent's own message
+        # should appear right away.  For OTHER agents' views, a second
+        # room_relay fires from _consumer_loop when they process the queued
+        # message (frontend dedup handles duplicates).
         ws_handler = mgr.ws_handler
         if ws_handler and hasattr(ws_handler, "_send"):
             try:
@@ -129,13 +189,10 @@ class BroadcastRoomTool(Tool):
                     "from_name": from_name,
                     "from_id": self._from_id,
                     "text": message,
-                    "reply_to": "",
+                    "reply_to": reply_to,
                 })
             except Exception:
                 pass
-
-        self._has_broadcast = True
-        self.suppress_reply = True  # success → suppress LLM follow-up
 
         _safe_print(
             f"[BroadcastRoom] {from_name} ({self._from_id}) "

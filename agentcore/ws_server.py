@@ -9,6 +9,8 @@ import logging
 import re
 from pathlib import Path
 
+from agentcore.room_parser import _parse_room_prefix
+
 import websockets
 from websockets.asyncio.server import serve, ServerConnection
 
@@ -305,11 +307,11 @@ class WsEventHandler(EventHandler):
                 ),
                 "raw_json": json.dumps({
                     "tool": name,
-                    "input": input_dict,
+                    "input": {k: str(v)[:1000] for k, v in input_dict.items()},
                     "result": result[:10000],
                     "is_error": is_error,
                     "duration_ms": duration_ms,
-                }, ensure_ascii=False, indent=2),
+                }, ensure_ascii=False, indent=2, default=str),
             },
             group_key=tool_gk,
         )
@@ -663,16 +665,18 @@ class WsEventHandler(EventHandler):
 def _serialize_messages(agent) -> list[dict]:
     """Serialize agent messages for frontend, excluding tool_result rows.
 
-    BroadcastRoom tool calls are expanded into labeled messages so they
-    remain visible after switching agents (matching handleRoomRelay format).
+    BroadcastRoom tool calls are expanded into visible messages with roomInfo
+    metadata so they survive agent switches and render with full room styling.
+    Also detects legacy [Room: ...] text-prefix messages and converts them.
     """
     mgr = getattr(agent, '_agent_manager', None)
     agent_name = getattr(agent, '_agent_name', '') or ''
+    agent_id = getattr(agent, '_agent_id', '') or ''
     result = []
     for m in agent.messages:
         if m.is_tool_result:
             continue
-        # Expand BroadcastRoom tool calls into visible messages
+        # Expand BroadcastRoom tool calls into visible messages with roomInfo
         if m.tool_use_blocks:
             broadcast_blocks = [
                 b for b in m.tool_use_blocks if b.tool_name == "BroadcastRoom"
@@ -685,21 +689,45 @@ def _serialize_messages(agent) -> list[dict]:
                     if m.diffs:
                         d["diffs"] = m.diffs
                     result.append(d)
-                # Add each broadcast as a labeled message
+                # Add each broadcast with roomInfo metadata
                 for b in broadcast_blocks:
                     msg_text = b.input.get("message", "")
                     room_id = b.input.get("room_id", "")
+                    reply_to = b.input.get("reply_to", "") or ""
                     room_name = ""
                     if mgr and hasattr(mgr, '_rooms') and room_id:
                         room = mgr._rooms.get(room_id)
                         room_name = room.name if room else ""
-                    label = f"[Room: {room_name} ← {agent_name}]" if room_name else f"[Room: ← {agent_name}]"
-                    result.append({"role": m.role, "content": f"{label}\n{msg_text}"})
+                    ri: dict = {
+                        "roomId": room_id,
+                        "roomName": room_name,
+                        "senderName": agent_name,
+                        "senderId": agent_id,
+                        "direction": "in",
+                    }
+                    if reply_to:
+                        ri["replyTo"] = reply_to
+                    result.append({
+                        "role": m.role,
+                        "content": msg_text,
+                        "roomInfo": ri,
+                    })
                 continue
-        d: dict = {"role": m.role, "content": m.content or ""}
-        if m.diffs:
-            d["diffs"] = m.diffs
-        result.append(d)
+
+        content_text = m.content or ""
+        # Detect legacy [Room: ...] text-prefix messages and convert to roomInfo
+        clean_content, room_info = _parse_room_prefix(content_text)
+        if room_info:
+            result.append({
+                "role": m.role,
+                "content": clean_content,
+                "roomInfo": room_info,
+            })
+        else:
+            d: dict = {"role": m.role, "content": content_text}
+            if m.diffs:
+                d["diffs"] = m.diffs
+            result.append(d)
     return result
 
 
@@ -1246,11 +1274,10 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 for aid in room.agent_ids:
                     st = manager.agents.get(aid)
                     member_names.append(f"{st.name} (id:{aid})" if st else aid)
-                # Broadcast to all member agents in parallel
+                formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
                 for agent_id in room.agent_ids:
                     state = manager.agents.get(agent_id)
                     if state and state.message_queue:
-                        formatted = f"[Room: {room.name} | Members: {', '.join(member_names)} | From: 用户]\n{text}"
                         state.message_queue.enqueue(formatted, source="room", room_id=room_id)
 
             elif msg_type == "file_list":

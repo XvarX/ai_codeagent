@@ -1,33 +1,99 @@
 <template>
   <div class="p-[14px_18px] overflow-y-auto flex-1" ref="container">
     <div v-for="(msg, i) in chatStore.messages" :key="i">
+      <!-- Empty message skip -->
       <div v-if="!msg.content || !msg.content.trim()" />
-      <div v-else :class="['flex py-[6px] gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start items-start']">
-        <div v-if="msg.role === 'assistant'" class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[13px] font-semibold">AI</div>
-        <div class="max-w-[75%] px-[14px] py-2 rounded-[14px] text-base leading-relaxed" :class="msg.role === 'user' ? 'bg-surface-2 border border-border-default rounded-br-[3px]' : 'bg-surface-2 border border-border-subtle rounded-tl-[3px]'">
-          <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+
+      <!-- ===== 聊天室消息 ===== -->
+      <div v-else-if="msg.roomInfo"
+        :class="['flex py-[6px] gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start items-start']"
+      >
+        <!-- 左侧头像：AI Agent（活跃Agent自己的聊天室广播） -->
+        <div v-if="msg.role === 'assistant'" class="flex flex-col items-center gap-0.5">
+          <span v-if="msg.roomInfo.senderName" class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">{{ msg.roomInfo.senderName }}</span>
+          <div class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[11px] font-semibold">AI</div>
+        </div>
+
+        <div class="flex flex-col max-w-[75%]" :class="msg.role === 'user' ? 'items-end' : 'items-start'">
+          <!-- 聊天室标签 -->
+          <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mb-1"
+            :class="msg.roomInfo.direction === 'out'
+              ? 'text-[#10B981] bg-[rgba(16,185,129,0.08)]'
+              : 'text-[#6366F1] bg-[rgba(99,102,241,0.08)]'"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="1.5" y="2" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/>
+              <line x1="4.5" y1="5.5" x2="11.5" y2="5.5" stroke="currentColor" stroke-width="1"/>
+              <line x1="4.5" y1="8.5" x2="9.5" y2="8.5" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            {{ msg.roomInfo.roomName }}
+            <template v-if="msg.roomInfo.replyTo">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" class="opacity-60">
+                <path d="M3 8h10M10 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="font-normal opacity-70">{{ msg.roomInfo.replyTo }}</span>
+            </template>
+          </span>
+          <!-- 聊天室气泡 -->
+          <div class="px-[14px] py-2 rounded-[14px] text-base leading-relaxed"
+            :class="msg.roomInfo.direction === 'out'
+              ? 'bg-[rgba(16,185,129,0.04)] border border-[rgba(16,185,129,0.20)] rounded-br-[3px]'
+              : msg.role === 'user'
+                ? 'bg-[rgba(99,102,241,0.04)] border border-[rgba(99,102,241,0.18)] rounded-br-[3px]'
+                : 'bg-[rgba(99,102,241,0.04)] border border-[rgba(99,102,241,0.18)] rounded-tl-[3px]'"
+          >
+            <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+          </div>
+        </div>
+
+        <!-- 右侧头像：其他 Agent（AI头像+名字）或用户 -->
+        <div v-if="msg.role === 'user'" class="flex flex-col items-center gap-0.5">
+          <span v-if="msg.roomInfo.senderName && msg.roomInfo.direction === 'in'" class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">{{ msg.roomInfo.senderName }}</span>
+          <div v-if="msg.roomInfo.direction === 'in'" class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[11px] font-semibold">AI</div>
+          <div v-else class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-white flex items-center justify-center text-[12px] font-semibold">你</div>
         </div>
       </div>
+
+      <!-- ===== 普通消息 ===== -->
+      <div v-else :class="['flex py-[6px] gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start items-start']">
+        <!-- 左侧 AI 头像 -->
+        <div v-if="msg.role === 'assistant'" class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[13px] font-semibold">AI</div>
+
+        <div class="max-w-[75%] px-[14px] py-2 rounded-[14px] text-base leading-relaxed"
+          :class="msg.role === 'user'
+            ? 'bg-surface-2 border border-border-default rounded-br-[3px]'
+            : 'bg-surface-2 border border-border-subtle rounded-tl-[3px]'"
+        >
+          <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+        </div>
+
+        <!-- 右侧用户头像 -->
+        <div v-if="msg.role === 'user'" class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-white flex items-center justify-center text-[12px] font-semibold">你</div>
+      </div>
+
+      <!-- Diffs -->
       <div v-if="msg.diffs && msg.diffs.length" v-for="(diff, di) in msg.diffs" :key="'diff-' + i + '-' + di" class="my-2">
         <DiffViewer :filePath="diff.filePath" :oldContent="diff.oldContent" :newContent="diff.newContent" />
       </div>
     </div>
+
+    <!-- Thinking -->
     <div v-if="chatStore.thinking" class="flex gap-1 py-2 items-center">
       <span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span><span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span><span class="w-[6px] h-[6px] rounded-[3px] bg-text-muted"></span>
       <span class="text-sm text-text-muted ml-[6px]">思考中...</span>
     </div>
+
+    <!-- Streaming message (always active agent on left) -->
     <div v-if="chatStore.currentAssistantMsg" class="flex py-[6px] gap-2 justify-start items-start">
       <div class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] text-white flex items-center justify-center text-[13px] font-semibold">AI</div>
       <div class="max-w-[75%] px-[14px] py-2 rounded-[14px] text-base leading-relaxed bg-surface-2 border border-border-subtle rounded-tl-[3px]">
         <div class="bubble-content" v-html="renderMarkdown(chatStore.currentAssistantMsg)"></div>
       </div>
     </div>
+
+    <!-- Current diffs -->
     <div v-for="(diff, di) in chatStore.diffs" :key="'diff-' + di" class="my-2">
-      <DiffViewer
-        :filePath="diff.filePath"
-        :oldContent="diff.oldContent"
-        :newContent="diff.newContent"
-      />
+      <DiffViewer :filePath="diff.filePath" :oldContent="diff.oldContent" :newContent="diff.newContent" />
     </div>
   </div>
 </template>
