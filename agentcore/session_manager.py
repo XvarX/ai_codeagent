@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agentcore.config import AgentConfig
 from agentcore.data_dir import DataDir
 from agentcore.session_store import SessionStore
-from agentcore.subagent_manager import AgentManager
+from agentcore.agent_manager import AgentManager
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
@@ -50,23 +50,27 @@ class SessionManager:
         user_agents = load_user_agents(config.cwd)
         mgr = AgentManager(config, user_agents)
 
-        # Connect MCP for master
-        master_state = mgr.agents["master"]
-        await master_state.controller.connect_mcp()
+        # Connect MCP for initial agent
+        main_state = mgr.agents["1"]
+        await main_state.controller.connect_mcp()
 
-        handler = WsEventHandler(self._ws, master_state.controller)
+        handler = WsEventHandler(self._ws, main_state.controller)
         handler._store = self._store
         handler._session_project = project_path
         handler._session_id = session_id
+        # Point debug storage to initial agent's debug_events (shared reference)
+        handler._debug_entries = main_state.debug_events
 
-        # Bind agent for message persistence
-        master_state.controller.agent.bind_session(
-            self._store, project_path, session_id)
-        master_state.controller.agent.messages = []
+        # Bind agent for message persistence (per-agent)
+        main_state.controller.agent.bind_session(
+            self._store, project_path, session_id, agent_id="1")
+        main_state.controller.agent.messages = []
 
         # Wire controller handler
-        master_state.controller.handler = handler
-        mgr.master_handler = handler
+        # Save the original _AgentHandler so switch_agent can restore it later
+        main_state._native_handler = main_state.controller.handler
+        main_state.controller.handler = handler
+        mgr.ws_handler = handler
 
         # Wire on_change
         async def _push_agent_list():
@@ -79,9 +83,8 @@ class SessionManager:
         proj_ref = project_path
         sess_ref = session_id
         async def _on_spawn(agent_id: str, state):
-            sub_sess = f"{sess_ref}/subagents/{agent_id}"
-            state.controller.agent.bind_session(store_ref, proj_ref, sub_sess)
-            store_ref.save_subagent_meta(proj_ref, sess_ref, agent_id, {
+            state.controller.agent.bind_session(store_ref, proj_ref, sess_ref, agent_id=agent_id)
+            store_ref.save_agent_meta(proj_ref, sess_ref, agent_id, {
                 "id": agent_id, "name": state.name,
                 "definition": {
                     "name": state.definition.name,
@@ -122,10 +125,10 @@ class SessionManager:
         user_agents = load_user_agents(config.cwd)
         mgr = AgentManager(config, user_agents)
 
-        master_state = mgr.agents["master"]
-        await master_state.controller.connect_mcp()
+        main_state = mgr.agents["1"]
+        await main_state.controller.connect_mcp()
 
-        handler = WsEventHandler(self._ws, master_state.controller)
+        handler = WsEventHandler(self._ws, main_state.controller)
         handler._store = self._store
         handler._session_project = project_path
         handler._session_id = session_id
@@ -134,15 +137,19 @@ class SessionManager:
         messages = self._store.load_messages(project_path, session_id)
         debug_entries = self._store.load_debug_log(project_path, session_id)
 
-        master_state.controller.agent.bind_session(
-            self._store, project_path, session_id)
-        master_state.controller.agent._agent_manager = mgr
-        master_state.controller.agent._agent_id = "master"
-        master_state.controller.agent.restore_messages(messages)
-        handler._debug_entries = list(debug_entries)
+        main_state.controller.agent.bind_session(
+            self._store, project_path, session_id, agent_id="1")
+        main_state.controller.agent._agent_manager = mgr
+        main_state.controller.agent._agent_id = "1"
+        main_state.controller.agent.restore_messages(messages)
+        # Share the same list object so handler._debug_entries IS state.debug_events
+        main_state.debug_events = list(debug_entries)
+        handler._debug_entries = main_state.debug_events
+        handler._entry_id = len(main_state.debug_events)
 
-        master_state.controller.handler = handler
-        mgr.master_handler = handler
+        main_state._native_handler = main_state.controller.handler
+        main_state.controller.handler = handler
+        mgr.ws_handler = handler
 
         async def _push_agent_list():
             from agentcore.ws_server import _send_agent_list
@@ -154,9 +161,8 @@ class SessionManager:
         proj_ref = project_path
         sess_ref = session_id
         async def _on_spawn(agent_id: str, state):
-            sub_sess = f"{sess_ref}/subagents/{agent_id}"
-            state.controller.agent.bind_session(store_ref, proj_ref, sub_sess)
-            store_ref.save_subagent_meta(proj_ref, sess_ref, agent_id, {
+            state.controller.agent.bind_session(store_ref, proj_ref, sess_ref, agent_id=agent_id)
+            store_ref.save_agent_meta(proj_ref, sess_ref, agent_id, {
                 "id": agent_id, "name": state.name,
                 "definition": {
                     "name": state.definition.name,
@@ -184,8 +190,8 @@ class SessionManager:
         await self._restore_subagents(slot)
 
     async def _restore_subagents(self, slot: SessionSlot):
-        """Recreate subagents from persisted metadata."""
-        from agentcore.subagent_manager import _AgentHandler, SubagentState
+        """Recreate agents from persisted metadata (skips id=1 which is already loaded)."""
+        from agentcore.agent_manager import _AgentHandler, AgentState
         from agentcore.agent_definitions import AgentDefinition
         from agentcore.agent_message_queue import AgentMessageQueue
         from agentcore.controller import AgentController
@@ -209,25 +215,20 @@ class SessionManager:
             controller.agent._agent_manager = slot.agent_manager
             controller.agent._agent_id = sub_id
 
-            # Bind session store for auto message persistence
-            sub_session_id = f"{slot.session_id}/subagents/{sub_id}"
+            # Bind session store for per-agent persistence
             controller.agent.bind_session(
-                self._store, slot.project_path, sub_session_id)
+                self._store, slot.project_path, slot.session_id, agent_id=sub_id)
 
-            # Restore subagent messages
-            msgs_path = self._dd.session_dir(
-                slot.project_path, slot.session_id) / "subagents" / sub_id / "messages.json"
-            if msgs_path.exists():
-                sub_msgs = json.loads(msgs_path.read_text(encoding="utf-8"))
-                if sub_msgs:
-                    controller.agent.restore_messages(sub_msgs)
+            # Restore messages via unified store
+            sub_msgs = self._store.load_messages(slot.project_path, slot.session_id, sub_id)
+            if sub_msgs:
+                controller.agent.restore_messages(sub_msgs)
 
             keep_alive = meta.get("keep_alive", False)
             restored_status = meta.get("status", "completed")
-            # keep_alive agents should show idle, not completed
             if keep_alive and restored_status in ("completed", "pending"):
                 restored_status = "idle"
-            state = SubagentState(
+            state = AgentState(
                 id=sub_id,
                 name=meta["name"],
                 definition=definition,
@@ -240,12 +241,8 @@ class SessionManager:
                 keep_alive=keep_alive,
             )
             # Wire debug events from disk
-            debug_path = self._dd.session_dir(
-                slot.project_path, slot.session_id) / "subagents" / sub_id / "debug_log.json"
-            if debug_path.exists():
-                state.debug_events = json.loads(debug_path.read_text(encoding="utf-8"))
-            else:
-                state.debug_events = []
+            state.debug_events = self._store.load_agent_debug_log(
+                slot.project_path, slot.session_id, sub_id)
 
             # Register SendMessage tool
             from agentcore.tools.send_message_tool import SendMessageTool
@@ -260,12 +257,12 @@ class SessionManager:
         if not slot:
             return
         mgr = slot.agent_manager
-        # Kill all non-master agents
+        # Kill all non-initial agents
         for aid in list(mgr.agents.keys()):
-            if aid != "master":
+            if aid != "1":
                 await mgr.kill(aid)
-        # Cancel master if running
-        await mgr.agents["master"].controller.cancel()
+        # Cancel initial agent if running
+        await mgr.agents["1"].controller.cancel()
         if self.active_session_id == session_id:
             self.active_session_id = ""
 
@@ -288,7 +285,7 @@ class SessionManager:
         has_running = False
         has_error = False
         for aid, state in slot.agent_manager.agents.items():
-            if aid == "master":
+            if aid == "1":
                 if state.controller.agent._loop_running:
                     has_running = True
             elif state.status == "running":

@@ -67,10 +67,12 @@ def test_append_message():
         store, dd = _make_store(tmp)
         store.register_project(r"D:\space\myproject")
         sid = store.create_session(r"D:\space\myproject")
-        store.append_message(r"D:\space\myproject", sid, {
+        store.append_message(r"D:\space\myproject", sid, "1", {
             "role": "user", "content": "Hello"
         })
-        msgs = json.loads(dd.messages_path(r"D:\space\myproject", sid).read_text())
+        msgs = json.loads(
+            (dd.agent_dir(r"D:\space\myproject", sid, "1") / "messages.json")
+            .read_text())
         assert len(msgs) == 1
         assert msgs[0]["content"] == "Hello"
 
@@ -81,7 +83,7 @@ def test_load_messages():
         store, _ = _make_store(tmp)
         store.register_project(r"D:\space\myproject")
         sid = store.create_session(r"D:\space\myproject")
-        store.append_message(r"D:\space\myproject", sid, {"role": "user", "content": "Hi"})
-        store.append_message(r"D:\space\myproject", sid, {"role": "assistant", "content": "Hey"})
-        msgs = store.load_messages(r"D:\space\myproject", sid)
+        store.append_message(r"D:\space\myproject", sid, "1", {"role": "user", "content": "Hi"})
+        store.append_message(r"D:\space\myproject", sid, "1", {"role": "assistant", "content": "Hey"})
+        msgs = store.load_messages(r"D:\space\myproject", sid, "1")
         assert len(msgs) == 2

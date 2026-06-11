@@ -74,15 +74,15 @@ class AgentSidebar(ft.Container):
         """Rebuild the agent list from current AgentManager state."""
         self._agent_list.controls.clear()
 
-        master_state = self.manager.agents.get("master")
+        main_state = self.manager.agents.get("1")
         self._agent_list.controls.append(self._build_entry(
-            "master", "Master",
-            status="running" if master_state else "pending",
-            is_active=(self.manager.active_id == "master"),
+            "1", "main",
+            status="running" if main_state else "pending",
+            is_active=(self.manager.active_id == "1"),
             subtitle="主 Agent",
         ))
 
-        for state in self.manager.list_subagents():
+        for state in self.manager.list_other_agents():
             label = state.name or state.definition.name
             subtitle = f"{state.est_tokens}t" if state.est_tokens else state.status
             self._agent_list.controls.append(self._build_entry(
@@ -91,7 +91,7 @@ class AgentSidebar(ft.Container):
                 subtitle=subtitle,
             ))
 
-        has_subagents = len(self.manager.list_subagents()) > 0
+        has_subagents = len(self.manager.list_other_agents()) > 0
         self.visible = has_subagents or self._expanded
 
         self.update()

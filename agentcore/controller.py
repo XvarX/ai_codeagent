@@ -21,7 +21,7 @@ from agentcore.events import (
 
 
 def _update_agent_status(agent: Agent, status: str):
-    """Sync agent status to SubagentState for UI status dots."""
+    """Sync agent status to AgentState for UI status dots."""
     mgr = getattr(agent, '_agent_manager', None)
     aid = getattr(agent, '_agent_id', None)
     if mgr and aid and aid in mgr.agents:
@@ -32,9 +32,9 @@ def _push_state_to_frontend(agent: Agent):
     """Send agent_list + session_status through the handler's WebSocket."""
     try:
         mgr = getattr(agent, '_agent_manager', None)
-        if not mgr or not mgr.master_handler:
+        if not mgr or not mgr.ws_handler:
             return
-        handler = mgr.master_handler
+        handler = mgr.ws_handler
         ws = getattr(handler, '_ws', None)
         if ws is None:
             return

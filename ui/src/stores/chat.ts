@@ -142,6 +142,9 @@ export const useChatStore = defineStore('chat', () => {
     thinking.value = false;
     diffs.value = [];
     toolLabels.value = [];
+    rooms.value = [];
+    roomMessages.value.clear();
+    activeRoomId.value = null;
   }
 
   function insertToInput(text: string) {
@@ -205,6 +208,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function handleRoomDone(data: { room_id: string; agent_id: string }) {
+    // Clear any leftover streaming state from main chat
+    currentAssistantMsg.value = ''
+    thinking.value = false
+    toolLabels.value = []
+    diffs.value = []
+
     const msgs = roomMessages.value.get(data.room_id) || []
     let finalizedContent = ''
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -216,21 +225,25 @@ export const useChatStore = defineStore('chat', () => {
     }
     roomMessages.value.set(data.room_id, msgs)
 
-    // Also show agent's response in main chat with room label
+    // Show agent's finalized response in main chat
     if (finalizedContent) {
       const room = rooms.value.find(r => r.id === data.room_id)
       const agent = useAgentStore()
+      const isActiveAgent = data.agent_id === agent.activeAgentId
       const agentInfo = agent.agents.find(a => a.id === data.agent_id)
       const fromName = agentInfo?.name || data.agent_id
       const roomLabel = room ? `[Room: ${room.name} ← ${fromName}]` : `[Room: ← ${fromName}]`
-      messages.value.push({ role: 'assistant', content: `${roomLabel}\n${finalizedContent}` })
+      messages.value.push({ role: isActiveAgent ? 'assistant' : 'user', content: `${roomLabel}\n${finalizedContent}` })
     }
   }
 
   function handleRoomRelay(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
-    // Show in main chat area with room label
+    // Show in main chat. Other agents' messages appear on right (incoming),
+    // active agent's own messages on left (its response).
+    const agent = useAgentStore()
+    const isActiveAgent = data.from_id === agent.activeAgentId
     const roomLabel = `[Room: ${data.room_name} ← ${data.from_name}${data.reply_to ? ` | Reply to: ${data.reply_to}` : ''}]`
-    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${data.text}` })
+    messages.value.push({ role: isActiveAgent ? 'assistant' : 'user', content: `${roomLabel}\n${data.text}` })
 
     // Also add to chatroom message stream
     if (data.room_id) {
@@ -256,7 +269,7 @@ export const useChatStore = defineStore('chat', () => {
     const room = rooms.value.find(r => r.id === roomId)
     const roomLabel = room ? `[Room: ${room.name} → All]` : `[Room: → All]`
 
-    // Add to room message stream
+    // Add to chatroom message stream
     const msgs = roomMessages.value.get(roomId) || []
     msgs.push({
       id: `rm_${++_roomMsgId}`,
@@ -270,9 +283,9 @@ export const useChatStore = defineStore('chat', () => {
     })
     roomMessages.value.set(roomId, msgs)
 
-    // Also show in main chat with room label
+    // Show in main chat (right side — user message)
     currentAssistantMsg.value = ''
-    messages.value.push({ role: 'assistant', content: `${roomLabel}\n${text}` })
+    messages.value.push({ role: 'user', content: `${roomLabel}\n${text}` })
   }
 
   return {

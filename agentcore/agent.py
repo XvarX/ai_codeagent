@@ -123,12 +123,14 @@ class Agent:
         self._session_store = session_store
         self._session_project = session_project
         self._session_id = session_id
+        self._session_agent_id = "1"
 
-    def bind_session(self, store, project: str, session_id: str):
+    def bind_session(self, store, project: str, session_id: str, agent_id: str = "1"):
         """Attach session store for message persistence."""
         self._session_store = store
         self._session_project = project
         self._session_id = session_id
+        self._session_agent_id = agent_id
 
     def restore_messages(self, msg_dicts: list[dict]):
         """Restore messages from persisted dicts. Clears existing messages."""
@@ -206,7 +208,7 @@ class Agent:
         if not hasattr(self, '_agent_manager') or not self._agent_manager:
             return
         text = self._agent_manager.get_alive_agents_text(
-            for_agent_id=self._agent_id or "master"
+            for_agent_id=self._agent_id or "1"
         )
         self.agents_text = text
 
@@ -417,7 +419,7 @@ class Agent:
             return
         msg_dict = self._message_to_dict(message)
         self._session_store.append_message(
-            self._session_project, self._session_id, msg_dict
+            self._session_project, self._session_id, self._session_agent_id, msg_dict
         )
 
     def _flush_messages(self):
@@ -426,7 +428,7 @@ class Agent:
             return
         all_dicts = [self._message_to_dict(m) for m in self.messages]
         self._session_store.overwrite_messages(
-            self._session_project, self._session_id, all_dicts
+            self._session_project, self._session_id, self._session_agent_id, all_dicts
         )
 
     def _message_to_dict(self, message) -> dict:
@@ -454,7 +456,7 @@ class Agent:
         if not self._session_store or not self._session_id:
             return
         self._session_store.append_llm_log(
-            self._session_project, self._session_id, raw_response
+            self._session_project, self._session_id, self._session_agent_id, raw_response
         )
 
     async def run_stream(self, user_message: str):

@@ -1,5 +1,18 @@
 # agentcore/session_store.py
-"""Project and session CRUD — manages store/projects/ directory tree."""
+"""Project and session CRUD — manages store/projects/ directory tree.
+
+Directory structure:
+    sessions/{session_id}/
+    ├── meta.json           ← session metadata
+    └── agents/
+        ├── 1/
+        │   ├── meta.json   ← agent metadata
+        │   ├── messages.json
+        │   ├── debug_log.json
+        │   └── llm_log.json
+        ├── 2/
+        └── ...
+"""
 
 import json
 import uuid
@@ -27,17 +40,14 @@ class SessionStore:
         now = datetime.now(timezone.utc).isoformat()
         display_name = name or Path(project_path).name
 
-        # Write meta.json
         meta_path = self._dd.project_meta_path(project_path)
         meta = {"path": project_path, "name": display_name, "last_opened": now}
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        # Update projects.json index
         index_path = self._dd.projects_index_path
         index = []
         if index_path.exists():
             index = json.loads(index_path.read_text(encoding="utf-8"))
-        # Remove existing entry for this path
         index = [p for p in index if p.get("path") != project_path]
         index.append({
             "hash": DataDir.project_hash(project_path),
@@ -57,16 +67,13 @@ class SessionStore:
         return index
 
     def touch_project(self, project_path: str):
-        """Update last_opened timestamp for a project."""
         self.register_project(project_path)
 
     def delete_project(self, project_path: str):
-        """Delete project directory and remove from projects.json index."""
         import shutil
         pdir = self._dd.project_dir(project_path)
         if pdir.exists():
             shutil.rmtree(pdir, ignore_errors=True)
-        # Remove from index
         index_path = self._dd.projects_index_path
         if index_path.exists():
             index = json.loads(index_path.read_text(encoding="utf-8"))
@@ -76,7 +83,7 @@ class SessionStore:
     # ── Sessions ────────────────────────────────────
 
     def create_session(self, project_path: str, title: str = "New Chat") -> str:
-        """Create a new session, return its ID."""
+        """Create a new session with initial agent directory, return session ID."""
         session_id = str(uuid.uuid4())
         sdir = self._dd.session_dir(project_path, session_id)
         sdir.mkdir(parents=True, exist_ok=True)
@@ -90,16 +97,20 @@ class SessionStore:
             "model": "",
             "msg_count": 0,
         }
-        meta_path = self._dd.session_meta_path(project_path, session_id)
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        (sdir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        # Init empty messages and llm_log
-        msgs_path = self._dd.messages_path(project_path, session_id)
-        msgs_path.write_text("[]", encoding="utf-8")
-        log_path = self._dd.llm_log_path(project_path, session_id)
-        log_path.write_text("[]", encoding="utf-8")
+        # Create initial agent directory (id=1)
+        self._init_agent_dir(project_path, session_id, "1")
 
         return session_id
+
+    def _init_agent_dir(self, project_path: str, session_id: str, agent_id: str):
+        """Initialize an agent directory with empty data files."""
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        (adir / "messages.json").write_text("[]", encoding="utf-8")
+        (adir / "llm_log.json").write_text("[]", encoding="utf-8")
+        (adir / "debug_log.json").write_text("[]", encoding="utf-8")
 
     def list_sessions(self, project_path: str) -> list[dict]:
         """Return sessions for a project, sorted by updated_at descending."""
@@ -111,8 +122,7 @@ class SessionStore:
             if sdir.is_dir():
                 meta_path = sdir / "meta.json"
                 if meta_path.exists():
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                    result.append(meta)
+                    result.append(json.loads(meta_path.read_text(encoding="utf-8")))
         result.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
         return result
 
@@ -123,7 +133,6 @@ class SessionStore:
         return json.loads(meta_path.read_text(encoding="utf-8"))
 
     def update_session_meta(self, project_path: str, session_id: str, **fields):
-        """Update fields in session meta.json."""
         meta_path = self._dd.session_meta_path(project_path, session_id)
         if not meta_path.exists():
             return
@@ -132,134 +141,135 @@ class SessionStore:
         meta["updated_at"] = datetime.now(timezone.utc).isoformat()
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # ── Messages ────────────────────────────────────
-
-    def append_message(self, project_path: str, session_id: str, message: dict):
-        """Append a single message to messages.json (append-only)."""
-        msgs_path = self._dd.messages_path(project_path, session_id)
-        msgs_path.parent.mkdir(parents=True, exist_ok=True)
-        if msgs_path.exists():
-            msgs = json.loads(msgs_path.read_text(encoding="utf-8"))
-        else:
-            msgs = []
-        msgs.append(message)
-        msgs_path.write_text(json.dumps(msgs, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    def append_messages(self, project_path: str, session_id: str, messages: list[dict]):
-        """Append multiple messages at once."""
-        for m in messages:
-            self.append_message(project_path, session_id, m)
-
-    def load_messages(self, project_path: str, session_id: str) -> list[dict]:
-        """Load all messages for a session."""
-        msgs_path = self._dd.messages_path(project_path, session_id)
-        if not msgs_path.exists():
-            return []
-        return json.loads(msgs_path.read_text(encoding="utf-8"))
-
-    def overwrite_messages(self, project_path: str, session_id: str, messages: list[dict]):
-        """Replace all messages (used after compaction)."""
-        msgs_path = self._dd.messages_path(project_path, session_id)
-        msgs_path.write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.update_session_meta(project_path, session_id, msg_count=len(messages))
-
     def delete_session(self, project_path: str, session_id: str):
-        """Delete a session directory and all its data."""
         import shutil
         sdir = self._dd.session_dir(project_path, session_id)
         if sdir.exists():
             shutil.rmtree(sdir, ignore_errors=True)
 
-    # ── LLM Log ─────────────────────────────────────
+    # ── Agent-level operations ─────────────────────
 
-    def append_llm_log(self, project_path: str, session_id: str, entry: dict):
-        """Append an LLM request/response log entry."""
-        log_path = self._dd.llm_log_path(project_path, session_id)
-        if log_path.exists():
-            logs = json.loads(log_path.read_text(encoding="utf-8"))
-        else:
-            logs = []
-        logs.append(entry)
-        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # ── Debug Log ───────────────────────────────────
-
-    def append_debug_entry(self, project_path: str, session_id: str, entry: dict):
-        """Append a debug event entry."""
-        log_path = self._dd.debug_log_path(project_path, session_id)
-        if log_path.exists():
-            logs = json.loads(log_path.read_text(encoding="utf-8"))
-        else:
-            logs = []
-        logs.append(entry)
-        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    def load_debug_log(self, project_path: str, session_id: str) -> list[dict]:
-        """Load all debug entries for a session."""
-        log_path = self._dd.debug_log_path(project_path, session_id)
-        if not log_path.exists():
+    def list_agents(self, project_path: str, session_id: str) -> list[str]:
+        """Return agent IDs by scanning agents/ directory."""
+        agents_dir = self._dd.session_dir(project_path, session_id) / "agents"
+        if not agents_dir.exists():
             return []
-        return json.loads(log_path.read_text(encoding="utf-8"))
+        return sorted(
+            [d.name for d in agents_dir.iterdir() if d.is_dir()],
+            key=lambda x: int(x) if x.isdigit() else 999,
+        )
 
-    # ── Subagents ───────────────────────────────────
+    # ── Messages (per agent) ───────────────────────
 
-    def save_subagent_meta(self, project_path: str, session_id: str,
-                           sub_id: str, meta: dict):
-        """Save or update subagent metadata."""
-        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
-        sdir.mkdir(parents=True, exist_ok=True)
-        meta_path = sdir / "meta.json"
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    def append_message(self, project_path: str, session_id: str,
+                       agent_id: str, message: dict):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        msgs_path = adir / "messages.json"
+        msgs = json.loads(msgs_path.read_text(encoding="utf-8")) if msgs_path.exists() else []
+        msgs.append(message)
+        msgs_path.write_text(json.dumps(msgs, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def save_subagent_debug_log(self, project_path: str, session_id: str,
-                                sub_id: str, entries: list[dict]):
-        """Save subagent debug events to disk."""
-        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
-        sdir.mkdir(parents=True, exist_ok=True)
-        (sdir / "debug_log.json").write_text(
-            json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+    def load_messages(self, project_path: str, session_id: str,
+                      agent_id: str = "1") -> list[dict]:
+        msgs_path = self._dd.agent_dir(project_path, session_id, agent_id) / "messages.json"
+        if not msgs_path.exists():
+            return []
+        return json.loads(msgs_path.read_text(encoding="utf-8"))
 
-    def load_subagent_meta(self, project_path: str, session_id: str,
-                           sub_id: str) -> dict | None:
-        """Load subagent metadata."""
-        meta_path = self._dd.subagent_dir(project_path, session_id, sub_id) / "meta.json"
+    def overwrite_messages(self, project_path: str, session_id: str,
+                           agent_id: str, messages: list[dict]):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        (adir / "messages.json").write_text(
+            json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.update_session_meta(project_path, session_id, msg_count=len(messages))
+
+    # ── Agent metadata ─────────────────────────────
+
+    def save_agent_meta(self, project_path: str, session_id: str,
+                        agent_id: str, meta: dict):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        (adir / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_agent_meta(self, project_path: str, session_id: str,
+                        agent_id: str) -> dict | None:
+        meta_path = self._dd.agent_dir(project_path, session_id, agent_id) / "meta.json"
         if not meta_path.exists():
             return None
         return json.loads(meta_path.read_text(encoding="utf-8"))
 
-    def list_subagents(self, project_path: str, session_id: str) -> list[dict]:
-        """List all subagents for a session."""
-        subs_dir = self._dd.session_dir(project_path, session_id) / "subagents"
-        if not subs_dir.exists():
+    # ── Debug log (per agent) ──────────────────────
+
+    def save_agent_debug_log(self, project_path: str, session_id: str,
+                             agent_id: str, entries: list[dict]):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        (adir / "debug_log.json").write_text(
+            json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+
+    def load_agent_debug_log(self, project_path: str, session_id: str,
+                             agent_id: str = "1") -> list[dict]:
+        log_path = self._dd.agent_dir(project_path, session_id, agent_id) / "debug_log.json"
+        if not log_path.exists():
             return []
+        return json.loads(log_path.read_text(encoding="utf-8"))
+
+    def append_debug_entry(self, project_path: str, session_id: str,
+                           agent_id: str, entry: dict):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        log_path = adir / "debug_log.json"
+        logs = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else []
+        logs.append(entry)
+        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # ── LLM log (per agent) ────────────────────────
+
+    def append_llm_log(self, project_path: str, session_id: str,
+                       agent_id: str, entry: dict):
+        adir = self._dd.agent_dir(project_path, session_id, agent_id)
+        adir.mkdir(parents=True, exist_ok=True)
+        log_path = adir / "llm_log.json"
+        logs = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else []
+        logs.append(entry)
+        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # ── Backward-compat aliases (delegate to unified methods) ──
+
+    def save_subagent_meta(self, project_path: str, session_id: str,
+                           sub_id: str, meta: dict):
+        self.save_agent_meta(project_path, session_id, sub_id, meta)
+
+    def save_subagent_debug_log(self, project_path: str, session_id: str,
+                                sub_id: str, entries: list[dict]):
+        self.save_agent_debug_log(project_path, session_id, sub_id, entries)
+
+    def load_subagent_meta(self, project_path: str, session_id: str,
+                           sub_id: str) -> dict | None:
+        return self.load_agent_meta(project_path, session_id, sub_id)
+
+    def list_subagents(self, project_path: str, session_id: str) -> list[dict]:
+        agents = self.list_agents(project_path, session_id)
         result = []
-        for sdir in subs_dir.iterdir():
-            if sdir.is_dir():
-                meta_path = sdir / "meta.json"
-                if meta_path.exists():
-                    result.append(json.loads(meta_path.read_text(encoding="utf-8")))
+        for aid in agents:
+            if aid == "1":
+                continue
+            meta = self.load_agent_meta(project_path, session_id, aid)
+            if meta:
+                result.append(meta)
         return result
 
     def append_subagent_message(self, project_path: str, session_id: str,
-                                 sub_id: str, message: dict):
-        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
-        sdir.mkdir(parents=True, exist_ok=True)
-        msgs_path = sdir / "messages.json"
-        if msgs_path.exists():
-            msgs = json.loads(msgs_path.read_text(encoding="utf-8"))
-        else:
-            msgs = []
-        msgs.append(message)
-        msgs_path.write_text(json.dumps(msgs, ensure_ascii=False, indent=2), encoding="utf-8")
+                                sub_id: str, message: dict):
+        self.append_message(project_path, session_id, sub_id, message)
 
     def append_subagent_llm_log(self, project_path: str, session_id: str,
-                                 sub_id: str, entry: dict):
-        sdir = self._dd.subagent_dir(project_path, session_id, sub_id)
-        sdir.mkdir(parents=True, exist_ok=True)
-        log_path = sdir / "llm_log.json"
-        if log_path.exists():
-            logs = json.loads(log_path.read_text(encoding="utf-8"))
-        else:
-            logs = []
-        logs.append(entry)
-        log_path.write_text(json.dumps(logs, ensure_ascii=False, indent=2), encoding="utf-8")
+                                sub_id: str, entry: dict):
+        self.append_llm_log(project_path, session_id, sub_id, entry)
+
+    def load_debug_log(self, project_path: str, session_id: str) -> list[dict]:
+        """Backward compat: load debug log for initial agent."""
+        return self.load_agent_debug_log(project_path, session_id, "1")

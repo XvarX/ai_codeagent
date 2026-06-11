@@ -41,7 +41,7 @@ class FletApp:
         self.user_agents = load_user_agents(config.cwd)
         try:
             self.agent_manager = AgentManager(config, self.user_agents)
-            self.controller = self.agent_manager.agents["master"].controller
+            self.controller = self.agent_manager.agents["1"].controller
             self.handler = self.controller.handler
         except Exception as e:
             self.agent_manager = None
@@ -49,7 +49,7 @@ class FletApp:
             self.handler = None
             self._init_error = str(e)
 
-        # Wire master's handler as initially active
+        # Wire initial agent's handler as active
         if self.handler:
             FletApp._wire_handler_forwarding(self, self.handler)
 
@@ -83,7 +83,7 @@ class FletApp:
                 pass
             try:
                 from agentcore.tools.send_message_tool import SendMessageTool
-                self.controller.registry.register(SendMessageTool(self.agent_manager, "master"))
+                self.controller.registry.register(SendMessageTool(self.agent_manager, "1"))
             except Exception:
                 pass
 
@@ -877,7 +877,7 @@ class FletApp:
             # Initial AgentManager creation failed — retry with new config
             try:
                 self.agent_manager = AgentManager(new_config, self.user_agents)
-                self.controller = self.agent_manager.agents["master"].controller
+                self.controller = self.agent_manager.agents["1"].controller
                 self.handler = self.controller.handler
                 FletApp._wire_handler_forwarding(self, self.handler)
                 self.agent_sidebar = AgentSidebar(

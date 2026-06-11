@@ -223,7 +223,7 @@ onMounted(() => {
     fileBrowserStore.reset();
     if (wasCurrent) {
       agentStore.setAgentList([]);
-      agentStore.setActiveAgent('master');
+      agentStore.setActiveAgent('1');
     }
   });
 
@@ -236,7 +236,7 @@ onMounted(() => {
       debugStore.clear();
       fileBrowserStore.reset();
       agentStore.setAgentList([]);
-      agentStore.setActiveAgent('master');
+      agentStore.setActiveAgent('1');
     }
   });
 

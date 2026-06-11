@@ -117,24 +117,22 @@ class BroadcastRoomTool(Tool):
                 target_count += 1
 
         # ── Notify frontend via room_relay event ──
-        # Use the master controller's *current* handler (WsEventHandler when
-        # ws_server is running), NOT the stale master_handler reference.
-        master_state = mgr.agents.get("master")
-        if master_state and master_state.controller:
-            ws_handler = master_state.controller.handler
-            if hasattr(ws_handler, "_send"):
-                try:
-                    await ws_handler._send({
-                        "type": "room_relay",
-                        "room_id": room_id,
-                        "room_name": room.name,
-                        "from_name": from_name,
-                        "from_id": self._from_id,
-                        "text": message,
-                        "reply_to": "",
-                    })
-                except Exception:
-                    pass
+        # Use mgr.ws_handler (always WsEventHandler) instead of a specific
+        # agent's controller.handler which may be _AgentHandler after switch.
+        ws_handler = mgr.ws_handler
+        if ws_handler and hasattr(ws_handler, "_send"):
+            try:
+                await ws_handler._send({
+                    "type": "room_relay",
+                    "room_id": room_id,
+                    "room_name": room.name,
+                    "from_name": from_name,
+                    "from_id": self._from_id,
+                    "text": message,
+                    "reply_to": "",
+                })
+            except Exception:
+                pass
 
         self._has_broadcast = True
         self.suppress_reply = True  # success → suppress LLM follow-up

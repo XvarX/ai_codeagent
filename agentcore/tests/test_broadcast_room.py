@@ -22,7 +22,7 @@ def _make_manager(rooms=None, agents=None, master_handler=None):
 
 
 def _make_agent_state(agent_id, name="TestAgent", has_queue=True):
-    """Build a mock SubagentState."""
+    """Build a mock AgentState."""
     state = MagicMock()
     state.controller = MagicMock()
     state.controller.agent = MagicMock()
@@ -59,12 +59,12 @@ async def test_broadcast_success():
     # Master state with a WsEventHandler-like handler that has _send
     ws_handler = MagicMock()
     ws_handler._send = AsyncMock()
-    master_state = _make_agent_state("master", "Master")
-    master_state.controller.handler = ws_handler
+    main_state = _make_agent_state("1", "Master")
+    main_state.controller.handler = ws_handler
 
     mgr = _make_manager(
         rooms={"r1": room},
-        agents={"A": state_a, "B": state_b, "C": state_c, "master": master_state},
+        agents={"A": state_a, "B": state_b, "C": state_c, "1": main_state},
     )
 
     tool = BroadcastRoomTool(mgr, "A")
@@ -134,11 +134,11 @@ async def test_broadcast_once_per_turn():
     state_a.controller.agent._current_room_id = "r1"
     state_b = _make_agent_state("B")
 
-    master_state = _make_agent_state("master", "Master")
-    master_state.controller.handler = MagicMock(_send=AsyncMock())
+    main_state = _make_agent_state("1", "Master")
+    main_state.controller.handler = MagicMock(_send=AsyncMock())
 
     mgr = _make_manager(
-        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "master": master_state},
+        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "1": main_state},
     )
 
     tool = BroadcastRoomTool(mgr, "A")
@@ -162,11 +162,11 @@ async def test_reset_broadcast_flag():
     state_a.controller.agent._current_room_id = "r1"
     state_b = _make_agent_state("B")
 
-    master_state = _make_agent_state("master", "Master")
-    master_state.controller.handler = MagicMock(_send=AsyncMock())
+    main_state = _make_agent_state("1", "Master")
+    main_state.controller.handler = MagicMock(_send=AsyncMock())
 
     mgr = _make_manager(
-        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "master": master_state},
+        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "1": main_state},
     )
 
     tool = BroadcastRoomTool(mgr, "A")
@@ -192,12 +192,12 @@ async def test_broadcast_multi_room_with_room_id_param():
     state_b = _make_agent_state("B")
     state_c = _make_agent_state("C")
 
-    master_state = _make_agent_state("master", "Master")
-    master_state.controller.handler = MagicMock(_send=AsyncMock())
+    main_state = _make_agent_state("1", "Master")
+    main_state.controller.handler = MagicMock(_send=AsyncMock())
 
     mgr = _make_manager(
         rooms={"r1": room1, "r2": room2},
-        agents={"A": state_a, "B": state_b, "C": state_c, "master": master_state},
+        agents={"A": state_a, "B": state_b, "C": state_c, "1": main_state},
     )
 
     tool = BroadcastRoomTool(mgr, "A")
@@ -228,11 +228,11 @@ def test_broadcast_tool_suppress_reply_default():
 
 def test_register_broadcast_tool():
     """register_broadcast_tool adds BroadcastRoom to agent's registry."""
-    from agentcore.subagent_manager import AgentManager
+    from agentcore.agent_manager import AgentManager
     from agentcore.config import AgentConfig
 
     # Patch provider creation to avoid API keys
-    with patch("agentcore.subagent_manager._build_provider") as mock_prov, \
+    with patch("agentcore.agent_manager._build_provider") as mock_prov, \
          patch("agentcore.controller._build_provider"):
         mock_prov.return_value = MagicMock(model="test")
 
@@ -240,11 +240,11 @@ def test_register_broadcast_tool():
         mgr = AgentManager(config)
 
         # Master should not have BroadcastRoom initially
-        master = mgr.agents["master"]
+        master = mgr.agents["1"]
         assert master.controller.registry.get("BroadcastRoom") is None
 
         # Register it
-        mgr.register_broadcast_tool("master")
+        mgr.register_broadcast_tool("1")
 
         # Now it should be there
         tool = master.controller.registry.get("BroadcastRoom")
@@ -252,16 +252,16 @@ def test_register_broadcast_tool():
         assert tool.name == "BroadcastRoom"
 
         # Calling again should not duplicate
-        mgr.register_broadcast_tool("master")
+        mgr.register_broadcast_tool("1")
         # (registry.register replaces by name, so still just one)
 
 
 def test_register_broadcast_tool_unknown_agent():
     """register_broadcast_tool silently ignores unknown agent IDs."""
-    from agentcore.subagent_manager import AgentManager
+    from agentcore.agent_manager import AgentManager
     from agentcore.config import AgentConfig
 
-    with patch("agentcore.subagent_manager._build_provider") as mock_prov, \
+    with patch("agentcore.agent_manager._build_provider") as mock_prov, \
          patch("agentcore.controller._build_provider"):
         mock_prov.return_value = MagicMock(model="test")
 

@@ -26,22 +26,22 @@ def _make_manager() -> SessionManager:
 
 
 def _mock_agent_manager():
-    """Build a mocked AgentManager with a master agent slot."""
+    """Build a mocked AgentManager with an initial agent slot."""
     mgr = MagicMock()
 
-    # SubagentState-like mock for master
-    master_state = MagicMock()
-    master_state.status = "running"
-    master_state.controller = MagicMock()
-    master_state.controller.connect_mcp = AsyncMock()
-    master_state.controller.cancel = AsyncMock()
-    master_state.controller.agent = MagicMock()
-    master_state.controller.agent.bind_session = MagicMock()
-    master_state.controller.agent.restore_messages = MagicMock()
-    master_state.controller.agent.messages = []
+    # AgentState-like mock for initial agent (id=1)
+    initial_state = MagicMock()
+    initial_state.status = "running"
+    initial_state.controller = MagicMock()
+    initial_state.controller.connect_mcp = AsyncMock()
+    initial_state.controller.cancel = AsyncMock()
+    initial_state.controller.agent = MagicMock()
+    initial_state.controller.agent.bind_session = MagicMock()
+    initial_state.controller.agent.restore_messages = MagicMock()
+    initial_state.controller.agent.messages = []
 
-    mgr.agents = {"master": master_state}
-    mgr.master_handler = None
+    mgr.agents = {"1": initial_state}
+    mgr.ws_handler = None
     mgr.on_change = None
 
     # kill and cancel are async
@@ -78,15 +78,15 @@ async def test_create_session():
         assert slot.project_path == "/tmp/proj"
 
         # Verify MCP connect was awaited
-        mock_mgr.agents["master"].controller.connect_mcp.assert_awaited_once()
+        mock_mgr.agents["1"].controller.connect_mcp.assert_awaited_once()
 
         # Verify bind_session was called
-        master_agent = mock_mgr.agents["master"].controller.agent
-        master_agent.bind_session.assert_called_once_with(
-            sm._store, "/tmp/proj", "sess-1")
+        initial_agent = mock_mgr.agents["1"].controller.agent
+        initial_agent.bind_session.assert_called_once_with(
+            sm._store, "/tmp/proj", "sess-1", agent_id="1")
 
         # Verify messages were cleared
-        assert master_agent.messages == []
+        assert initial_agent.messages == []
 
 
 @pytest.mark.asyncio
@@ -123,8 +123,8 @@ async def test_load_session():
         sm._store.load_messages.assert_called_once_with("/tmp/proj", "sess-load")
 
         # Verify restore_messages was called with loaded messages
-        master_agent = mock_mgr.agents["master"].controller.agent
-        master_agent.restore_messages.assert_called_once_with(
+        initial_agent = mock_mgr.agents["1"].controller.agent
+        initial_agent.restore_messages.assert_called_once_with(
             [{"role": "user", "content": "Hello"},
              {"role": "assistant", "content": "Hi"}])
 
@@ -177,11 +177,11 @@ async def test_destroy_session():
     # Active should be cleared
     assert sm.active_session_id == ""
 
-    # Non-master agents should be killed
+    # Non-initial agents should be killed
     mock_mgr.kill.assert_any_call("worker-1")
 
-    # Master controller should be cancelled
-    mock_mgr.agents["master"].controller.cancel.assert_awaited_once()
+    # Initial agent controller should be cancelled
+    mock_mgr.agents["1"].controller.cancel.assert_awaited_once()
 
     # Destroying non-existent session is a no-op
     await sm.destroy_session("no-such-session")

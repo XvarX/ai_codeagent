@@ -84,8 +84,13 @@ class DataDir:
     def debug_log_path(self, project_path: str, session_id: str) -> Path:
         return self.session_dir(project_path, session_id) / "debug_log.json"
 
+    def agent_dir(self, project_path: str, session_id: str, agent_id: str) -> Path:
+        """Return the directory for a specific agent within a session."""
+        return self.session_dir(project_path, session_id) / "agents" / agent_id
+
     def subagent_dir(self, project_path: str, session_id: str, sub_id: str) -> Path:
-        return self.session_dir(project_path, session_id) / "subagents" / sub_id
+        """Alias for agent_dir (backward compat)."""
+        return self.agent_dir(project_path, session_id, sub_id)
 
     # ── Project-level .myagent paths ─────────────────
 
