@@ -164,6 +164,8 @@ export const useChatStore = defineStore('chat', () => {
     }));
     currentAssistantMsg.value = '';
     thinking.value = false;
+    _relayBuffer = [];
+    _roomRelaySeen.clear();
   }
 
   function clear() {
