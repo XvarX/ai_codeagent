@@ -61,15 +61,9 @@ class AgentMessageQueue:
                     last_bracket = text.rfind("]")
                     msg_body = text[last_bracket + 1:].strip() if last_bracket >= 0 else text
 
-                    # Reset BroadcastRoom tool flag for new room turn
-                    for t in self._controller.agent.registry._tools.values():
-                        if t.name == "BroadcastRoom" and hasattr(t, 'reset_broadcast_flag'):
-                            t.reset_broadcast_flag()
-
                     # Notify frontend NOW — the agent is about to process this room message
                     if relay_meta:
                         ws_handler = getattr(self._controller, 'handler', None)
-                        # Navigate to the ws_handler (may be WsEventHandler or proxied)
                         if ws_handler and hasattr(ws_handler, '_send'):
                             try:
                                 await ws_handler._send({

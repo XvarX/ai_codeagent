@@ -104,6 +104,8 @@ class _AgentHandler(EventHandler):
         self.agent_id = agent_id
         self._pending_tools = 0  # track tool calls to distinguish [Response] vs [Final Response]
         self._pending_tool_calls: list[dict] = []  # mirror WsEventHandler for debug detail
+        self._has_pending_tool_results = False  # mirror WsEventHandler for [Send Tool Result]
+        self._last_tool_group_key: str | None = None
         self._fwd_thinking: callable | None = None
         self._fwd_text_delta: callable | None = None
         self._fwd_tool_use: callable | None = None
@@ -162,10 +164,11 @@ class _AgentHandler(EventHandler):
                 event_data: dict | None = None, group_key: str | None = None):
         """Store event in the same format as ws_server._send_debug().
 
-        Only used when NOT forwarding to the main handler.
-        When forwarding IS active, the main handler stores events instead.
+        When forwarding IS active and NOT in room context, the main handler
+        stores events via _send_debug() instead. In room context forwarding
+        is suppressed so we must store here regardless.
         """
-        if self._is_forwarding:
+        if self._is_forwarding and not self._in_room_context():
             return  # main handler already stores via _send_debug()
         state = self.manager.agents.get(self.agent_id)
         if state:
@@ -238,7 +241,18 @@ class _AgentHandler(EventHandler):
         return False
 
     async def on_thinking(self, agent_id: str = ""):
-        if self._in_room_context():
+        in_room = self._in_room_context()
+
+        # Emit [Send Tool Result] when WsEventHandler won't do it:
+        # - room context: forwarding suppressed, WsEventHandler.on_thinking not called
+        # - inactive agent: no forwarding wired at all
+        if self._has_pending_tool_results:
+            if in_room or not self._is_forwarding:
+                self._record("[Send Tool Result]", "-> LLM  |  回传工具结果", "#8B5CF6",
+                            group_key=self._last_tool_group_key)
+            self._has_pending_tool_results = False
+
+        if in_room:
             return  # Suppress — room context handled by room_relay/room_done
         if self._fwd_thinking:
             self._fwd_thinking()
@@ -306,12 +320,17 @@ class _AgentHandler(EventHandler):
                     "duration_ms": duration_ms,
                 }, ensure_ascii=False, indent=2, default=str),
             }
+            tool_gk = f"tool:{tool_use_id}" if tool_use_id else None
             self._record(f"[Tool] {name} {status_icon}", message, color,
-                         event_data=event_data,
-                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+                         event_data=event_data, group_key=tool_gk)
+            self._has_pending_tool_results = True
+            self._last_tool_group_key = tool_gk
         except Exception:
+            tool_gk = f"tool:{tool_use_id}" if tool_use_id else None
             self._record(f"[Tool] {name}", result[:200], "#10B981",
-                         group_key=f"tool:{tool_use_id}" if tool_use_id else None)
+                         group_key=tool_gk)
+            self._has_pending_tool_results = True
+            self._last_tool_group_key = tool_gk
         if self._in_room_context():
             return  # Suppress — room context doesn't need tool events in main chat
         if self._fwd_tool_result:
@@ -408,6 +427,8 @@ class _AgentHandler(EventHandler):
             self._fwd_error(message)
 
     async def on_done(self, final_text: str, agent_id: str = ""):
+        # Clear stale pending flag (mirrors WsEventHandler.on_done)
+        self._has_pending_tool_results = False
         state = self.manager.agents.get(self.agent_id)
         if state:
             state.result = final_text
