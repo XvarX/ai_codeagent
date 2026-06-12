@@ -174,7 +174,7 @@ class BroadcastRoomTool(Tool):
         # shows messages from non-active agents without waiting for the active
         # agent to finish its current turn.
         mgr_ws = mgr.ws_handler
-        if mgr_ws and hasattr(mgr_ws, "_send") and mgr_ws is not ws_handler:
+        if mgr_ws and hasattr(mgr_ws, "_send"):
             try:
                 await mgr_ws._send({
                     "type": "room_chat",

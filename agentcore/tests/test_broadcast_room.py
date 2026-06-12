@@ -88,12 +88,18 @@ async def test_broadcast_success():
     assert relay_meta["from_id"] == "A"
     assert relay_meta["text"] == "Hello room!"
 
-    # room_relay is also sent immediately for the broadcasting agent's own display
-    ws_handler._send.assert_called_once()
-    relay_data = ws_handler._send.call_args[0][0]
-    assert relay_data["type"] == "room_relay"
+    # Active agent: both room_chat (chatroom panel) and room_relay (main chat)
+    # are sent via the same ws_handler. room_chat+room_relay share ws_handler.
+    assert ws_handler._send.call_count == 2
+    calls = [c[0][0] for c in ws_handler._send.call_args_list]
+    types = {c["type"] for c in calls}
+    assert types == {"room_chat", "room_relay"}
+    relay_data = [c for c in calls if c["type"] == "room_relay"][0]
     assert relay_data["room_name"] == "Room1"
     assert relay_data["from_name"] == "Alice"
+    chat_data = [c for c in calls if c["type"] == "room_chat"][0]
+    assert chat_data["room_name"] == "Room1"
+    assert chat_data["from_name"] == "Alice"
 
     # suppress_reply should be True on success
     assert tool.suppress_reply is True
