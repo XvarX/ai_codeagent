@@ -62,7 +62,7 @@
         <div v-if="msg.pvtInfo.direction === 'out'" class="flex flex-col items-center gap-0.5">
           <span class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">AI</span>
           <div class="w-7 h-7 rounded-full flex-shrink-0 text-white flex items-center justify-center text-[11px] font-semibold"
-            style="background:linear-gradient(135deg, #F59E0B, #D97706)">PM</div>
+            style="background:linear-gradient(135deg, #F59E0B, #D97706)">AI</div>
         </div>
 
         <div class="flex flex-col max-w-[75%]" :class="msg.pvtInfo.direction === 'out' ? 'items-start' : 'items-end'">
@@ -91,7 +91,7 @@
         <div v-if="msg.pvtInfo.direction === 'in'" class="flex flex-col items-center gap-0.5">
           <span v-if="msg.pvtInfo.targetName" class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">{{ msg.pvtInfo.targetName }}</span>
           <div class="w-7 h-7 rounded-full flex-shrink-0 text-white flex items-center justify-center text-[11px] font-semibold"
-            style="background:linear-gradient(135deg, #D97706, #92400E)">PM</div>
+            style="background:linear-gradient(135deg, #D97706, #92400E)">AI</div>
         </div>
       </div>
 
