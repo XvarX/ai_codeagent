@@ -130,8 +130,16 @@ export const useChatStore = defineStore('chat', () => {
     // Flush buffered relays BEFORE the agent's own response — other agents'
     // broadcasts happened earlier and should appear first.
     _flushRelayBuffer();
-    // Push SendMessage tool calls as separate private message bubbles FIRST —
-    // they represent actions taken before the final text response
+    if (currentAssistantMsg.value) {
+      messages.value.push({
+        role: 'assistant',
+        content: currentAssistantMsg.value,
+        toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+        diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
+      } as ChatMessage);
+      currentAssistantMsg.value = '';
+    }
+    // Push SendMessage tool calls as separate private message bubbles
     for (const tl of toolLabels.value) {
       if (tl.name === 'SendMessage') {
         messages.value.push({
@@ -143,15 +151,6 @@ export const useChatStore = defineStore('chat', () => {
           },
         } as ChatMessage);
       }
-    }
-    if (currentAssistantMsg.value) {
-      messages.value.push({
-        role: 'assistant',
-        content: currentAssistantMsg.value,
-        toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
-        diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
-      } as ChatMessage);
-      currentAssistantMsg.value = '';
     }
     toolLabels.value = [];
     diffs.value = [];
