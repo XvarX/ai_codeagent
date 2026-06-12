@@ -61,6 +61,19 @@ class AgentMessageQueue:
                     last_bracket = text.rfind("]")
                     msg_body = text[last_bracket + 1:].strip() if last_bracket >= 0 else text
 
+                    # Check if this message was sent before our last broadcast —
+                    # if so, the sender hadn't seen our reply yet at send time
+                    msg_ts = relay_meta.get("ts", 0)
+                    agent = self._controller.agent
+                    last_broadcasts = getattr(agent, '_last_broadcast_ts', None) or {}
+                    my_last_ts = last_broadcasts.get(room_id, 0)
+                    if my_last_ts and msg_ts and msg_ts < my_last_ts:
+                        text = (
+                            "[⚠ 此消息发出时尚未看到你的最新回复，"
+                            "对方已可能看到你的发言，无需重复回复]\n"
+                            + text
+                        )
+
                     # Notify frontend NOW — the agent is about to process this room message
                     if relay_meta:
                         ws_handler = getattr(self._controller, 'handler', None)

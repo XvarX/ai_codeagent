@@ -1,6 +1,7 @@
 """BroadcastRoomTool — LLM-controlled room broadcast for chat rooms."""
 
 import sys
+import time
 
 from agentcore.tools.base import Tool, ToolContext
 
@@ -144,6 +145,10 @@ class BroadcastRoomTool(Tool):
             f" | To: {reply_to}]\n{message}"
         )
 
+        now = time.time()
+        agent._last_broadcast_ts = getattr(agent, '_last_broadcast_ts', None) or {}
+        agent._last_broadcast_ts[room_id] = now
+
         target_count = 0
         relay_meta = {
             "room_id": room_id,
@@ -152,6 +157,7 @@ class BroadcastRoomTool(Tool):
             "from_id": self._from_id,
             "text": message,
             "reply_to": reply_to,
+            "ts": now,
         }
         for aid in room.agent_ids:
             if aid == self._from_id:
