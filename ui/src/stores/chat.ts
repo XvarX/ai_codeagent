@@ -141,13 +141,26 @@ export const useChatStore = defineStore('chat', () => {
     // Flush buffered relays BEFORE the agent's own response — other agents'
     // broadcasts happened earlier and should appear first.
     _flushRelayBuffer();
-    if (currentAssistantMsg.value) {
-      messages.value.push({
-        role: 'assistant',
-        content: currentAssistantMsg.value,
-        toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
-        diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
-      } as ChatMessage);
+    const hasSendMessage = toolLabels.value.some(tl => tl.name === 'SendMessage');
+    const text = currentAssistantMsg.value.trim();
+    if (text) {
+      if (hasSendMessage) {
+        // Append accompanying text to the last SendMessage bubble
+        for (let i = messages.value.length - 1; i >= 0; i--) {
+          const m = messages.value[i];
+          if (m.pvtInfo?.direction === 'out') {
+            m.content = m.content + '\n\n' + text;
+            break;
+          }
+        }
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: text,
+          toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+          diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
+        } as ChatMessage);
+      }
       currentAssistantMsg.value = '';
     }
     toolLabels.value = [];
