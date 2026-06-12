@@ -12,6 +12,12 @@ interface ToolCallEntry {
   durationMs?: number;
 }
 
+export interface PvtInfo {
+  direction: 'in' | 'out'
+  targetName: string
+  targetId?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -19,6 +25,7 @@ export interface ChatMessage {
   toolLabels?: ToolLabel[];
   diffs?: DiffEntry[];
   roomInfo?: RoomInfo;
+  pvtInfo?: PvtInfo;
 }
 
 export interface ToolLabel {
@@ -159,12 +166,13 @@ export const useChatStore = defineStore('chat', () => {
     diffs.value.push({ filePath, oldContent, newContent });
   }
 
-  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[]; roomInfo?: RoomInfo }>) {
+  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[]; roomInfo?: RoomInfo; pvtInfo?: PvtInfo }>) {
     messages.value = msgs.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
       diffs: m.diffs,
       roomInfo: m.roomInfo,
+      pvtInfo: m.pvtInfo,
     }));
     currentAssistantMsg.value = '';
     thinking.value = false;

@@ -54,6 +54,45 @@
         </div>
       </div>
 
+      <!-- ===== 私聊消息 ===== -->
+      <div v-else-if="msg.pvtInfo"
+        :class="['flex py-[6px] gap-2', msg.pvtInfo.direction === 'in' ? 'justify-start items-start' : 'justify-end']"
+      >
+        <!-- 左侧头像：收到的私聊 -->
+        <div v-if="msg.pvtInfo.direction === 'in'" class="flex flex-col items-center gap-0.5">
+          <span v-if="msg.pvtInfo.targetName" class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">{{ msg.pvtInfo.targetName }}</span>
+          <div class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#F59E0B] to-[#D97706] text-white flex items-center justify-center text-[11px] font-semibold">PM</div>
+        </div>
+
+        <div class="flex flex-col max-w-[75%]" :class="msg.pvtInfo.direction === 'out' ? 'items-end' : 'items-start'">
+          <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mb-1"
+            :class="msg.pvtInfo.direction === 'out'
+              ? 'text-[#F59E0B] bg-[rgba(245,158,11,0.08)]'
+              : 'text-[#D97706] bg-[rgba(217,119,6,0.08)]'"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="3" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <line x1="5" y1="7" x2="11" y2="7" stroke="currentColor" stroke-width="1"/>
+              <line x1="5" y1="10" x2="9" y2="10" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            {{ msg.pvtInfo.direction === 'out' ? 'To' : 'From' }}: {{ msg.pvtInfo.targetName }}
+          </span>
+          <div class="px-[14px] py-2 rounded-[14px] text-base leading-relaxed"
+            :class="msg.pvtInfo.direction === 'out'
+              ? 'bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.25)] rounded-br-[3px]'
+              : 'bg-[rgba(217,119,6,0.04)] border border-[rgba(217,119,6,0.20)] rounded-tl-[3px]'"
+          >
+            <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+          </div>
+        </div>
+
+        <!-- 右侧头像：发出的私聊 -->
+        <div v-if="msg.pvtInfo.direction === 'out'" class="flex flex-col items-center gap-0.5">
+          <span class="text-[10px] text-text-muted font-medium max-w-[56px] text-center truncate">我</span>
+          <div class="w-7 h-7 rounded-full flex-shrink-0 bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-white flex items-center justify-center text-[12px] font-semibold">你</div>
+        </div>
+      </div>
+
       <!-- ===== 普通消息 ===== -->
       <div v-else :class="['flex py-[6px] gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start items-start']">
         <!-- 左侧 AI 头像 -->
