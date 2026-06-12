@@ -145,14 +145,19 @@ export const useChatStore = defineStore('chat', () => {
     const text = currentAssistantMsg.value.trim();
     if (text) {
       if (hasSendMessage) {
-        // Append accompanying text to the last SendMessage bubble
+        // Insert accompanying text BEFORE the last SendMessage bubble
+        let insertIdx = messages.value.length;
         for (let i = messages.value.length - 1; i >= 0; i--) {
-          const m = messages.value[i];
-          if (m.pvtInfo?.direction === 'out') {
-            m.content = m.content + '\n\n' + text;
+          if (messages.value[i].pvtInfo?.direction === 'out') {
+            insertIdx = i;
             break;
           }
         }
+        messages.value.splice(insertIdx, 0, {
+          role: 'assistant',
+          content: text,
+          toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+        } as ChatMessage);
       } else {
         messages.value.push({
           role: 'assistant',
