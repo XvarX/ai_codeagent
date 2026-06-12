@@ -178,9 +178,7 @@ onMounted(() => {
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
-    chatStore.loadMessages(
-      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
-    );
+    chatStore.loadMessages(d.messages || []);
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
@@ -202,9 +200,7 @@ onMounted(() => {
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
-    chatStore.loadMessages(
-      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
-    );
+    chatStore.loadMessages(d.messages || []);
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
@@ -282,6 +278,8 @@ onMounted(() => {
   agentWs.on('room_updated', (d: any) => chatStore.handleRoomUpdated(d.room));
   agentWs.on('room_broadcast', (d: any) => chatStore.handleRoomBroadcast(d));
   agentWs.on('room_relay', (d: any) => chatStore.handleRoomRelay(d));
+  agentWs.on('room_chat', (d: any) => chatStore.handleRoomChat(d));
+  agentWs.on('private_message', (d: any) => chatStore.handlePrivateMessage(d));
 
   agentWs.connect();
 });

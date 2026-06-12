@@ -12,6 +12,12 @@ interface ToolCallEntry {
   durationMs?: number;
 }
 
+export interface PvtInfo {
+  direction: 'in' | 'out'
+  targetName: string
+  targetId?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -19,6 +25,7 @@ export interface ChatMessage {
   toolLabels?: ToolLabel[];
   diffs?: DiffEntry[];
   roomInfo?: RoomInfo;
+  pvtInfo?: PvtInfo;
 }
 
 export interface ToolLabel {
@@ -86,6 +93,17 @@ export const useChatStore = defineStore('chat', () => {
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
+    // Push SendMessage bubble immediately — don't wait for finalizeAssistantMessage
+    if (name === 'SendMessage') {
+      messages.value.push({
+        role: 'assistant',
+        content: input?.message || '',
+        pvtInfo: {
+          direction: 'out',
+          targetName: input?.to || '',
+        },
+      } as ChatMessage);
+    }
   }
 
   function addToolResultPreview(index: number, resultPreview: string, isError: boolean) {
@@ -123,17 +141,35 @@ export const useChatStore = defineStore('chat', () => {
     // Flush buffered relays BEFORE the agent's own response — other agents'
     // broadcasts happened earlier and should appear first.
     _flushRelayBuffer();
-    if (currentAssistantMsg.value) {
-      messages.value.push({
-        role: 'assistant',
-        content: currentAssistantMsg.value,
-        toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
-        diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
-      } as ChatMessage);
+    const hasSendMessage = toolLabels.value.some(tl => tl.name === 'SendMessage');
+    const text = currentAssistantMsg.value.trim();
+    if (text) {
+      if (hasSendMessage) {
+        // Insert accompanying text BEFORE the last SendMessage bubble
+        let insertIdx = messages.value.length;
+        for (let i = messages.value.length - 1; i >= 0; i--) {
+          if (messages.value[i].pvtInfo?.direction === 'out') {
+            insertIdx = i;
+            break;
+          }
+        }
+        messages.value.splice(insertIdx, 0, {
+          role: 'assistant',
+          content: text,
+          toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+        } as ChatMessage);
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: text,
+          toolLabels: toolLabels.value.length > 0 ? [...toolLabels.value] : undefined,
+          diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
+        } as ChatMessage);
+      }
       currentAssistantMsg.value = '';
-      toolLabels.value = [];
-      diffs.value = [];
     }
+    toolLabels.value = [];
+    diffs.value = [];
     thinking.value = false;
     if (_busyCounter > 0) _busyCounter--;
   }
@@ -159,12 +195,13 @@ export const useChatStore = defineStore('chat', () => {
     diffs.value.push({ filePath, oldContent, newContent });
   }
 
-  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[]; roomInfo?: RoomInfo }>) {
+  function loadMessages(msgs: Array<{ role: string; content: string; diffs?: DiffEntry[]; roomInfo?: RoomInfo; pvtInfo?: PvtInfo }>) {
     messages.value = msgs.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
       diffs: m.diffs,
       roomInfo: m.roomInfo,
+      pvtInfo: m.pvtInfo,
     }));
     currentAssistantMsg.value = '';
     thinking.value = false;
@@ -327,22 +364,35 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       messages.value.push(relayMsg)
     }
+  }
 
-    // Always add to chatroom message stream
-    if (data.room_id) {
-      const msgs = roomMessages.value.get(data.room_id) || []
-      msgs.push({
-        id: `rm_${++_roomMsgId}`,
-        roomId: data.room_id,
-        senderId: data.from_id,
-        senderName: data.from_name,
-        senderColor: agent.getAgentColor(data.from_id),
-        content: data.text,
-        timestamp: Date.now(),
-        isStreaming: false,
-      })
-      _setRoomMessages(data.room_id, msgs)
-    }
+  function handlePrivateMessage(data: { from_name: string; from_id: string; text: string }) {
+    messages.value.push({
+      role: 'user',
+      content: data.text,
+      pvtInfo: {
+        direction: 'in',
+        targetName: data.from_name,
+        targetId: data.from_id,
+      },
+    } as ChatMessage);
+  }
+
+  function handleRoomChat(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
+    if (!data.room_id) return
+    const agent = useAgentStore()
+    const msgs = roomMessages.value.get(data.room_id) || []
+    msgs.push({
+      id: `rm_${++_roomMsgId}`,
+      roomId: data.room_id,
+      senderId: data.from_id,
+      senderName: data.from_name,
+      senderColor: agent.getAgentColor(data.from_id),
+      content: data.text,
+      timestamp: Date.now(),
+      isStreaming: false,
+    })
+    _setRoomMessages(data.room_id, msgs)
   }
 
   function sendRoomMessage(roomId: string, text: string) {
@@ -387,6 +437,6 @@ export const useChatStore = defineStore('chat', () => {
     // Room
     roomMessages, rooms, activeRoomId,
     handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
-    handleRoomBroadcast, handleRoomDone, handleRoomRelay, sendRoomMessage,
+    handleRoomBroadcast, handleRoomDone, handleRoomRelay, handleRoomChat, handlePrivateMessage, sendRoomMessage,
   };
 });

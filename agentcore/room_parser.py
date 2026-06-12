@@ -52,3 +52,22 @@ def _parse_room_prefix(content: str) -> tuple[str, dict | None]:
             "direction": "in" if sender != "用户" else "out",
         }
     return content, None
+
+
+def _parse_private_message_prefix(content: str) -> tuple[str, dict | None]:
+    """If content starts with [Message from ...] prefix, strip it and return pvtInfo.
+
+    Returns (clean_content, pvtInfo | None).
+    """
+    import re
+    # [Message from senderName (id:senderId)]\nmessage
+    m = re.match(r'^\[Message from ([^(\]]+?)\s*\(id:([^)]*)\)\]\n', content)
+    if m:
+        target_name = m.group(1).strip()
+        target_id = m.group(2).strip()
+        return content[m.end():], {
+            "direction": "in",
+            "targetName": target_name,
+            "targetId": target_id,
+        }
+    return content, None

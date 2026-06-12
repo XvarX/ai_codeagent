@@ -9,7 +9,7 @@ import logging
 import re
 from pathlib import Path
 
-from agentcore.room_parser import _parse_room_prefix
+from agentcore.room_parser import _parse_room_prefix, _parse_private_message_prefix
 
 import websockets
 from websockets.asyncio.server import serve, ServerConnection
@@ -676,19 +676,16 @@ def _serialize_messages(agent) -> list[dict]:
     for m in agent.messages:
         if m.is_tool_result:
             continue
-        # Expand BroadcastRoom tool calls into visible messages with roomInfo
+        # Expand BroadcastRoom and SendMessage tool calls into visible messages
         if m.tool_use_blocks:
             broadcast_blocks = [
                 b for b in m.tool_use_blocks if b.tool_name == "BroadcastRoom"
             ]
-            if broadcast_blocks:
-                # Keep assistant text (if any) as a separate message
-                text = (m.content or "").strip()
-                if text:
-                    d = {"role": m.role, "content": text}
-                    if m.diffs:
-                        d["diffs"] = m.diffs
-                    result.append(d)
+            sendmsg_blocks = [
+                b for b in m.tool_use_blocks if b.tool_name == "SendMessage"
+            ]
+            if broadcast_blocks or sendmsg_blocks:
+                # Tool bubbles first, then assistant text
                 # Add each broadcast with roomInfo metadata
                 for b in broadcast_blocks:
                     msg_text = b.input.get("message", "")
@@ -712,6 +709,33 @@ def _serialize_messages(agent) -> list[dict]:
                         "content": msg_text,
                         "roomInfo": ri,
                     })
+                # Add each SendMessage with pvtInfo metadata
+                for b in sendmsg_blocks:
+                    msg_text = b.input.get("message", "")
+                    to_name = b.input.get("to", "")
+                    # Resolve target name to agent id for coloring
+                    target_id = ""
+                    if mgr:
+                        for aid, ast in (mgr.agents or {}).items():
+                            if ast.name and ast.name.lower() == to_name.lower():
+                                target_id = aid
+                                break
+                    result.append({
+                        "role": m.role,
+                        "content": msg_text,
+                        "pvtInfo": {
+                            "direction": "out",
+                            "targetName": to_name,
+                            "targetId": target_id,
+                        },
+                    })
+                # Assistant text (if any) after tool bubbles
+                text = (m.content or "").strip()
+                if text:
+                    d = {"role": m.role, "content": text}
+                    if m.diffs:
+                        d["diffs"] = m.diffs
+                    result.append(d)
                 continue
 
         content_text = m.content or ""
@@ -724,10 +748,19 @@ def _serialize_messages(agent) -> list[dict]:
                 "roomInfo": room_info,
             })
         else:
-            d: dict = {"role": m.role, "content": content_text}
-            if m.diffs:
-                d["diffs"] = m.diffs
-            result.append(d)
+            # Detect [Message from ...] private message prefix → pvtInfo
+            clean_content, pvt_info = _parse_private_message_prefix(content_text)
+            if pvt_info:
+                result.append({
+                    "role": m.role,
+                    "content": clean_content,
+                    "pvtInfo": pvt_info,
+                })
+            else:
+                d: dict = {"role": m.role, "content": content_text}
+                if m.diffs:
+                    d["diffs"] = m.diffs
+                result.append(d)
     return result
 
 

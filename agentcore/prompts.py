@@ -18,6 +18,8 @@ def build_system_prompt(tool_names: list[str], cwd: str) -> str:
         _get_role_section(),
         _get_doing_tasks_section(),
         _get_using_your_tools_section(tool_names),
+        _get_chatroom_section(),
+        _get_private_message_section(),
         _get_tone_section(),
         _get_dynamic_section(cwd),
     ]
@@ -86,6 +88,37 @@ def _get_using_your_tools_section(tool_names: list[str]) -> str:
     )
 
     return "\n".join(lines)
+
+
+def _get_chatroom_section() -> str:
+    return (
+        "# 聊天室 (Chat Rooms)\n\n"
+        "你所在的聊天室信息会在每次对话轮次中注入。消息格式：\n\n"
+        "```\n"
+        "[Room: 聊天室名称 | From: 发送者 | To: 接收者]\n"
+        "消息正文\n"
+        "```\n\n"
+        "回复规则：\n"
+        "- To 指明消息目标。需要回复的情况：To 明确指向你、面向全体、"
+        "通过内容上下文判断是在跟你对话、或内容有明显错误需要纠正\n"
+        "- 不是对你的、不是对全体的、且内容没有错误时，不需要回复\n"
+        "- 需要回复时必须用 BroadcastRoom 工具回复（直接在对话中回复用户看不到），to 参数指定回复对象\n"
+        "- 达成共识后停止广播，不要无意义来回广播\n"
+    )
+
+
+def _get_private_message_section() -> str:
+    return (
+        "# 私聊 (Private Messages)\n\n"
+        "其他 Agent 可能通过 SendMessage 向你发送私聊。私聊消息格式：\n\n"
+        "```\n"
+        "[Message from 发送者 (id:ID)]\n"
+        "消息正文\n"
+        "```\n\n"
+        "回复规则：\n"
+        "- 如需回复，只能用 SendMessage 私聊回复，不能使用 BroadcastRoom\n"
+        "- 内容不涉及你、无需回复时可以不回应\n"
+    )
 
 
 def _get_tone_section() -> str:

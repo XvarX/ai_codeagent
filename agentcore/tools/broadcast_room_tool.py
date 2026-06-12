@@ -1,6 +1,7 @@
 """BroadcastRoomTool — LLM-controlled room broadcast for chat rooms."""
 
 import sys
+import time
 
 from agentcore.tools.base import Tool, ToolContext
 
@@ -45,12 +46,10 @@ class BroadcastRoomTool(Tool):
     def __init__(self, manager, from_agent_id: str):
         self.name = "BroadcastRoom"
         self.description = (
-            "向聊天室发送消息，让房间内其他成员看到。"
-            "收到用户从聊天室发送的消息，要回复时优先调用此工具。"
-            "注意：你能看到聊天室里其他成员的消息，这些消息目标可能不是你，不需要调用此工具回应"
-            "在以下情况主动调用：在聊天室里跟用户或其他Agent讨论，需要纠正错误信息、补充关键遗漏、"
-            "或用户明确要求你回应。如果讨论已达成共识或你只是认可对方的观点，"
-            "不要调用。可通过 room_id 参数指定目标房间。"
+            "向聊天室发送消息，让房间内其他成员看到你的回复。"
+            "收到用户从聊天室发送的消息时必须调用此工具回复，直接在对话中回复用户看不到；"
+            "收到其他Agent发言中有明显错误或关键遗漏时调用纠正/补充；"
+            "用户明确要求你回应时调用。"
         )
         self.parameters = {
             "type": "object",
@@ -65,7 +64,7 @@ class BroadcastRoomTool(Tool):
                 },
                 "to": {
                     "type": "string",
-                    "description": "消息发送给谁。可填 '用户' 或房间成员的名字/id。留空则自动从当前对话上下文判断。",
+                    "description": "这句话说给谁听。填 '用户' 或房间内某个成员的名字/id。务必根据对话上下文显式指定。",
                 },
             },
             "required": ["message"],
@@ -80,7 +79,7 @@ class BroadcastRoomTool(Tool):
         message = input["message"]
         room_id = input.get("room_id", "")
 
-        # ── Resolve room ──
+        # ── Resolve agent ──
         mgr = self._manager
         agent_state = mgr.agents.get(self._from_id)
         if not agent_state or not agent_state.controller:
@@ -88,6 +87,11 @@ class BroadcastRoomTool(Tool):
             return f"Agent '{self._from_id}' not found."
 
         agent = agent_state.controller.agent
+
+        # ── Guard: SendMessage 私聊触发的处理禁止调用 BroadcastRoom ──
+        if getattr(agent, '_current_source', '') == 'agent':
+            self.suppress_reply = False
+            return "当前正在处理其他 Agent 的私聊请求，禁止调用 BroadcastRoom。如需回复请使用 SendMessage 私聊。"
 
         # Determine target room
         if not room_id:
@@ -111,7 +115,7 @@ class BroadcastRoomTool(Tool):
             return f"你不在这个房间中（{room.name}）。"
 
         # ── Resolve target (to) ──
-        from_name = getattr(agent, "_agent_name", "") or "unknown"
+        from_name = agent_state.name or "unknown"
         reply_to = input.get("to", "") or input.get("reply_to", "") or ""
 
         # A: LLM-specified `to` — validate and normalize
@@ -141,6 +145,10 @@ class BroadcastRoomTool(Tool):
             f" | To: {reply_to}]\n{message}"
         )
 
+        now = time.time()
+        agent._last_broadcast_ts = getattr(agent, '_last_broadcast_ts', None) or {}
+        agent._last_broadcast_ts[room_id] = now
+
         target_count = 0
         relay_meta = {
             "room_id": room_id,
@@ -149,6 +157,7 @@ class BroadcastRoomTool(Tool):
             "from_id": self._from_id,
             "text": message,
             "reply_to": reply_to,
+            "ts": now,
         }
         for aid in room.agent_ids:
             if aid == self._from_id:
@@ -168,6 +177,26 @@ class BroadcastRoomTool(Tool):
         # use _AgentHandler which doesn't, so their broadcasts reach the
         # frontend only when the active agent dequeues them in consumer_loop.
         ws_handler = agent_state.controller.handler
+
+        # Push to chatroom panel immediately via manager's global ws_handler.
+        # This bypasses the active agent's message queue so the chatroom panel
+        # shows messages from non-active agents without waiting for the active
+        # agent to finish its current turn.
+        mgr_ws = mgr.ws_handler
+        if mgr_ws and hasattr(mgr_ws, "_send"):
+            try:
+                await mgr_ws._send({
+                    "type": "room_chat",
+                    "room_id": room_id,
+                    "room_name": room.name,
+                    "from_name": from_name,
+                    "from_id": self._from_id,
+                    "text": message,
+                    "reply_to": reply_to,
+                })
+            except Exception:
+                pass
+
         if ws_handler and hasattr(ws_handler, "_send"):
             try:
                 await ws_handler._send({
