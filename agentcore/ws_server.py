@@ -685,13 +685,7 @@ def _serialize_messages(agent) -> list[dict]:
                 b for b in m.tool_use_blocks if b.tool_name == "SendMessage"
             ]
             if broadcast_blocks or sendmsg_blocks:
-                # Keep assistant text (if any) as a separate message
-                text = (m.content or "").strip()
-                if text:
-                    d = {"role": m.role, "content": text}
-                    if m.diffs:
-                        d["diffs"] = m.diffs
-                    result.append(d)
+                # Tool bubbles first, then assistant text
                 # Add each broadcast with roomInfo metadata
                 for b in broadcast_blocks:
                     msg_text = b.input.get("message", "")
@@ -735,6 +729,13 @@ def _serialize_messages(agent) -> list[dict]:
                             "targetId": target_id,
                         },
                     })
+                # Assistant text (if any) after tool bubbles
+                text = (m.content or "").strip()
+                if text:
+                    d = {"role": m.role, "content": text}
+                    if m.diffs:
+                        d["diffs"] = m.diffs
+                    result.append(d)
                 continue
 
         content_text = m.content or ""
