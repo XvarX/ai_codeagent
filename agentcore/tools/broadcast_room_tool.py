@@ -114,7 +114,7 @@ class BroadcastRoomTool(Tool):
             return f"你不在这个房间中（{room.name}）。"
 
         # ── Resolve target (to) ──
-        from_name = getattr(agent, "_agent_name", "") or "unknown"
+        from_name = agent_state.name or "unknown"
         reply_to = input.get("to", "") or input.get("reply_to", "") or ""
 
         # A: LLM-specified `to` — validate and normalize

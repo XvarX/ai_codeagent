@@ -24,9 +24,9 @@ def _make_manager(rooms=None, agents=None, master_handler=None):
 def _make_agent_state(agent_id, name="TestAgent", has_queue=True):
     """Build a mock AgentState."""
     state = MagicMock()
+    state.name = name
     state.controller = MagicMock()
     state.controller.agent = MagicMock()
-    state.controller.agent._agent_name = name
     state.controller.agent._agent_id = agent_id
     state.controller.agent._current_room_id = ""
     state.controller.registry = MagicMock()
