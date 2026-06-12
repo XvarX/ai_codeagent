@@ -78,7 +78,7 @@ class BroadcastRoomTool(Tool):
         message = input["message"]
         room_id = input.get("room_id", "")
 
-        # ── Resolve room ──
+        # ── Resolve agent ──
         mgr = self._manager
         agent_state = mgr.agents.get(self._from_id)
         if not agent_state or not agent_state.controller:
@@ -86,6 +86,11 @@ class BroadcastRoomTool(Tool):
             return f"Agent '{self._from_id}' not found."
 
         agent = agent_state.controller.agent
+
+        # ── Guard: SendMessage 私聊触发的处理禁止调用 BroadcastRoom ──
+        if getattr(agent, '_current_source', '') == 'agent':
+            self.suppress_reply = False
+            return "当前正在处理其他 Agent 的私聊请求，禁止调用 BroadcastRoom。如需回复请使用 SendMessage 私聊。"
 
         # Determine target room
         if not room_id:

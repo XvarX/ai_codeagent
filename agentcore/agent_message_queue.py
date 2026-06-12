@@ -109,7 +109,7 @@ class AgentMessageQueue:
                         agent.provider.model or "",
                     )
                 async with self._controller._agent_lock:
-                    await self._controller.send_message(text, room_id=room_id)
+                    await self._controller.send_message(text, room_id=room_id, source=source)
             except asyncio.CancelledError:
                 break
             except Exception:

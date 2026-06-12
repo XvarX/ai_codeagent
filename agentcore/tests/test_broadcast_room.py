@@ -309,4 +309,25 @@ async def test_broadcast_room_chat_for_inactive_agent():
     assert chat_data["text"] == "Hello from inactive!"
 
     # room_relay is NOT sent via agent's own handler (no _send)
-    # and is NOT sent via mgr.ws_handler (mgr_ws is not ws_handler guard)
+
+
+@pytest.mark.asyncio
+async def test_broadcast_blocked_on_send_message_source():
+    """BroadcastRoom is blocked when processing a SendMessage private message."""
+    room = _make_room("r1", "Room1", ["A", "B"])
+    state_a = _make_agent_state("A", "Alice")
+    state_a.controller.agent._current_room_id = "r1"
+    state_a.controller.agent._current_source = "agent"  # SendMessage triggered
+    state_b = _make_agent_state("B", "Bob")
+
+    mgr = _make_manager(
+        rooms={"r1": room},
+        agents={"A": state_a, "B": state_b},
+    )
+
+    tool = BroadcastRoomTool(mgr, "A")
+    ctx = ToolContext(cwd="/tmp", messages=[])
+
+    result = await tool.call({"message": "Should be blocked"}, ctx)
+    assert "禁止调用" in result
+    assert tool.suppress_reply is False
