@@ -45,12 +45,10 @@ class BroadcastRoomTool(Tool):
     def __init__(self, manager, from_agent_id: str):
         self.name = "BroadcastRoom"
         self.description = (
-            "向聊天室发送消息，让房间内其他成员看到。"
-            "收到用户从聊天室发送的消息，要回复时优先调用此工具。"
-            "注意：你能看到聊天室里其他成员的消息，这些消息目标可能不是你，不需要调用此工具回应"
-            "在以下情况主动调用：在聊天室里跟用户或其他Agent讨论，需要纠正错误信息、补充关键遗漏、"
-            "或用户明确要求你回应。如果讨论已达成共识或你只是认可对方的观点，"
-            "不要调用。可通过 room_id 参数指定目标房间。"
+            "向聊天室发送消息，让房间内其他成员看到你的回复。"
+            "收到用户消息时优先调用此工具回复；"
+            "收到其他Agent发言中有明显错误或关键遗漏时调用纠正/补充；"
+            "用户明确要求你回应时调用。"
         )
         self.parameters = {
             "type": "object",
@@ -65,7 +63,7 @@ class BroadcastRoomTool(Tool):
                 },
                 "to": {
                     "type": "string",
-                    "description": "消息发送给谁。可填 '用户' 或房间成员的名字/id。留空则自动从当前对话上下文判断。",
+                    "description": "回复对象。填 '用户' 或成员名/id。留空从最近一条用户消息的 From 字段自动推断。",
                 },
             },
             "required": ["message"],
