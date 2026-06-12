@@ -751,7 +751,7 @@ class AgentManager:
                     st = self.agents.get(aid)
                     members.append(f"{st.name} [id:{aid}]" if st else aid)
                 room_lines.append(f"  「{room.name}」[id:{rid}]: 成员 {', '.join(members)}")
-                room_lines.append(f"    规则: 被 @提及 必须回复; To 明确指向你或面向全体时回复; From 是其他 Agent 且 To 不是你且内容无错误时不需要回复; 需要回复时使用 BroadcastRoom 工具，to 参数指定回复对象; 达成共识后停止广播")
+                room_lines.append(f"    规则: 被 @提及 必须回复; To 明确指向你或面向全体时回复; From 是其他 Agent 且 To 不是你且内容无错误时不需要回复; 需要回复时必须用 BroadcastRoom 回复（直接对话回复用户看不到），to 参数指明回复对象; 达成共识后停止广播")
             parts.append("\n".join(room_lines))
 
         return "\n\n".join(parts) if parts else ""
