@@ -178,9 +178,7 @@ onMounted(() => {
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
-    chatStore.loadMessages(
-      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
-    );
+    chatStore.loadMessages(d.messages || []);
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
@@ -202,9 +200,7 @@ onMounted(() => {
     if (d.active_agent_id) {
       agentStore.setActiveAgent(d.active_agent_id);
     }
-    chatStore.loadMessages(
-      (d.messages || []).map((m: any) => ({ role: m.role, content: m.content }))
-    );
+    chatStore.loadMessages(d.messages || []);
     if (d.debug_entries) {
       debugStore.loadEvents(d.debug_entries);
     } else {
