@@ -93,6 +93,17 @@ export const useChatStore = defineStore('chat', () => {
 
   function addToolCall(name: string, input: Record<string, any>) {
     toolLabels.value.push({ name, input });
+    // Push SendMessage bubble immediately — don't wait for finalizeAssistantMessage
+    if (name === 'SendMessage') {
+      messages.value.push({
+        role: 'assistant',
+        content: input?.message || '',
+        pvtInfo: {
+          direction: 'out',
+          targetName: input?.to || '',
+        },
+      } as ChatMessage);
+    }
   }
 
   function addToolResultPreview(index: number, resultPreview: string, isError: boolean) {
@@ -130,19 +141,6 @@ export const useChatStore = defineStore('chat', () => {
     // Flush buffered relays BEFORE the agent's own response — other agents'
     // broadcasts happened earlier and should appear first.
     _flushRelayBuffer();
-    // Push tool call bubbles FIRST, then assistant text
-    for (const tl of toolLabels.value) {
-      if (tl.name === 'SendMessage') {
-        messages.value.push({
-          role: 'assistant',
-          content: tl.input?.message || '',
-          pvtInfo: {
-            direction: 'out',
-            targetName: tl.input?.to || '',
-          },
-        } as ChatMessage);
-      }
-    }
     if (currentAssistantMsg.value) {
       messages.value.push({
         role: 'assistant',
