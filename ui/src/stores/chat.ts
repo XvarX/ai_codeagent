@@ -138,9 +138,22 @@ export const useChatStore = defineStore('chat', () => {
         diffs: diffs.value.length > 0 ? [...diffs.value] : undefined,
       } as ChatMessage);
       currentAssistantMsg.value = '';
-      toolLabels.value = [];
-      diffs.value = [];
     }
+    // Push SendMessage tool calls as separate private message bubbles
+    for (const tl of toolLabels.value) {
+      if (tl.name === 'SendMessage') {
+        messages.value.push({
+          role: 'assistant',
+          content: tl.input?.message || '',
+          pvtInfo: {
+            direction: 'out',
+            targetName: tl.input?.to || '',
+          },
+        } as ChatMessage);
+      }
+    }
+    toolLabels.value = [];
+    diffs.value = [];
     thinking.value = false;
     if (_busyCounter > 0) _busyCounter--;
   }
@@ -337,6 +350,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function handlePrivateMessage(data: { from_name: string; from_id: string; text: string }) {
+    messages.value.push({
+      role: 'user',
+      content: data.text,
+      pvtInfo: {
+        direction: 'in',
+        targetName: data.from_name,
+        targetId: data.from_id,
+      },
+    } as ChatMessage);
+  }
+
   function handleRoomChat(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
     if (!data.room_id) return
     const agent = useAgentStore()
@@ -396,6 +421,6 @@ export const useChatStore = defineStore('chat', () => {
     // Room
     roomMessages, rooms, activeRoomId,
     handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
-    handleRoomBroadcast, handleRoomDone, handleRoomRelay, handleRoomChat, sendRoomMessage,
+    handleRoomBroadcast, handleRoomDone, handleRoomRelay, handleRoomChat, handlePrivateMessage, sendRoomMessage,
   };
 });

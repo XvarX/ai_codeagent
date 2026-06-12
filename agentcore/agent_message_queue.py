@@ -94,11 +94,24 @@ class AgentMessageQueue:
 
 
                 elif source == "agent":
-                    m = re.match(r"\[Message from ([^\]]+)\]", text)
-                    from_name = m.group(1) if m else "unknown"
+                    m = re.match(r"\[Message from ([^(\]]+?)\s*\(id:([^)]*)\)\]", text)
+                    from_name = m.group(1).strip() if m else "unknown"
+                    from_id = m.group(2).strip() if m else ""
                     msg_body = text[m.end():].strip() if m else text
                     await self._controller.handler.on_enqueued(
                         from_name, msg_body, source)
+                    # Push private_message to frontend for real-time display
+                    ws_handler = getattr(self._controller, 'handler', None)
+                    if ws_handler and hasattr(ws_handler, '_send'):
+                        try:
+                            await ws_handler._send({
+                                "type": "private_message",
+                                "from_name": from_name,
+                                "from_id": from_id,
+                                "text": msg_body,
+                            })
+                        except Exception:
+                            pass
                 elif source == "user":
                     agent = self._controller.agent
                     await self._controller.handler.on_request(

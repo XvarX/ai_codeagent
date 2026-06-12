@@ -283,6 +283,7 @@ onMounted(() => {
   agentWs.on('room_broadcast', (d: any) => chatStore.handleRoomBroadcast(d));
   agentWs.on('room_relay', (d: any) => chatStore.handleRoomRelay(d));
   agentWs.on('room_chat', (d: any) => chatStore.handleRoomChat(d));
+  agentWs.on('private_message', (d: any) => chatStore.handlePrivateMessage(d));
 
   agentWs.connect();
 });
