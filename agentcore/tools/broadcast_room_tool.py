@@ -64,7 +64,7 @@ class BroadcastRoomTool(Tool):
                 },
                 "to": {
                     "type": "string",
-                    "description": "回复对象。填 '用户' 或成员名/id。留空从最近一条用户消息的 From 字段自动推断。",
+                    "description": "这句话说给谁听。填 '用户' 或房间内某个成员的名字/id。务必根据对话上下文显式指定。",
                 },
             },
             "required": ["message"],
