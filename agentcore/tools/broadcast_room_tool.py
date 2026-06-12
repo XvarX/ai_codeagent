@@ -168,6 +168,26 @@ class BroadcastRoomTool(Tool):
         # use _AgentHandler which doesn't, so their broadcasts reach the
         # frontend only when the active agent dequeues them in consumer_loop.
         ws_handler = agent_state.controller.handler
+
+        # Push to chatroom panel immediately via manager's global ws_handler.
+        # This bypasses the active agent's message queue so the chatroom panel
+        # shows messages from non-active agents without waiting for the active
+        # agent to finish its current turn.
+        mgr_ws = mgr.ws_handler
+        if mgr_ws and hasattr(mgr_ws, "_send") and mgr_ws is not ws_handler:
+            try:
+                await mgr_ws._send({
+                    "type": "room_chat",
+                    "room_id": room_id,
+                    "room_name": room.name,
+                    "from_name": from_name,
+                    "from_id": self._from_id,
+                    "text": message,
+                    "reply_to": reply_to,
+                })
+            except Exception:
+                pass
+
         if ws_handler and hasattr(ws_handler, "_send"):
             try:
                 await ws_handler._send({

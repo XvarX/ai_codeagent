@@ -327,22 +327,23 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       messages.value.push(relayMsg)
     }
+  }
 
-    // Always add to chatroom message stream
-    if (data.room_id) {
-      const msgs = roomMessages.value.get(data.room_id) || []
-      msgs.push({
-        id: `rm_${++_roomMsgId}`,
-        roomId: data.room_id,
-        senderId: data.from_id,
-        senderName: data.from_name,
-        senderColor: agent.getAgentColor(data.from_id),
-        content: data.text,
-        timestamp: Date.now(),
-        isStreaming: false,
-      })
-      _setRoomMessages(data.room_id, msgs)
-    }
+  function handleRoomChat(data: { room_id: string; room_name: string; from_name: string; from_id: string; text: string; reply_to: string }) {
+    if (!data.room_id) return
+    const agent = useAgentStore()
+    const msgs = roomMessages.value.get(data.room_id) || []
+    msgs.push({
+      id: `rm_${++_roomMsgId}`,
+      roomId: data.room_id,
+      senderId: data.from_id,
+      senderName: data.from_name,
+      senderColor: agent.getAgentColor(data.from_id),
+      content: data.text,
+      timestamp: Date.now(),
+      isStreaming: false,
+    })
+    _setRoomMessages(data.room_id, msgs)
   }
 
   function sendRoomMessage(roomId: string, text: string) {
@@ -387,6 +388,6 @@ export const useChatStore = defineStore('chat', () => {
     // Room
     roomMessages, rooms, activeRoomId,
     handleRoomCreated, handleRoomList, handleRoomDestroyed, handleRoomUpdated,
-    handleRoomBroadcast, handleRoomDone, handleRoomRelay, sendRoomMessage,
+    handleRoomBroadcast, handleRoomDone, handleRoomRelay, handleRoomChat, sendRoomMessage,
   };
 });

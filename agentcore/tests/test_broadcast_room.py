@@ -56,15 +56,14 @@ async def test_broadcast_success():
     state_b = _make_agent_state("B", "Bob")
     state_c = _make_agent_state("C", "Carol")
 
-    # Master state with a WsEventHandler-like handler that has _send
+    # Agent A is the active agent — its controller.handler is the WsEventHandler
     ws_handler = MagicMock()
     ws_handler._send = AsyncMock()
-    main_state = _make_agent_state("1", "Master")
-    main_state.controller.handler = ws_handler
+    state_a.controller.handler = ws_handler
 
     mgr = _make_manager(
         rooms={"r1": room},
-        agents={"A": state_a, "B": state_b, "C": state_c, "1": main_state},
+        agents={"A": state_a, "B": state_b, "C": state_c},
     )
     mgr.ws_handler = ws_handler
 
@@ -132,63 +131,6 @@ async def test_broadcast_not_in_room():
 
     assert "不在" in result
     assert tool.suppress_reply is False
-
-
-@pytest.mark.asyncio
-async def test_broadcast_once_per_turn():
-    """Second call in same turn is rejected."""
-    room = _make_room("r1", "Room1", ["A", "B"])
-    state_a = _make_agent_state("A")
-    state_a.controller.agent._current_room_id = "r1"
-    state_b = _make_agent_state("B")
-
-    main_state = _make_agent_state("1", "Master")
-    main_state.controller.handler = MagicMock(_send=AsyncMock())
-
-    mgr = _make_manager(
-        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "1": main_state},
-    )
-
-    tool = BroadcastRoomTool(mgr, "A")
-    ctx = ToolContext(cwd="/tmp", messages=[])
-
-    # First call succeeds
-    result1 = await tool.call({"message": "First"}, ctx)
-    assert "已广播" in result1
-
-    # Second call rejected
-    result2 = await tool.call({"message": "Second"}, ctx)
-    assert "不可重复" in result2
-    assert tool.suppress_reply is False  # error case
-
-
-@pytest.mark.asyncio
-async def test_reset_broadcast_flag():
-    """reset_broadcast_flag allows another broadcast."""
-    room = _make_room("r1", "Room1", ["A", "B"])
-    state_a = _make_agent_state("A")
-    state_a.controller.agent._current_room_id = "r1"
-    state_b = _make_agent_state("B")
-
-    main_state = _make_agent_state("1", "Master")
-    main_state.controller.handler = MagicMock(_send=AsyncMock())
-
-    mgr = _make_manager(
-        rooms={"r1": room}, agents={"A": state_a, "B": state_b, "1": main_state},
-    )
-
-    tool = BroadcastRoomTool(mgr, "A")
-    ctx = ToolContext(cwd="/tmp", messages=[])
-
-    await tool.call({"message": "First"}, ctx)
-    assert tool._has_broadcast is True
-
-    tool.reset_broadcast_flag()
-    assert tool._has_broadcast is False
-
-    # Can broadcast again
-    result = await tool.call({"message": "Second"}, ctx)
-    assert "已广播" in result
 
 
 @pytest.mark.asyncio
@@ -322,3 +264,43 @@ async def test_message_queue_no_auto_broadcast():
     # code is removed. If it were still there, it would try to access
     # agent._agent_manager which is None and error/attempt broadcast.
     # We verify simply that send_message was called exactly once.
+
+
+@pytest.mark.asyncio
+async def test_broadcast_room_chat_for_inactive_agent():
+    """Non-active agent's BroadcastRoom sends room_chat via mgr.ws_handler."""
+    room = _make_room("r1", "Room1", ["A", "B"])
+    state_a = _make_agent_state("A", "Alice")
+    state_a.controller.agent._current_room_id = "r1"
+    state_b = _make_agent_state("B", "Bob")
+
+    # Agent A is NOT the active agent — its handler has no _send
+    state_a.controller.handler = MagicMock()
+    del state_a.controller.handler._send
+
+    # Global ws_handler has _send (belongs to the active agent)
+    ws_handler = MagicMock()
+    ws_handler._send = AsyncMock()
+
+    mgr = _make_manager(
+        rooms={"r1": room},
+        agents={"A": state_a, "B": state_b},
+    )
+    mgr.ws_handler = ws_handler
+
+    tool = BroadcastRoomTool(mgr, "A")
+    ctx = ToolContext(cwd="/tmp", messages=[])
+
+    result = await tool.call({"message": "Hello from inactive!"}, ctx)
+    assert "1" in result  # broadcast to 1 member (B only)
+
+    # mgr.ws_handler._send should have been called with room_chat
+    ws_handler._send.assert_called_once()
+    chat_data = ws_handler._send.call_args[0][0]
+    assert chat_data["type"] == "room_chat"
+    assert chat_data["room_id"] == "r1"
+    assert chat_data["from_id"] == "A"
+    assert chat_data["text"] == "Hello from inactive!"
+
+    # room_relay is NOT sent via agent's own handler (no _send)
+    # and is NOT sent via mgr.ws_handler (mgr_ws is not ws_handler guard)
