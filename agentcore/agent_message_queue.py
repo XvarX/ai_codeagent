@@ -69,9 +69,10 @@ class AgentMessageQueue:
                     my_last_ts = last_broadcasts.get(room_id, 0)
                     if my_last_ts and msg_ts and msg_ts < my_last_ts:
                         text = (
-                            "[⚠ 此消息发出时尚未看到你的最新回复，"
+                            text[:last_bracket + 1]
+                            + "\n[⚠ 此消息发出时尚未看到你的最新回复，"
                             "对方已可能看到你的发言，无需重复回复]\n"
-                            + text
+                            + text[last_bracket + 1:]
                         )
 
                     # Notify frontend NOW — the agent is about to process this room message
