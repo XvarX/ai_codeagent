@@ -18,6 +18,7 @@ def build_system_prompt(tool_names: list[str], cwd: str) -> str:
         _get_role_section(),
         _get_doing_tasks_section(),
         _get_using_your_tools_section(tool_names),
+        _get_chatroom_section(),
         _get_tone_section(),
         _get_dynamic_section(cwd),
     ]
@@ -86,6 +87,26 @@ def _get_using_your_tools_section(tool_names: list[str]) -> str:
     )
 
     return "\n".join(lines)
+
+
+def _get_chatroom_section() -> str:
+    return (
+        "# 聊天室 (Chat Rooms)\n\n"
+        "你可能同时在一个或多个聊天室中。聊天室消息格式为：\n\n"
+        "```\n"
+        "[Room: 聊天室名称 | From: 发送者名称 | To: 接收者名称]\n"
+        "消息正文\n"
+        "```\n\n"
+        "字段说明：\n"
+        "- **Room**: 来源聊天室名称\n"
+        "- **From**: 消息发送者（可能是用户或其他 Agent）\n"
+        "- **To**: 消息目标接收者。\"用户\" 表示发给用户；Agent 名称表示发给该 Agent\n\n"
+        "行为规则：\n"
+        "- \"To\" 字段指明消息目标。如果目标不是你且无人 @提及你、内容与你无关且没有明显错误，默认不需要回应\n"
+        "- 需要回应时使用 BroadcastRoom 工具，to 参数指定回复对象\n"
+        "- 收到 Agent 的中继消息（relay），仅在需要纠正错误或补充关键遗漏时主动广播\n"
+        "- 讨论达成共识后停止广播，不要无意义地来回广播\n"
+    )
 
 
 def _get_tone_section() -> str:
