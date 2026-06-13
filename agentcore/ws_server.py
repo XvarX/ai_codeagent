@@ -803,9 +803,6 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
         "type": "connected", "version": "0.1.0",
     }))
 
-    # Room registry (per-session, in-memory)
-    rooms: dict[str, ChatRoom] = {}
-
     async for raw_message in websocket:
         try:
             msg = json.loads(raw_message)
@@ -1247,10 +1244,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 name = msg.get("name", "New Room")
                 agent_ids = msg.get("agent_ids", [])
                 room = ChatRoom(id=str(uuid.uuid4()), name=name, agent_ids=agent_ids)
-                rooms[room.id] = room
                 slot = session_mgr.get_active()
                 if slot:
-                    slot.agent_manager._rooms = rooms
+                    slot.agent_manager._rooms[room.id] = room
                     # Register BroadcastRoom tool on each member agent
                     for aid in room.agent_ids:
                         slot.agent_manager.register_broadcast_tool(aid)
@@ -1260,8 +1256,10 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
                 }, ensure_ascii=False))
 
             elif msg_type == "room_list":
+                slot = session_mgr.get_active()
+                mgr_rooms = slot.agent_manager._rooms if slot else {}
                 room_list = [{"id": r.id, "name": r.name, "agent_ids": r.agent_ids, "created_at": r.created_at}
-                             for r in rooms.values()]
+                             for r in mgr_rooms.values()]
                 await websocket.send(json.dumps({
                     "type": "room_list", "rooms": room_list,
                 }, ensure_ascii=False))
@@ -1269,16 +1267,17 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
             elif msg_type == "room_add_agent":
                 room_id = msg.get("room_id", "")
                 agent_id = msg.get("agent_id", "")
-                room = rooms.get(room_id)
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
+                mgr_rooms = slot.agent_manager._rooms
+                room = mgr_rooms.get(room_id)
                 if not room:
                     continue
                 if agent_id not in room.agent_ids:
                     room.agent_ids.append(agent_id)
-                slot = session_mgr.get_active()
-                if slot:
-                    slot.agent_manager._rooms = rooms
-                    # Register BroadcastRoom tool on the added agent
-                    slot.agent_manager.register_broadcast_tool(agent_id)
+                # Register BroadcastRoom tool on the added agent
+                slot.agent_manager.register_broadcast_tool(agent_id)
                 await websocket.send(json.dumps({
                     "type": "room_updated",
                     "room": {"id": room.id, "name": room.name, "agent_ids": room.agent_ids, "created_at": room.created_at},
@@ -1286,10 +1285,9 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
 
             elif msg_type == "room_destroy":
                 room_id = msg.get("room_id", "")
-                rooms.pop(room_id, None)
                 slot = session_mgr.get_active()
                 if slot:
-                    slot.agent_manager._rooms = rooms
+                    slot.agent_manager._rooms.pop(room_id, None)
                 await websocket.send(json.dumps({
                     "type": "room_destroyed", "room_id": room_id,
                 }, ensure_ascii=False))
@@ -1297,16 +1295,16 @@ async def _handle_client(websocket: ServerConnection, session_mgr: "SessionManag
             elif msg_type == "room_message":
                 room_id = msg.get("room_id", "")
                 text = msg.get("text", "")
-                room = rooms.get(room_id)
+                slot = session_mgr.get_active()
+                if not slot:
+                    continue
+                manager = slot.agent_manager
+                room = manager._rooms.get(room_id)
                 if not room:
                     await websocket.send(json.dumps({
                         "type": "error", "message": f"Room {room_id} not found",
                     }))
                     continue
-                slot = session_mgr.get_active()
-                if not slot:
-                    continue
-                manager = slot.agent_manager
                 # Build member names for context
                 member_names = []
                 for aid in room.agent_ids:
